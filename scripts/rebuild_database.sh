@@ -1,0 +1,1 @@
+python -m tools.create_api_db
