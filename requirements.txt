@@ -35,7 +35,7 @@ mysql-client==0.0.1
 mysql-connector-python==8.0.31
 mysqlclient==2.1.1
 numpy==1.22.4
-opencv-python==4.6.0.66
+opencv-python==4.8.0.74
 openpyxl==3.0.10
 ormar==0.11.2
 paho-mqtt==1.6.1
