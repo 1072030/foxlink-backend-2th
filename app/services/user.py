@@ -80,6 +80,9 @@ async def add_pending_user(dto: UserPedding) -> User:
 
 async def created_user(badge:str,confirmed:bool) -> User:
     user = await Pending_Approvals.objects.filter(badge=badge).get_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=400, detail="didnt find this user in pending_approval list")
     add_user = User(
         badge=user.badge,
         username=user.username,
