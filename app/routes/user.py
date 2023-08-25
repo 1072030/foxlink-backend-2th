@@ -96,8 +96,8 @@ async def pending_approval_user(dto:UserPedding):
     return await add_pending_user(dto)
 
 @router.post("/create-user", tags=["users"])
-async def create_user(badge:str,confirmed:bool):
-    return await created_user(badge,confirmed)
+async def create_user(dto:List[UserCreate]):
+    return await created_user(dto)
 
 
 @router.post("/get-off-work", tags=["users"])

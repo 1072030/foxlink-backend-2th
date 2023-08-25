@@ -33,7 +33,6 @@ class UserPedding(UserBase):
 
 class UserCreate(UserBase):
     confirmed:bool
-    password: str
 
 
 class UserPatch(BaseModel):

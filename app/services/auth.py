@@ -98,8 +98,8 @@ def get_current_user(light_user=False):
         elif user.current_UUID != decode_UUID and user.current_UUID == '0':
             raise HTTPException(403, detail='系统重启，请重新登入')
 
-        elif user.current_UUID != decode_UUID and user.level == UserLevel.maintainer.value:
-            raise HTTPException(403, detail='登录另一台设备，请登出')
+        # elif user.current_UUID != decode_UUID and user.level == UserLevel.maintainer.value:
+        #     raise HTTPException(403, detail='登录另一台设备，请登出')
 
         return user
 

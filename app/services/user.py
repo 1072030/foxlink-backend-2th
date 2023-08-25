@@ -54,6 +54,10 @@ async def get_users() -> List[User]:
 
 
 async def add_pending_user(dto: UserPedding) -> User:
+    if dto.password is None or dto.password == "":
+        raise HTTPException(
+            status_code=400, detail="password can not be empty")
+
     pw_hash = get_password_hash(dto.password)
 
     new_dto = dto.dict()
@@ -66,6 +70,14 @@ async def add_pending_user(dto: UserPedding) -> User:
         raise HTTPException(
             status_code=400, detail="User account already exist")
 
+    if dto.badge is None or dto.badge == "":
+        raise HTTPException(
+            status_code=400, detail="User account can not be empty")
+    
+    if dto.username is None or dto.username == "":
+        raise HTTPException(
+            status_code=400, detail="Username can not be empty")
+    
     user = Pending_Approvals(
         badge=new_dto["badge"],
         username=new_dto["username"],
@@ -78,26 +90,50 @@ async def add_pending_user(dto: UserPedding) -> User:
         raise HTTPException(
             status_code=400, detail="cannot add user:" + str(e))
 
-async def created_user(badge:str,confirmed:bool) -> User:
-    user = await Pending_Approvals.objects.filter(badge=badge).get_or_none()
-    if user is None:
-        raise HTTPException(
-            status_code=400, detail="didnt find this user in pending_approval list")
-    add_user = User(
-        badge=user.badge,
-        username=user.username,
-        password_hash=user.password_hash,
-        flag=True
-    )
-    try:
-        if confirmed is True:
+async def created_user(dto:List[UserCreate]) -> User:
+    bulk_create:List[User] = []
+    for appendingUser in dto:
+        user = await Pending_Approvals.objects.filter(badge=appendingUser.badge).get_or_none()
+        if user is None:
+            raise HTTPException(
+                status_code=400, detail="didnt find this user in pending_approval list")
+        
+        user_ = await User.objects.filter(badge=appendingUser.badge).get_or_none() 
+        if user_ is not None:
+            raise HTTPException(
+                status_code=400, detail="already have same badge Id in the user list")
+        
+        if appendingUser.confirmed is True:
+            bulk_create.append(User(
+                badge=user.badge,
+                username=user.username,
+                password_hash=user.password_hash,
+                flag=True
+            ))
             await user.delete()
-            return await add_user.save()
         else:
             await user.delete()
+    try:
+        await User.objects.bulk_create(bulk_create)
+        return bulk_create
     except Exception as e:
         raise HTTPException(
             status_code=400, detail="cannot add user:" + str(e))
+    # add_user = User(
+    #     badge=user.badge,
+    #     username=user.username,
+    #     password_hash=user.password_hash,
+    #     flag=True
+    # )
+    # try:
+    #     if confirmed is True:
+    #         await user.delete()
+    #         return await add_user.save()
+    #     else:
+    #         await user.delete()
+    # except Exception as e:
+    #     raise HTTPException(
+    #         status_code=400, detail="cannot add user:" + str(e))
 
 
 async def get_worker_by_badge(
