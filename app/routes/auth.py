@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordRequestForm
 # from app.mqtt import mqtt_client
-from app.services.auth import authenticate_user, create_access_token, get_current_user, set_device_UUID
+from app.services.auth import authenticate_user, create_access_token,authenticate_foxlink
 from datetime import datetime, timedelta, timezone
 from app.core.database import (
     transaction,
@@ -36,11 +36,18 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 @transaction(callback=True)
 async def login_routine(form_data, handler=[]):
     user = await authenticate_user(form_data.username, form_data.password)
-
+    # login_data={
+    #     "type":"login",
+    #     "user_id":user.badge,
+    #     "password":user.password_hash,
+    #     "system":"001"
+    # }
+    
     # if user.status == WorkerStatusEnum.working.value:
     #     raise HTTPException(403, detail=f'{user.current_UUID} 现在正在工作')
 
     # form_data.client_id
+    # auth_foxlink_gateway
 
     access_token = create_access_token(
         data={

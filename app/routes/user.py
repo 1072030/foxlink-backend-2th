@@ -12,7 +12,7 @@ from app.core.database import (
     WorkerStatusEnum,
     AuditLogHeader,
     api_db,
-    Pending_Approvals,
+    PendingApprovals,
     transaction
 )
 from app.services.user import (
@@ -76,7 +76,7 @@ async def check_user_status(user: User = Depends(get_current_user())):
 
 @router.get("/pending-approvals-list", tags=["users"])
 async def pending_approvals_list(user: User = Depends(get_current_user())):
-    return await Pending_Approvals.objects.all()
+    return await PendingApprovals.objects.all()
 
 @router.post("/change-password", tags=["users"])
 async def change_password(
@@ -137,6 +137,8 @@ async def logout_routine(reason, to_change_status, user):
     return {
         "leave_time":user.updated_date + timedelta(hours=8)
     }
+
+
 
 
 @router.patch("/{badge}", tags=["users"])

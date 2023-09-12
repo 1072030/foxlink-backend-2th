@@ -18,7 +18,7 @@ from app.core.database import api_db
 # from app.mqtt import mqtt_client
 from app.log import LOGGER_NAME
 from fastapi.middleware.cors import CORSMiddleware
-# from app.foxlink.db import foxlink_dbs
+from app.foxlink.db import foxlink_dbs
 
 # dictConfig(LogConfig().dict())
 logger = logging.getLogger(LOGGER_NAME)
@@ -79,7 +79,7 @@ async def startup():
         try:
             await asyncio.gather(*[
                 api_db.connect(),
-                # foxlink_dbs.connect()
+                foxlink_dbs.connect()
             ])
         except Exception as e:
             logger.error(f"Start up error: {e}")
@@ -97,7 +97,7 @@ async def shutdown():
         try:
             await asyncio.gather(*[
                 api_db.disconnect(),
-                # foxlink_dbs.disconnect()
+                foxlink_dbs.disconnect()
             ])
         except Exception as e:
             logger.error(f"Start up error: {e}")

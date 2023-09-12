@@ -30,7 +30,7 @@ if __name__ == "__main__":
     # from app.foxlink.model import FoxlinkEvent
     from app.utils.utils import DTO
     # from app.foxlink.utils import assemble_device_id
-    # # from app.foxlink.db import foxlink_dbs
+    from app.foxlink.db import foxlink_dbs
     from fastapi import HTTPException
     # from app.services.mission import (
     #     assign_mission,

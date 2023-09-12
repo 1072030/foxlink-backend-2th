@@ -65,6 +65,12 @@ class UserStatus(BaseModel):
     status: str
     work_type: str
 
+class UserLoginFoxlink(BaseModel):
+    type:str
+    user_id:str
+    password:str
+    system:str
+
 # * Mission
 
 

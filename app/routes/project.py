@@ -1,9 +1,20 @@
 from typing import Dict
-from fastapi import APIRouter
+from fastapi import APIRouter,Depends
 from fastapi.exceptions import HTTPException
+
 from app.core.database import (
     Project,
-    User
+    User,
+)
+from app.services.project import(
+    AddNewProject,
+    AddNewProjectWorker,
+    SearchProjectDevices,
+    AddNewProjectDevices,
+    CreateTable
+)
+from app.services.auth import (
+    get_admin_active_user
 )
 
 router = APIRouter(prefix="/project")
@@ -14,26 +25,21 @@ async def get_all_project():
     return await Project.objects.all()
 
 @router.post("/", tags=["project"])
-async def add_new_project(name:str):
-    check_duplicate = await Project.objects.get_or_none(name=name)
-    if check_duplicate is None:
-        return await Project.objects.create(name=name)
-    else:
-        raise HTTPException(
-            status_code=404, detail="The project name is duplicated.")
+async def add_new_project(project_name:str):
+    return await AddNewProject(project_name)
     
 @router.post("/add-project-worker", tags=["project"])
-async def add_new_workers(project_id:str,username:str):
-    user = await User.objects.filter(username=username).get_or_none()
-    if user is None:
-        raise HTTPException(404, 'user is not found')
-    
-    project = await Project.objects.filter(id=project_id).get_or_none()
+async def add_new_workers(project_id:int,user_id:str,permission:int):
+    return await AddNewProjectWorker(project_id,user_id,permission)
 
-    if project is None:
-        raise HTTPException(404, 'project is not found')
+@router.get("/search-project-devices",tags=["project"])
+async def search_project_devices(project_id:str):
+    return await SearchProjectDevices(project_id)
 
-    if not await Project.objects.filter(id=project_id,workers__username=username).exists():
-        await project.workers.add(user)
-    else:
-        raise HTTPException(400, 'the user already in the project.')
+@router.get("/add-project-devices",tags=["project"])
+async def add_project_devices(project_id:str):
+    return await AddNewProjectDevices()
+
+@router.get("/create_table",tags=["project"])
+async def create_table():
+    return await CreateTable()
