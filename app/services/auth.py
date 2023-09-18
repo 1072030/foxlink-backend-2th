@@ -89,10 +89,7 @@ def get_current_user(light_user=False):
         if badge is None:
             raise HTTPException(403, detail='无法验证凭据')
 
-        if light_user:
-            user = await get_worker_by_badge(badge, [])
-        else:
-            user = await get_worker_by_badge(badge, [])
+        user = await get_worker_by_badge(badge, [])
 
         if user is None:
             raise HTTPException(403, detail='无法验证凭据')
@@ -157,3 +154,22 @@ async def authenticate_foxlink(dto:UserLoginFoxlink):
     # print(requests.post(endpoint, json=json_data). content)
     response = await requests.post()
     return
+
+async def checkUserProjectPermission(project_id:int,user:User):
+    project = await Project.objects.filter(id=project_id).get_or_none()
+    print(user)
+    if project is None:
+        raise HTTPException(404, detail='project is not foound')
+    project_user = await ProjectUser.objects.filter(
+        project_id=project.id,
+        user_id=user.badge
+    ).get_or_none()
+    if project_user is None:
+        raise HTTPException(404, detail='this user didnt in the project')
+    
+    if not project_user.permission == UserLevel.admin.value:
+        raise HTTPException(
+            status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
+            )
+    
+    return user

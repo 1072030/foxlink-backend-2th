@@ -270,29 +270,6 @@ class User(ormar.Model):
     # def User_flag_fetch():
     #     return User.objects.filter(flag=True)
 
-class Project(ormar.Model):
-    class Meta(MainMeta):
-        tablename="projects"
-    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
-    name:str = ormar.String(max_length=50, nullable=False)
-    created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
-    # workers: List[User] = ormar.ManyToMany(User,related_name="projects")
-class ProjectUser(ormar.Model):
-    class Meta(MainMeta):
-        tablename="project_users"
-    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
-    project_id: Project = ormar.ForeignKey(Project,index=True, nullable=False)
-    user_id: User = ormar.ForeignKey(User,index=True, nullable=False)
-    permission: int = ormar.Integer(choices=list(UserLevel))
-
-class ProjectEvent(ormar.Model):
-    class Meta(MainMeta):
-        tablename="project_events"
-    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
-    project_id:int = ormar.ForeignKey(Project, index=True, nullable=False)
-    name:str = ormar.String(max_length=50, nullable=False)
-    created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
-
 
 class PendingApprovals(ormar.Model):
     class Meta(MainMeta):
@@ -303,12 +280,37 @@ class PendingApprovals(ormar.Model):
     password_hash: str = ormar.String(max_length=100, nullable=True)
     created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
+class Project(ormar.Model):
+    class Meta(MainMeta):
+        tablename="projects"
+    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
+    name:str = ormar.String(max_length=50, nullable=False)
+    created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
+    # workers: List[User] = ormar.ManyToMany(User,related_name="projects")
+
 class Device(ormar.Model):
     class Meta(MainMeta):
         tablename="devices"
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
     Device_Name:str = ormar.String(max_length=100,index=True)
     project_id:int = ormar.ForeignKey(Project, index=True, nullable=False)
+    created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
+
+class ProjectUser(ormar.Model):
+    class Meta(MainMeta):
+        tablename="project_users"
+    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
+    project_id: Project = ormar.ForeignKey(Project,index=True, nullable=False,ondelete="CASCADE")
+    user_id: User = ormar.ForeignKey(User,index=True, nullable=False)
+    permission: int = ormar.Integer(choices=list(UserLevel))
+
+class ProjectEvent(ormar.Model):
+    class Meta(MainMeta):
+        tablename="project_events"
+    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
+    project_id:int = ormar.ForeignKey(Project, index=True, nullable=False)
+    device_id:int = ormar.ForeignKey(Device, index=True, nullable=False)
+    name:str = ormar.String(max_length=50, nullable=False)
     created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
 class Aoi_measure(ormar.Model):

@@ -18,17 +18,25 @@ from app.foxlink.db import foxlink_dbs
 
 
 async def AddNewProject(project_name:str):
+    # stmt = (
+    #     f"SELECT Device_Name , Measure_Workno FROM testing_foxlink.measure_info WHERE Project = '{project_name}'"
+    # )
+    # devices = await foxlink_dbs['mysql-test:3306@testing_foxlink'].fetch_all(query=stmt)
     stmt = (
-        f"SELECT Device_Name , Measure_Workno FROM testing_foxlink.measure_info WHERE Project = '{project_name}'"
+        f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
     )
-    devices = await foxlink_dbs['mysql-test:3306@testing_foxlink'].fetch_all(query=stmt)
+    devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
 
     check_duplicate = await Project.objects.get_or_none(name=project_name)
-    if devices is not None and check_duplicate is None:
+
+    if len(devices) != 0 and check_duplicate is None:
         return await Project.objects.create(name=project_name)
     else:
         raise HTTPException(
             status_code=404, detail="The project name is duplicate or not existed.")
+
+async def DeleteProject(project_id:int):
+    return await Project.objects.delete(id=project_id)
 
 async def AddNewProjectWorker(project_id:int,user_id:str,permission:int=UserLevel):
     user = await User.objects.filter(badge=user_id).get_or_none()
@@ -68,11 +76,12 @@ async def SearchProjectDevices(project_id:str):
             dvs_aoi[device_name] = dvs_aoi.get(device_name,[])
         dvs_aoi[device_name].append(message.lower())
 
-
     return dvs_aoi
 
 async def AddNewProjectDevices():
     return
+
+
 
 async def CreateTable():
     foxlink_engine = create_engine(f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi')
