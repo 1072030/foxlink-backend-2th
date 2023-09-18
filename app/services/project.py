@@ -18,7 +18,6 @@ from app.foxlink.db import foxlink_dbs
 
 
 async def AddNewProject(project_name:str):
-    await foxlink_dbs.connect()
     stmt = (
         f"SELECT Device_Name , Measure_Workno FROM testing_foxlink.measure_info WHERE Project = '{project_name}'"
     )
@@ -56,22 +55,20 @@ async def AddNewProjectWorker(project_id:int,user_id:str,permission:int=UserLeve
         raise HTTPException(400, 'this user is already in the project')
 
 async def SearchProjectDevices(project_id:str):
-    await foxlink_dbs.connect()
-    host = 'aoi'
     stmt = (
-        f"SELECT Device_Name , Measure_Workno FROM testing_foxlink.measure_info WHERE Project = '{project_id}'"
+        f"SELECT DISTINCT Device_Name ,Message FROM aoi.`{project_id}_event`"
+        "where ((Category >= 1 AND Category <= 199) OR (Category >= 300 AND Category <= 699))"
     )
-    devices = await foxlink_dbs['mysql-test:3306@testing_foxlink'].fetch_all(query=stmt)
-    # print(device)
+    devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
+    # print(devices)
     dvs_aoi = {}
-    print(devices)
-    for device,measure in devices:
-        if device not in dvs_aoi.keys():
-            dvs_aoi[device] = dvs_aoi.get(device,[])
-        dvs_aoi[device].append(measure.lower())
-    print(dvs_aoi)
 
-    await foxlink_dbs.disconnect()
+    for device_name,message in devices:
+        if device_name not in dvs_aoi.keys():
+            dvs_aoi[device_name] = dvs_aoi.get(device_name,[])
+        dvs_aoi[device_name].append(message.lower())
+
+
     return dvs_aoi
 
 async def AddNewProjectDevices():
@@ -80,7 +77,6 @@ async def AddNewProjectDevices():
 async def CreateTable():
     foxlink_engine = create_engine(f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi')
     ntust_engine = create_engine(f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink')
-    await foxlink_dbs.connect()
     stmt = (
         f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = 'd7x e75'"
     )
@@ -94,7 +90,7 @@ async def CreateTable():
         dvs_aoi[device].append(measure.lower())
     # print(dvs_aoi)
 
-    # await foxlink_dbs.disconnect()
+
     hourly_mf = pd.DataFrame()
     dn_mf = pd.DataFrame()
     operation_day={}
