@@ -324,6 +324,7 @@ class Hourly_mf(ormar.Model):
         tablename="hourly_mf"
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
     date:datetime = ormar.DateTime(timezone=True)
+    hour:int = ormar.Integer(nullable=False)
     shift:bool = ormar.Boolean(default=True)
     pcs:int = ormar.Integer(nullable=True)
     ng_rate:float = ormar.Float(nullable=True)
