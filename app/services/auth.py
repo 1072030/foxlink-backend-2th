@@ -155,9 +155,8 @@ async def authenticate_foxlink(dto:UserLoginFoxlink):
     response = await requests.post()
     return
 
-async def checkUserProjectPermission(project_id:int,user:User):
+async def checkUserProjectPermission(project_id:int,user:User,permission:int):
     project = await Project.objects.filter(id=project_id).get_or_none()
-    print(user)
     if project is None:
         raise HTTPException(404, detail='project is not foound')
     project_user = await ProjectUser.objects.filter(
@@ -167,7 +166,7 @@ async def checkUserProjectPermission(project_id:int,user:User):
     if project_user is None:
         raise HTTPException(404, detail='this user didnt in the project')
     
-    if not project_user.permission == UserLevel.admin.value:
+    if not project_user.permission == permission:
         raise HTTPException(
             status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
             )

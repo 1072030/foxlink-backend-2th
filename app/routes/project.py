@@ -33,7 +33,7 @@ async def add_new_project(project_name:str):
 @router.delete("/", tags=["project"])
 async def delete_project(project_id:int,user:User = Depends(get_current_user())):
     # print(user)
-    user = await checkUserProjectPermission(project_id,user)
+    user = await checkUserProjectPermission(project_id,user,5)
     if user is not None:
         return await DeleteProject(project_id)
     else:

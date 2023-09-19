@@ -25,7 +25,11 @@ async def AddNewProject(project_name:str):
     stmt = (
         f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
     )
-    devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
+    try:
+        devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
+    except:
+        raise HTTPException(
+            status_code=400, detail="cant query foxlink database")
 
     check_duplicate = await Project.objects.get_or_none(name=project_name)
 
@@ -67,7 +71,11 @@ async def SearchProjectDevices(project_id:str):
         f"SELECT DISTINCT Device_Name ,Message FROM aoi.`{project_id}_event`"
         "where ((Category >= 1 AND Category <= 199) OR (Category >= 300 AND Category <= 699))"
     )
-    devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
+    try:
+        devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
+    except:
+        raise HTTPException(
+            status_code=400, detail="cant query foxlink database")
     # print(devices)
     dvs_aoi = {}
 
@@ -89,7 +97,11 @@ async def CreateTable():
     stmt = (
         f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = 'd7x e75'"
     )
-    devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
+    try:
+        devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
+    except:
+        raise HTTPException(
+            status_code=400, detail="cant query foxlink database")
     # print(device)
     dvs_aoi = {}
     print(devices)
