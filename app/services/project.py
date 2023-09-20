@@ -72,10 +72,11 @@ async def SearchProjectDevices(project_id:str):
         "where ((Category >= 1 AND Category <= 199) OR (Category >= 300 AND Category <= 699))"
     )
     try:
+        await foxlink_dbs['172.21.0.1:12345@aoi'].connect()
         devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
     except:
         raise HTTPException(
-            status_code=400, detail="cant query foxlink database")
+            status_code=400, detail="can not connect foxlink database or sql parameter is wrong")
     # print(devices)
     dvs_aoi = {}
 

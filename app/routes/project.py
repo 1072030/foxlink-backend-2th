@@ -1,7 +1,7 @@
 from typing import Dict
 from fastapi import APIRouter,Depends,status
 from fastapi.exceptions import HTTPException
-
+from fastapi import Query
 from app.core.database import (
     Project,
     User,
@@ -27,7 +27,8 @@ async def get_all_project():
     return await Project.objects.all()
 
 @router.post("/", tags=["project"])
-async def add_new_project(project_name:str):
+async def add_new_project(project_name:str = Query(None,description="your new project name")):
+
     return await AddNewProject(project_name)
 
 @router.delete("/", tags=["project"])
