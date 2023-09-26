@@ -30,7 +30,7 @@ from app.core.database import (
     AuditActionEnum,
     AuditLogHeader,
     User,
-    PendingApprovals,
+    PendingApproval,
     UserLevel,
     WorkerStatusEnum,
     api_db,
@@ -65,7 +65,7 @@ async def add_pending_user(dto: UserPedding) -> User:
     new_dto["password_hash"] = pw_hash
 
     user_duplicate = await User.objects.filter(badge=new_dto["badge"]).get_or_none()
-    approvals_duplicate = await PendingApprovals.objects.filter(badge=new_dto["badge"]).get_or_none()
+    approvals_duplicate = await PendingApproval.objects.filter(badge=new_dto["badge"]).get_or_none()
     if approvals_duplicate is not None or user_duplicate is not None:
         raise HTTPException(
             status_code=400, detail="User account already exist")
@@ -78,7 +78,7 @@ async def add_pending_user(dto: UserPedding) -> User:
         raise HTTPException(
             status_code=400, detail="Username can not be empty")
     
-    user = PendingApprovals(
+    user = PendingApproval(
         badge=new_dto["badge"],
         username=new_dto["username"],
         password_hash=new_dto["password_hash"]
@@ -93,7 +93,7 @@ async def add_pending_user(dto: UserPedding) -> User:
 async def created_user(dto:List[UserCreate]) -> User:
     bulk_create:List[User] = []
     for appendingUser in dto:
-        user = await PendingApprovals.objects.filter(badge=appendingUser.badge).get_or_none()
+        user = await PendingApproval.objects.filter(badge=appendingUser.badge).get_or_none()
         if user is None:
             raise HTTPException(
                 status_code=400, detail="didnt find this user in pending_approval list")

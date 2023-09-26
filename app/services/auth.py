@@ -124,7 +124,7 @@ async def get_admin_active_user(project_id:int,active_user: User = Depends(get_c
     if not project_user.permission == UserLevel.admin.value:
         raise HTTPException(
             status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
-            )
+        )
     # if not active_user.level == UserLevel.admin.value:
     #     raise HTTPException(
     #         status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"

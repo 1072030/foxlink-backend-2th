@@ -271,7 +271,7 @@ class User(ormar.Model):
     #     return User.objects.filter(flag=True)
 
 
-class PendingApprovals(ormar.Model):
+class PendingApproval(ormar.Model):
     class Meta(MainMeta):
         tablename="pending_approvals"
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
@@ -292,8 +292,8 @@ class Device(ormar.Model):
     class Meta(MainMeta):
         tablename="devices"
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
-    Device_Name:str = ormar.String(max_length=100,index=True)
-    project_id:int = ormar.ForeignKey(Project, index=True, nullable=False)
+    device_name:str = ormar.String(max_length=100,nullable=False)
+    project_id:int = ormar.ForeignKey(Project, index=True, nullable=False,ondelete="CASCADE")
     created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
 class ProjectUser(ormar.Model):

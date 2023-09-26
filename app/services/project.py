@@ -5,36 +5,43 @@ from fastapi.exceptions import HTTPException
 from datetime import timedelta
 import pandas as pd
 import numpy as np
+from app.models.schema import NewProjectDto
 from sqlalchemy import create_engine
 from app.core.database import (
+    transaction,
     get_ntz_now,
     User,
     Project,
     ProjectUser,
     ProjectEvent,
-    UserLevel
+    UserLevel,
+    Device
 )
+from app.env import FOXLINK_EVENT_DB_HOSTS,FOXLINK_EVENT_DB_NAME
 from app.foxlink.db import foxlink_dbs
+# from app.foxlink.sql import foxlink_sql
 
+FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
 
-async def AddNewProject(project_name:str):
-    # stmt = (
-    #     f"SELECT Device_Name , Measure_Workno FROM testing_foxlink.measure_info WHERE Project = '{project_name}'"
-    # )
-    # devices = await foxlink_dbs['mysql-test:3306@testing_foxlink'].fetch_all(query=stmt)
+async def AddNewProject(project_name:str,user:User):
     stmt = (
         f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
     )
     try:
-        devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
+        devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
     except:
         raise HTTPException(
             status_code=400, detail="cant query foxlink database")
 
     check_duplicate = await Project.objects.get_or_none(name=project_name)
-
-    if len(devices) != 0 and check_duplicate is None:
-        return await Project.objects.create(name=project_name)
+    if len(devices) == 0 and check_duplicate is None:
+        project = await Project.objects.create(name=project_name)
+        await ProjectUser.objects.create(ProjectUser(
+            project_id=project.id,
+            user_id=user.badge,
+            permission=5
+        ))
+        return 
     else:
         raise HTTPException(
             status_code=404, detail="The project name is duplicate or not existed.")
@@ -67,13 +74,14 @@ async def AddNewProjectWorker(project_id:int,user_id:str,permission:int=UserLeve
         raise HTTPException(400, 'this user is already in the project')
 
 async def SearchProjectDevices(project_id:str):
+
     stmt = (
         f"SELECT DISTINCT Device_Name ,Message FROM aoi.`{project_id}_event`"
         "where ((Category >= 1 AND Category <= 199) OR (Category >= 300 AND Category <= 699))"
     )
     try:
-        await foxlink_dbs['172.21.0.1:12345@aoi'].connect()
-        devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
+        await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+        devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
     except:
         raise HTTPException(
             status_code=400, detail="can not connect foxlink database or sql parameter is wrong")
@@ -86,8 +94,55 @@ async def SearchProjectDevices(project_id:str):
         dvs_aoi[device_name].append(message.lower())
 
     return dvs_aoi
+@transaction()
+async def AddNewProjectEvents(dto:NewProjectDto):
+    project_name = dto.project_name
+    devices = dto.devices.keys()
 
-async def AddNewProjectDevices():
+    stmt = (
+        f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
+    )
+    try:
+        device = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+    except:
+        raise HTTPException(
+            status_code=400, detail="cant query foxlink database")
+
+    check_duplicate = await Project.objects.get_or_none(name=project_name)
+
+    if len(device) != 0 and check_duplicate is None:
+        project = await Project.objects.create(name=project_name)
+    else:
+        raise HTTPException(
+            status_code=404, detail="The project name is duplicate or not existed.")
+
+    project = await Project.objects.create(name=project_name)
+
+    bulk_create_device:List[Device] = []
+    bulk_create_events:List[ProjectEvent]=[]
+    for device_name in devices:
+        device = Device(
+            device_name = device_name,
+            project_id = project.id
+        )
+        bulk_create_device.append(device)
+
+    await Device.objects.bulk_create(bulk_create_device)
+    
+    new_devices = await Device.objects.filter(
+        project_id = project.id
+    ).all()
+
+    for devices in new_devices:
+        for events in dto.devices[devices.device_name]:
+            event = ProjectEvent(
+                project_id = project.id,
+                device_id = devices.id,
+                name = events
+            )
+            bulk_create_events.append(event)
+    
+    await ProjectEvent.objects.bulk_create(bulk_create_events)
     return
 
 
@@ -99,7 +154,7 @@ async def CreateTable():
         f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = 'd7x e75'"
     )
     try:
-        devices = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
+        devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
     except:
         raise HTTPException(
             status_code=400, detail="cant query foxlink database")
@@ -127,7 +182,7 @@ async def CreateTable():
                 # stmt = (
                 #     f"SELECT Code1,Code2,Code3,Code4,Code6 FROM aoi.`d7x e75_{measure}_data`"
                 # )
-                # aoi = await foxlink_dbs['172.21.0.1:12345@aoi'].fetch_all(query=stmt)
+                # aoi = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
                 # aoi = pd.DataFrame() # 批次讀取後再合併
                 aoi = pd.DataFrame()
                 sql = f"SELECT * FROM `d7x e75_{measure}_data` LIMIT 1;" # 資料表第一筆資料

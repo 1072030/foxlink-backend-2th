@@ -12,7 +12,7 @@ from app.core.database import (
     WorkerStatusEnum,
     AuditLogHeader,
     api_db,
-    PendingApprovals,
+    PendingApproval,
     transaction
 )
 from app.services.user import (
@@ -76,7 +76,7 @@ async def check_user_status(user: User = Depends(get_current_user())):
 
 @router.get("/pending-approvals-list", tags=["users"])
 async def pending_approvals_list(user: User = Depends(get_current_user())):
-    return await PendingApprovals.objects.all()
+    return await PendingApproval.objects.all()
 
 @router.post("/change-password", tags=["users"])
 async def change_password(

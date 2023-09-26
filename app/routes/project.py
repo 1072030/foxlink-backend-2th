@@ -1,7 +1,8 @@
 from typing import Dict
 from fastapi import APIRouter,Depends,status
 from fastapi.exceptions import HTTPException
-from fastapi import Query
+from typing import List,Dict
+# from fastapi import Query
 from app.core.database import (
     Project,
     User,
@@ -10,7 +11,7 @@ from app.services.project import(
     AddNewProject,
     AddNewProjectWorker,
     SearchProjectDevices,
-    AddNewProjectDevices,
+    AddNewProjectEvents,
     DeleteProject,
     CreateTable
 )
@@ -18,6 +19,7 @@ from app.services.auth import (
     get_current_user,
     checkUserProjectPermission
 )
+from app.models.schema import NewProjectDto
 
 router = APIRouter(prefix="/project")
 
@@ -27,9 +29,8 @@ async def get_all_project():
     return await Project.objects.all()
 
 @router.post("/", tags=["project"])
-async def add_new_project(project_name:str = Query(None,description="your new project name")):
-
-    return await AddNewProject(project_name)
+async def add_new_project(project_name:str,user:User = Depends(get_current_user())):
+    return await AddNewProject(project_name,user)
 
 @router.delete("/", tags=["project"])
 async def delete_project(project_id:int,user:User = Depends(get_current_user())):
@@ -50,9 +51,10 @@ async def add_new_workers(project_id:int,user_id:str,permission:int):
 async def search_project_devices(project_id:str):
     return await SearchProjectDevices(project_id)
 
-@router.get("/add-project-devices",tags=["project"])
-async def add_project_devices(project_id:str):
-    return await AddNewProjectDevices()
+@router.post("/add-project-events",tags=["project"])
+async def add_project_events(dto:NewProjectDto):
+    # user:User = await checkUserProjectPermission(project_id,user,5)
+    return await AddNewProjectEvents(dto)
 
 @router.get("/create_table",tags=["project"])
 async def create_table():

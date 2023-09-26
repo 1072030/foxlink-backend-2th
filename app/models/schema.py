@@ -238,6 +238,13 @@ class DeviceExp(BaseModel):
     line: int
     exp: int
 
+class NewProjectDto(BaseModel):
+    project_name:str
+    devices:Dict[str,List[str]]
+
+
+
+
 
 # class UserOverviewOut(BaseModel):
 #     badge: str
