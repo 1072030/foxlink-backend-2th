@@ -110,13 +110,13 @@ async def AddNewProjectEvents(dto:NewProjectDto):
 
     check_duplicate = await Project.objects.get_or_none(name=project_name)
 
-    if len(device) != 0 and check_duplicate is None:
+    if len(device) == 0 and check_duplicate is None:
         project = await Project.objects.create(name=project_name)
     else:
         raise HTTPException(
             status_code=404, detail="The project name is duplicate or not existed.")
 
-    project = await Project.objects.create(name=project_name)
+    # project = await Project.objects.create(name=project_name)
 
     bulk_create_device:List[Device] = []
     bulk_create_events:List[ProjectEvent]=[]

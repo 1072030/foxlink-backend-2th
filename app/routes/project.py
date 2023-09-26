@@ -51,7 +51,7 @@ async def add_new_workers(project_id:int,user_id:str,permission:int):
 async def search_project_devices(project_id:str):
     return await SearchProjectDevices(project_id)
 
-@router.post("/add-project-events",tags=["project"])
+@router.post("/add-project-events",status_code=200,tags=["project"])
 async def add_project_events(dto:NewProjectDto):
     # user:User = await checkUserProjectPermission(project_id,user,5)
     return await AddNewProjectEvents(dto)
