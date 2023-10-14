@@ -38,7 +38,7 @@ async def get_all_project(project_id:int):
     """
     取得對應專案內的所有人員
     """
-    return await ProjectUser.objects.filter(project_id=project_id).all()
+    return await ProjectUser.objects.filter(project=project_id).all()
 
 # @router.post("/", tags=["project"])
 # async def add_new_project(project_name:str):

@@ -30,7 +30,7 @@ api_db = databases.Database(DATABASE_URI, min_size=3, max_size=5, pool_recycle=1
 
 metadata = MetaData()
 
-MissionRef = ForwardRef("Mission")
+ProjectRef = ForwardRef("Project")
 AuditLogHeaderRef = ForwardRef("AuditLogHeader")
 UserRef = ForwardRef("User")
 DeviceRef = ForwardRef("Device")
@@ -293,23 +293,45 @@ class Device(ormar.Model):
         tablename="devices"
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
     device_name:str = ormar.String(max_length=100,nullable=False)
-    project_id:int = ormar.ForeignKey(Project, index=True, nullable=False,ondelete="CASCADE")
+    project:int = ormar.ForeignKey(Project, index=True, nullable=False,ondelete="CASCADE")
     created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
 class ProjectUser(ormar.Model):
     class Meta(MainMeta):
         tablename="project_users"
+        constraints = [ormar.UniqueColumns(
+            "project")]
+
+    project:ProjectRef = ormar.ForeignKey(
+        ProjectRef,
+        index=True,
+        ondelete="CASCADE",
+        related_name="users"
+    )
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
-    project_id: Project = ormar.ForeignKey(Project,index=True, nullable=False,ondelete="CASCADE")
-    user_id: User = ormar.ForeignKey(User,index=True, nullable=False)
+    user: User = ormar.ForeignKey(User,index=True, nullable=False)
     permission: int = ormar.Integer(choices=list(UserLevel))
 
 class ProjectEvent(ormar.Model):
     class Meta(MainMeta):
         tablename="project_events"
+        constraints = [ormar.UniqueColumns(
+            "project")]
+    
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
-    project_id:int = ormar.ForeignKey(Project, index=True, nullable=False)
-    device_id:int = ormar.ForeignKey(Device, index=True, nullable=False)
+    
+    project:ProjectRef = ormar.ForeignKey(
+        ProjectRef,
+        index=True,
+        ondelete="CASCADE",
+        related_name="events"
+    )
+    device:DeviceRef = ormar.ForeignKey(
+        DeviceRef,
+        index=True,
+        ondelete="CASCADE",
+        related_name="devices"
+    )
     name:str = ormar.String(max_length=50, nullable=False)
     created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
@@ -317,7 +339,7 @@ class Aoi_measure(ormar.Model):
     class Meta(MainMeta):
         tablename="aoi_measure"
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
-    device_id = ormar.ForeignKey(Device, index=True, nullable=False)
+    device = ormar.ForeignKey(Device, index=True, nullable=False)
     aoi_measure_name:str = ormar.String(max_length=100,index=True)
     created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
@@ -333,8 +355,8 @@ class Hourly_mf(ormar.Model):
     first_prod_time:datetime = ormar.DateTime(nullable=True)
     last_prod_time:datetime = ormar.DateTime(nullable=True)
     operation_time:timedelta = ormar.DateTime(nullable=True)
-    device_id = ormar.ForeignKey(Device, index=True, nullable=False)
-    aoi_measure_id:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False)
+    device = ormar.ForeignKey(Device, index=True, nullable=False)
+    aoi_measure:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False)
     # created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
 class Dn_mf(ormar.Model):
@@ -345,8 +367,8 @@ class Dn_mf(ormar.Model):
     shift:bool = ormar.Boolean(default=True)
     pcs:int = ormar.Integer(nullable=True)
     operation_time:timedelta = ormar.DateTime(nullable=True)
-    device_id = ormar.ForeignKey(Device, index=True, nullable=False)
-    aoi_measure_id:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False)
+    device = ormar.ForeignKey(Device, index=True, nullable=False)
+    aoi_measure:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False)
     # created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
 class Aoi_feature(ormar.Model):
@@ -363,8 +385,8 @@ class Aoi_feature(ormar.Model):
     ct_mean:float = ormar.Float(nullable=True)
     ct_min:float = ormar.Float(nullable=True)
 
-    device_id = ormar.ForeignKey(Device, index=True, nullable=False)
-    aoi_measure_id:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False)
+    device = ormar.ForeignKey(Device, index=True, nullable=False)
+    aoi_measure:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False)
     # created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
 
@@ -546,7 +568,7 @@ class AuditLogHeader(ormar.Model):
 #     updated_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
 
 
-# MissionEvent.update_forward_refs()
+ProjectEvent.update_forward_refs()
 User.update_forward_refs()
 
 

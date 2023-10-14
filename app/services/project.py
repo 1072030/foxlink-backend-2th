@@ -60,13 +60,13 @@ async def AddNewProjectWorker(project_id:int,user_id:str,permission:int=UserLeve
         raise HTTPException(404, 'project is not found')
 
     check_duplicate = await ProjectUser.objects.filter(
-        project_id=project_id,user_id=user_id
+        project=project_id,user=user_id
         ).get_or_none()
     
     if check_duplicate is None:
         await ProjectUser.objects.create(
-           project_id=project_id,
-           user_id=user.badge,
+           project=project_id,
+           user=user.badge,
            permission=permission
         ) 
         return True
@@ -99,54 +99,73 @@ async def SearchProjectDevices(project_id:str):
 async def AddNewProjectEvents(dto:NewProjectDto):
     project_name = dto.project_name
     devices = dto.devices.keys()
-
+    # check selected devices
+    if len(devices) == 0:
+        raise HTTPException(
+            status_code=400, detail="please select devices")
+    
+    # foxlink db project select
     stmt = (
         f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
     )
     try:
+    # check query project
+        await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
         device = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
     except:
         raise HTTPException(
             status_code=400, detail="cant query foxlink database")
-
+    # check project in system duplicated
     check_duplicate = await Project.objects.get_or_none(name=project_name)
 
-    if len(device) == 0 and check_duplicate is None:
-        project = await Project.objects.create(name=project_name)
+    if len(device) != 0:
+        if check_duplicate is None:
+            project = await Project.objects.create(name=project_name)
+        else:
+            raise HTTPException(
+                status_code=400, detail="The project name duplicated.")
     else:
         raise HTTPException(
-            status_code=404, detail="The project name is duplicate or not existed.")
+            status_code=400, detail="The project name is not existed.")
 
-    # project = await Project.objects.create(name=project_name)
+    # add admin into project
+    admin = await User.objects.filter(badge='admin').get_or_none()
+    await ProjectUser.objects.create(project_id=project.id,user_id=admin.badge,permission=5)
 
+    # add devices and events in project
     bulk_create_device:List[Device] = []
     bulk_create_events:List[ProjectEvent]=[]
     for device_name in devices:
         device = Device(
             device_name = device_name,
-            project_id = project.id
+            project = project.id
         )
         bulk_create_device.append(device)
 
+    # bulk create device
     await Device.objects.bulk_create(bulk_create_device)
     
     new_devices = await Device.objects.filter(
-        project_id = project.id
+        project = project.id
     ).all()
 
     for devices in new_devices:
+        # check selected events
+        if len(dto.devices[devices.device_name]) == 0:
+            raise HTTPException(
+                status_code=400, detail="some devices you selected and you dont selected events")
+        
         for events in dto.devices[devices.device_name]:
             event = ProjectEvent(
-                project_id = project.id,
-                device_id = devices.id,
+                project = project.id,
+                device = devices.id,
                 name = events
             )
             bulk_create_events.append(event)
     
+    # bulk create events
     await ProjectEvent.objects.bulk_create(bulk_create_events)
     return
-
-
 
 async def CreateTable():
     foxlink_engine = create_engine(f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi')
@@ -155,6 +174,7 @@ async def CreateTable():
         f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = 'd7x e75'"
     )
     try:
+        await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
         devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
     except:
         raise HTTPException(
@@ -168,6 +188,12 @@ async def CreateTable():
         dvs_aoi[device].append(measure.lower())
     # print(dvs_aoi)
 
+
+    data = await Project.objects.filter(id=1).select_related(
+                ["devices","events"]
+            ).get_or_none()
+    print(data)
+    print(data[0].events)
 
     hourly_mf = pd.DataFrame()
     dn_mf = pd.DataFrame()
@@ -199,17 +225,8 @@ async def CreateTable():
                     """
                 tmp_data = pd.read_sql(sql, foxlink_engine)
                 aoi = aoi.append(tmp_data)
-                # print(type(aoi["Code3"]))
-
-                date = pd.to_datetime(aoi["Code3"])
-                
-                test = pd.to_datetime((aoi["Code4"]).dt.total_seconds(),unit='s')
-                combine = datetime.combine(date,test)
-                print(date)
-                print(test)
-                
-
-                # test = pd.to_datetime(aoi['Code4'], format='%H:%M')s
+            
+                # 先測試三個月的 之後再進行到1年
                 # for index in range(1, len(dr)):
                 #     sql = f"""
                 #     SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `d7x e75_{measure}_data`
@@ -233,7 +250,7 @@ async def CreateTable():
                 # aoi = pd.DataFrame.from_records(aoi,columns=["Code1","Code2","Code3","Code4","Code6"])
                 # print(aoi)
                 aoi = aoi[(aoi['Code2']<3)]
-                aoi['MF_Time'] = pd.to_datetime(aoi['Code3'] + ' ' + aoi['Code4'])
+                aoi['MF_Time'] = pd.to_datetime(aoi['Code3'])+ aoi['Code4']
                 aoi["Time_shift"] = aoi["MF_Time"] - pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
                 aoi['date'] = aoi['Time_shift'].dt.date # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
                 aoi['hour'] = aoi['Time_shift'].dt.hour+1 # 工作日期的第幾個小時 1~12為早班 13~24為晚班
@@ -258,12 +275,13 @@ async def CreateTable():
                 hourly_dvs_mf['operation_time'] = hourly_dvs_mf['last_prod_time'] - hourly_dvs_mf['first_prod_time']
                 hourly_dvs_mf['operation_time'].fillna(pd.Timedelta(0), inplace=True)
                 
+                
                 hourly_dvs_mf['Device_Name'] = dvs
                 hourly_dvs_mf['AOI_measure'] = measure
                 
                 hourly_dvs_mf['pcs'] = hourly_dvs_mf['pcs'].astype(int)
                 hourly_dvs_mf['ng_num'] = hourly_dvs_mf['ng_num'].astype(int)
-
+                print(hourly_dvs_mf)
                 hourly_mf = hourly_mf.append(hourly_dvs_mf)
                 
                 # 日夜班 生產量 運作時間
@@ -271,9 +289,13 @@ async def CreateTable():
                 dn_dvs_mf = pd.merge(dn_dvs_mf, hourly_dvs_mf.groupby(['date','shift'])['operation_time'].sum().reset_index(), on=['date','shift'], how='outer')
                 dn_dvs_mf['pcs'] = dn_dvs_mf['pcs'].astype(int)
                 
+                # Data = await Project.objects.filter(id=1).select_related(
+                #             ["devices","events"]
+                #         ).all()
+                # print(Data)
                 dn_dvs_mf['Device_Name'] = dvs
                 dn_dvs_mf['AOI_measure'] = measure
-
+                print(dn_dvs_mf)
                 dn_mf = dn_mf.append(dn_dvs_mf)
                 
                 # 計算operation day

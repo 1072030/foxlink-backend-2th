@@ -114,12 +114,12 @@ def get_current_user(light_user=False):
 
 # 確認取得人員身份
 async def get_admin_active_user(project_id:int,active_user: User = Depends(get_current_user())):
-    project = await Project.objects.filter(project_id=project_id).get_or_none()
+    project = await Project.objects.filter(project=project_id).get_or_none()
     if project is None:
         raise HTTPException(404, detail='project is not foound')
     project_user = await ProjectUser.objects.filter(
-        project_id=project.id,
-        user_id=active_user.badge
+        project=project.id,
+        user=active_user.badge
     ).get_or_none()
     if project_user is None:
         raise HTTPException(404, detail='this user didnt in the project')
@@ -163,8 +163,8 @@ async def checkUserProjectPermission(project_id:int,user:User,permission:int):
     if project is None:
         raise HTTPException(404, detail='project is not foound')
     project_user = await ProjectUser.objects.filter(
-        project_id=project.id,
-        user_id=user.badge
+        project=project.id,
+        user=user.badge
     ).get_or_none()
     if project_user is None:
         raise HTTPException(404, detail='this user didnt in the project')
