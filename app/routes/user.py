@@ -46,11 +46,14 @@ from app.models.schema import (
 router = APIRouter(prefix="/users")
 
 
-@router.get("/", response_model=List[UserOut], tags=["users"])
-async def read_all_users(
-    user: User = Depends(get_admin_active_user), workshop_name: Optional[str] = None
-):
-    return
+# @router.get("/", response_model=List[UserOut], tags=["users"])
+# async def read_all_users(
+#     user: User = Depends(get_admin_active_user), workshop_name: Optional[str] = None
+# ):
+#     """
+#     查詢所有使用者
+#     """
+#     return
 
 
 @router.get("/info", response_model=UserOutWithWorkTimeAndSummary, tags=["users"])
@@ -78,21 +81,24 @@ async def check_user_status(user: User = Depends(get_current_user())):
 async def pending_approvals_list(user: User = Depends(get_current_user())):
     return await PendingApproval.objects.all()
 
-@router.post("/change-password", tags=["users"])
-async def change_password(
-    dto: UserChangePassword, user: User = Depends(get_current_user())
-):
-    if not verify_password(dto.old_password, user.password_hash):
-        raise HTTPException(
-            status_code=401, detail="The old password is not matched")
+# @router.post("/change-password", tags=["users"])
+# async def change_password(
+#     dto: UserChangePassword, user: User = Depends(get_current_user())
+# ):
+#     if not verify_password(dto.old_password, user.password_hash):
+#         raise HTTPException(
+#             status_code=401, detail="The old password is not matched")
 
-    await user.update(
-        password_hash=get_password_hash(dto.new_password),
-        change_pwd=True
-    )
+#     await user.update(
+#         password_hash=get_password_hash(dto.new_password),
+#         change_pwd=True
+#     )
 
 @router.post("/pending-approval-user", tags=["users"])
 async def pending_approval_user(dto:UserPedding):
+    """
+    
+    """
     return await add_pending_user(dto)
 
 @router.post("/create-user", tags=["users"])
@@ -151,12 +157,12 @@ async def update_user_information(
     return await user.update(**dto.dict())
 
 
-@router.delete("/{badge}", tags=["users"])
-async def delete_a_user_by_badge(
-    badge: str, user: User = Depends(get_admin_active_user)
-):
-    await delete_user_by_badge(badge)
-    return True
+# @router.delete("/{badge}", tags=["users"])
+# async def delete_a_user_by_badge(
+#     badge: str, user: User = Depends(get_admin_active_user)
+# ):
+#     await delete_user_by_badge(badge)
+#     return True
 
 
 # @router.get("/subordinates", tags=["users"], response_model=List[WorkerStatusDto])

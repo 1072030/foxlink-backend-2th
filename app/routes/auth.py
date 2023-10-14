@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordRequestForm
 # from app.mqtt import mqtt_client
-from app.services.auth import authenticate_user, create_access_token,authenticate_foxlink
+from app.services.auth import authenticate_user, create_access_token,checkFoxlinkAuth
 from datetime import datetime, timedelta, timezone
 from app.core.database import (
     transaction,
@@ -34,8 +34,16 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 
 @transaction(callback=True)
-async def login_routine(form_data, handler=[]):
+async def login_routine(form_data, handler=[], checkFoxlink:bool = False):
     user = await authenticate_user(form_data.username, form_data.password)
+
+    if checkFoxlink and user is not None:
+        foxlink = await checkFoxlinkAuth(type="login",user_id=user.badge,password=form_data.password,system="001",checkSSH=True)
+    elif(user is None):
+        raise HTTPException(
+            status_code=400, detail="user badge doesnt exist."
+        )
+    
     # login_data={
     #     "type":"login",
     #     "user_id":user.badge,

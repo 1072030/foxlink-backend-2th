@@ -1,6 +1,9 @@
 import requests
 from fastapi import FastAPI
 import logging
+import paramiko
+import json
+import requests
 from jose.constants import ALGORITHMS
 from jose.exceptions import ExpiredSignatureError
 from app.core.database import (
@@ -132,14 +135,14 @@ async def get_admin_active_user(project_id:int,active_user: User = Depends(get_c
     return active_user
 
 # 確認取得人員身份
-async def get_manager_active_user(
+def get_manager_active_user(
     manager_user: User = Depends(get_current_user()),
 ):
-    if manager_user == "admin":
-        raise HTTPException(
-            status_code=HTTPStatus.HTTP_403_FORBIDDEN,
-            detail="Permission Denied",
-        )
+    # if manager_user.badge != "admin":
+    #     raise HTTPException(
+    #         status_code=HTTPStatus.HTTP_403_FORBIDDEN,
+    #         detail="Permission Denied",
+    #     )
     return manager_user
 
 
@@ -172,3 +175,26 @@ async def checkUserProjectPermission(project_id:int,user:User,permission:int):
             )
     
     return user
+
+async def checkFoxlinkAuth(type:str,user_id:str,password:str,system:str,checkSSH:bool=False):
+    if checkSSH:
+        ip = "192.168.65.210"
+        username = "ntust"
+        password = "aa946809"
+        command = f'curl -X POST -d "type=login&user_id=001&password=foxlink&system=001" http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(ip, port=22, username=username, password=password, timeout=20)
+        stdin, stdout, stderr = client.exec_command(command)
+        return json.loads(stdout.read().decode("utf-8"))
+    else:
+        url = 'http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
+        myobj = {
+            "type":type,
+            "user_id":user_id,
+            "password":password,
+            "system":system
+        }
+        x = requests.post(url, data = json.dumps(myobj))
+        print(x)
+        return

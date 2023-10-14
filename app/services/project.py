@@ -23,28 +23,28 @@ from app.foxlink.db import foxlink_dbs
 
 FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
 
-async def AddNewProject(project_name:str,user:User):
-    stmt = (
-        f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
-    )
-    try:
-        devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
-    except:
-        raise HTTPException(
-            status_code=400, detail="cant query foxlink database")
+# async def AddNewProject(project_name:str,user:User):
+#     stmt = (
+#         f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
+#     )
+#     try:
+#         devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+#     except:
+#         raise HTTPException(
+#             status_code=400, detail="cant query foxlink database")
 
-    check_duplicate = await Project.objects.get_or_none(name=project_name)
-    if len(devices) == 0 and check_duplicate is None:
-        project = await Project.objects.create(name=project_name)
-        await ProjectUser.objects.create(ProjectUser(
-            project_id=project.id,
-            user_id=user.badge,
-            permission=5
-        ))
-        return 
-    else:
-        raise HTTPException(
-            status_code=404, detail="The project name is duplicate or not existed.")
+#     check_duplicate = await Project.objects.get_or_none(name=project_name)
+#     if len(devices) == 0 and check_duplicate is None:
+#         project = await Project.objects.create(name=project_name)
+#         await ProjectUser.objects.create(ProjectUser(
+#             project_id=project.id,
+#             user_id=user.badge,
+#             permission=5
+#         ))
+#         return 
+#     else:
+#         raise HTTPException(
+#             status_code=404, detail="The project name is duplicate or not existed.")
 
 async def DeleteProject(project_id:int):
     return await Project.objects.delete(id=project_id)
@@ -94,6 +94,7 @@ async def SearchProjectDevices(project_id:str):
         dvs_aoi[device_name].append(message.lower())
 
     return dvs_aoi
+    
 @transaction()
 async def AddNewProjectEvents(dto:NewProjectDto):
     project_name = dto.project_name
@@ -160,7 +161,7 @@ async def CreateTable():
             status_code=400, detail="cant query foxlink database")
     # print(device)
     dvs_aoi = {}
-    print(devices)
+    # print(devices)
     for device,measure in devices:
         if device not in dvs_aoi.keys():
             dvs_aoi[device] = dvs_aoi.get(device,[])
@@ -176,7 +177,6 @@ async def CreateTable():
 # for dvs in list(dvs_aoi)[:2]:
     for dvs in dvs_aoi:
         if dvs == "Device_5":
-
             for measure in dvs_aoi[dvs]:
                 print(dvs, measure)
                 # stmt = (
@@ -199,17 +199,28 @@ async def CreateTable():
                     """
                 tmp_data = pd.read_sql(sql, foxlink_engine)
                 aoi = aoi.append(tmp_data)
-                for index in range(1, len(dr)):
-                    sql = f"""
-                    SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `d7x e75_{measure}_data`
-                    WHERE 
-                        (Code3 = '{dr[index-1]}' AND Code4 >= '07:40:00') OR
-                        (Code3 > '{dr[index-1]}' AND Code3 < '{dr[index]}') OR
-                        (Code3 = '{dr[index]}' AND Code4 <= '07:40:00')
-                        AND Code2 < 3 ;
-                    """
-                    tmp_data = pd.read_sql(sql, foxlink_engine)
-                    aoi = aoi.append(tmp_data)
+                # print(type(aoi["Code3"]))
+
+                date = pd.to_datetime(aoi["Code3"])
+                
+                test = pd.to_datetime((aoi["Code4"]).dt.total_seconds(),unit='s')
+                combine = datetime.combine(date,test)
+                print(date)
+                print(test)
+                
+
+                # test = pd.to_datetime(aoi['Code4'], format='%H:%M')s
+                # for index in range(1, len(dr)):
+                #     sql = f"""
+                #     SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `d7x e75_{measure}_data`
+                #     WHERE 
+                #         (Code3 = '{dr[index-1]}' AND Code4 >= '07:40:00') OR
+                #         (Code3 > '{dr[index-1]}' AND Code3 < '{dr[index]}') OR
+                #         (Code3 = '{dr[index]}' AND Code4 <= '07:40:00')
+                #         AND Code2 < 3 ;
+                #     """
+                #     tmp_data = pd.read_sql(sql, foxlink_engine)
+                #     aoi = aoi.append(tmp_data)
                 
                 # aoi = pd.read_csv(f'../d7x/AOI/2022/{dvs}_{measure}.csv', usecols=['ID', 'Code1','Code2','Code3','Code4','Code6'])
                 # test = pd.DataFrame(columns=["Code1","Code2","Code3","Code4","Code6"])
