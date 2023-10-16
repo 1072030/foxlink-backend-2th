@@ -71,7 +71,8 @@ async def SearchProjectDevices(project_id:str):
             dvs_aoi[device_name] = dvs_aoi.get(device_name,[])
         dvs_aoi[device_name].append(message.lower())
 
-    return dvs_aoi.keys()
+    # return list(dvs_aoi.keys())
+    return dvs_aoi
     
 @transaction()
 async def AddNewProjectEvents(dto:NewProjectDto):

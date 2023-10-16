@@ -18,6 +18,8 @@ from app.services.project import(
 from app.services.auth import (
     get_current_user,
     checkUserProjectPermission,
+    checkUserSearchProjectPermission,
+    checkAdminPermission,
     checkFoxlinkAuth,
     get_manager_active_user
 )
@@ -27,18 +29,33 @@ router = APIRouter(prefix="/project")
 
 
 @router.get("/", tags=["project"])
-async def get_all_project():
+async def get_all_project(user:User = Depends(get_current_user())):
     """
-    取得所有專案內容
+    取得所有專案內容(當前使用者權限內所有的專案)
     """
-    return await Project.objects.all()
+    project_id_list = await checkUserSearchProjectPermission(user,5)
+    if len(project_id_list) != 0:
+        return await (Project.objects.filter(
+            id__in=project_id_list
+        ).all())
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
+        )
 
 @router.get("/users", tags=["project"])
-async def get_all_project(project_id:int):
+async def get_all_project(project_id:int,user:User = Depends(get_current_user())):
     """
-    取得對應專案內的所有人員
+    取得對應專案內的所有人員(當前使用者權限內的專案)
     """
-    return await ProjectUser.objects.filter(project=project_id).all()
+    user = await checkUserProjectPermission(project_id,user,5)
+    if user is not None:
+        return await ProjectUser.objects.filter(project=project_id).fields(['user']).values()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
+        )
+    
 
 @router.delete("/", tags=["project"])
 async def delete_project(project_id:int,user:User = Depends(get_current_user())):
@@ -54,11 +71,18 @@ async def delete_project(project_id:int,user:User = Depends(get_current_user()))
         )
 
 @router.post("/add-project-worker", tags=["project"])
-async def add_new_workers(project_id:int,user_id:str,permission:int):
+async def add_new_workers(project_id:int,user_id:str,permission:int,user:User = Depends(get_current_user())):
     """
-    新增專案內人員
+    新增專案內人員(會確認新增者權限)
     """
-    return await AddNewProjectWorker(project_id,user_id,permission)
+    user = await checkUserProjectPermission(project_id,user,5)
+    if user is not None:
+        return await AddNewProjectWorker(project_id,user_id,permission)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
+        )
+    
 
 @router.get("/search-project-devices",tags=["project"])
 async def search_project_devices(project_id:str):
@@ -68,12 +92,18 @@ async def search_project_devices(project_id:str):
     return await SearchProjectDevices(project_id)
 
 @router.post("/add-project-events",status_code=200,tags=["project"])
-async def add_project_events(dto:NewProjectDto):
+async def add_project_and_events(dto:NewProjectDto,user:User = Depends(get_current_user())):
     """
-    搜尋專案內的所有事件
+    搜尋專案內的所有事件(會確認新增者權限 = admin)
     """
+    user = await checkAdminPermission(user)
+    if user is not None:
+        return await AddNewProjectEvents(dto)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
+        )
     # user:User = await checkUserProjectPermission(project_id,user,5)
-    return await AddNewProjectEvents(dto)
 
 @router.get("/create_table",tags=["project"])
 async def create_table():

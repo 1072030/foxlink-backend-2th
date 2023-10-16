@@ -31,7 +31,6 @@ app = FastAPI(title="Foxlink API Backend", version="0.0.1")
 origins = [
     "http://localhost:3000",
     "http://localhost:8080",
-    
     "http://localhost:8888",
     "http://127.0.0.1:8888",
     "http://127.0.0.1:8086",
@@ -59,13 +58,7 @@ app.include_router(system.router)
 app.include_router(user.router)
 app.include_router(auth.router)
 app.include_router(project.router)
-# app.include_router(migration.router)
-# app.include_router(statistics.router)
 app.include_router(log.router)
-# app.include_router(device.router)
-# app.include_router(workshop.router)
-# app.include_router(test.router)
-# app.include_router(shift.router)
 app.include_router(backup.router)
 
 # if PY_ENV == 'dev':

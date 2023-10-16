@@ -25,7 +25,7 @@ router = APIRouter(prefix="/users")
 
 @router.post("/get-off-work", tags=["users"])
 async def get_off_work(
-    reason: LogoutReasonEnum, to_change_status: bool = True, user: User = Depends(get_current_user(True))
+    reason: LogoutReasonEnum, to_change_status: bool = True, user: User = Depends(get_current_user)
 ):
     return await logout_routine(reason, to_change_status, user)
 

@@ -256,6 +256,7 @@ class User(ormar.Model):
     badge: str = ormar.String(primary_key=True, max_length=100, index=True)
     username: str = ormar.String(max_length=50, nullable=False)
     # level: int = ormar.SmallInteger(choices=list(UserLevel), nullable=False)
+    password_hash: str = ormar.String(max_length=100, nullable=True)
     current_UUID: str = ormar.String(max_length=100, nullable=True)
     ####################
     flag:bool = ormar.Boolean(default=False)
@@ -284,7 +285,6 @@ class Project(ormar.Model):
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
     name:str = ormar.String(max_length=50, nullable=False)
     created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
-    # workers: List[User] = ormar.ManyToMany(User,related_name="projects")
 
 class Device(ormar.Model):
     class Meta(MainMeta):
@@ -297,24 +297,21 @@ class Device(ormar.Model):
 class ProjectUser(ormar.Model):
     class Meta(MainMeta):
         tablename="project_users"
-        constraints = [ormar.UniqueColumns(
-            "project")]
-
+        
+    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
+    
     project:ProjectRef = ormar.ForeignKey(
         ProjectRef,
-        index=True,
         ondelete="CASCADE",
-        related_name="users"
+        related_name="project"
     )
-    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
+    
     user: User = ormar.ForeignKey(User,index=True, nullable=False)
     permission: int = ormar.Integer(choices=list(UserLevel))
 
 class ProjectEvent(ormar.Model):
     class Meta(MainMeta):
         tablename="project_events"
-        constraints = [ormar.UniqueColumns(
-            "project")]
     
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
     

@@ -1,7 +1,7 @@
 import requests
 from fastapi import FastAPI
 import logging
-import paramiko
+# import paramiko
 import json
 import requests
 from jose.constants import ALGORITHMS
@@ -65,7 +65,7 @@ async def authenticate_user(badge: str, password: str):
     return user
 
 
-def get_current_user(light_user=False):
+def get_current_user():
     async def driver(token: str = Depends(oauth2_scheme)):
         expired = False
         try:
@@ -175,6 +175,24 @@ async def checkUserProjectPermission(project_id:int,user:User,permission:int):
             )
     
     return user
+
+async def checkAdminPermission(user:User):
+    if user.badge == "admin":
+        return user
+    else:
+        raise HTTPException(
+            status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
+            )
+
+async def checkUserSearchProjectPermission(user:User,permission:int):
+    user_in_project = await ProjectUser.objects.filter(user=user.badge).all()
+    if len(user_in_project) == 0:
+        raise HTTPException(400, detail='this person didnt join any project')
+    user_access_project_id = []
+    for user in user_in_project:
+        if user.permission >= permission:
+            user_access_project_id.append(user.project.id)
+    return user_access_project_id
 
 async def checkFoxlinkAuth(type:str,user_id:str,password:str,system:str,checkSSH:bool=False):
     if checkSSH:
