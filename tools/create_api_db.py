@@ -8,7 +8,6 @@ from app.env import (
     DATABASE_PASSWORD,
     DATABASE_NAME
 )
-from app.services.user import get_password_hash
 from app.core.database import metadata, create_engine, api_db, User
 
 print(f"Working at Foxlink DB")
@@ -60,9 +59,7 @@ async def create_default_entries():
         await User.objects.create(
             badge='admin',
             username='admin',
-            password_hash=get_password_hash("foxlink"),
             current_UUID=0,
-            change_pwd=0,
             flag=1
         )
     await api_db.disconnect()

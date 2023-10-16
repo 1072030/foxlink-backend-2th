@@ -40,14 +40,6 @@ async def get_all_project(project_id:int):
     """
     return await ProjectUser.objects.filter(project=project_id).all()
 
-# @router.post("/", tags=["project"])
-# async def add_new_project(project_name:str):
-#     """
-#     新增專案(僅admin身分可以新增)
-#     """
-#     return
-#     return await AddNewProject(project_name,user)
-
 @router.delete("/", tags=["project"])
 async def delete_project(project_id:int,user:User = Depends(get_current_user())):
     """

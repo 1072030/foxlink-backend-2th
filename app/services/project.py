@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends ,Response
 from fastapi.exceptions import HTTPException
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
 import pandas as pd
 import numpy as np
 from app.models.schema import NewProjectDto
@@ -15,36 +15,14 @@ from app.core.database import (
     ProjectUser,
     ProjectEvent,
     UserLevel,
-    Device
+    Device,
+    Hourly_mf
 )
 from app.env import FOXLINK_EVENT_DB_HOSTS,FOXLINK_EVENT_DB_NAME
 from app.foxlink.db import foxlink_dbs
 # from app.foxlink.sql import foxlink_sql
 
 FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
-
-# async def AddNewProject(project_name:str,user:User):
-#     stmt = (
-#         f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
-#     )
-#     try:
-#         devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
-#     except:
-#         raise HTTPException(
-#             status_code=400, detail="cant query foxlink database")
-
-#     check_duplicate = await Project.objects.get_or_none(name=project_name)
-#     if len(devices) == 0 and check_duplicate is None:
-#         project = await Project.objects.create(name=project_name)
-#         await ProjectUser.objects.create(ProjectUser(
-#             project_id=project.id,
-#             user_id=user.badge,
-#             permission=5
-#         ))
-#         return 
-#     else:
-#         raise HTTPException(
-#             status_code=404, detail="The project name is duplicate or not existed.")
 
 async def DeleteProject(project_id:int):
     return await Project.objects.delete(id=project_id)
@@ -93,7 +71,7 @@ async def SearchProjectDevices(project_id:str):
             dvs_aoi[device_name] = dvs_aoi.get(device_name,[])
         dvs_aoi[device_name].append(message.lower())
 
-    return dvs_aoi
+    return dvs_aoi.keys()
     
 @transaction()
 async def AddNewProjectEvents(dto:NewProjectDto):
@@ -130,7 +108,7 @@ async def AddNewProjectEvents(dto:NewProjectDto):
 
     # add admin into project
     admin = await User.objects.filter(badge='admin').get_or_none()
-    await ProjectUser.objects.create(project_id=project.id,user_id=admin.badge,permission=5)
+    await ProjectUser.objects.create(project=project.id,user=admin.badge,permission=5)
 
     # add devices and events in project
     bulk_create_device:List[Device] = []
@@ -189,11 +167,11 @@ async def CreateTable():
     # print(dvs_aoi)
 
 
-    data = await Project.objects.filter(id=1).select_related(
-                ["devices","events"]
-            ).get_or_none()
-    print(data)
-    print(data[0].events)
+    # data = await Project.objects.filter(id=1).select_related(
+    #             ["devices","events"]
+    #         ).get_or_none()
+    # print(data)
+    # print(data.events)
 
     hourly_mf = pd.DataFrame()
     dn_mf = pd.DataFrame()
@@ -274,27 +252,40 @@ async def CreateTable():
                 hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.drop_duplicates(['date','hour'], keep='last')[['date','hour','Time_shift']].rename(columns={'Time_shift':'last_prod_time'}) , on=['date','hour'], how='outer') # 各小時最後一筆生產時間
                 hourly_dvs_mf['operation_time'] = hourly_dvs_mf['last_prod_time'] - hourly_dvs_mf['first_prod_time']
                 hourly_dvs_mf['operation_time'].fillna(pd.Timedelta(0), inplace=True)
-                
-                
-                hourly_dvs_mf['Device_Name'] = dvs
-                hourly_dvs_mf['AOI_measure'] = measure
+                temp = hourly_dvs_mf['operation_time']
+                hourly_dvs_mf['operation_time'] = (datetime.combine(date.today(), time(0,0,0)) + hourly_dvs_mf['operation_time'])
+                hourly_dvs_mf['operation_time'] = hourly_dvs_mf['operation_time'].map(lambda x:x.time())
+
+
+                data = await Project.objects.filter(id=1).select_related(
+                            ["devices","events"]
+                        ).get_or_none()
+
+                hourly_dvs_mf['device'] = data.devices[0].id
+                hourly_dvs_mf['aoi_measure'] = data.events[0].id
                 
                 hourly_dvs_mf['pcs'] = hourly_dvs_mf['pcs'].astype(int)
                 hourly_dvs_mf['ng_num'] = hourly_dvs_mf['ng_num'].astype(int)
+
+
+                
+
                 print(hourly_dvs_mf)
+                hourly_mf.to_sql(con=ntust_engine,name="hourly_mf",if_exists='append',index_label='id')
+                test = await Hourly_mf.objects.all()
+                print(test)
                 hourly_mf = hourly_mf.append(hourly_dvs_mf)
                 
                 # 日夜班 生產量 運作時間
+                hourly_dvs_mf['operation_time'] = temp
                 dn_dvs_mf = hourly_dvs_mf.groupby(['date','shift']).pcs.sum().reset_index() # 生產量
                 dn_dvs_mf = pd.merge(dn_dvs_mf, hourly_dvs_mf.groupby(['date','shift'])['operation_time'].sum().reset_index(), on=['date','shift'], how='outer')
                 dn_dvs_mf['pcs'] = dn_dvs_mf['pcs'].astype(int)
                 
-                # Data = await Project.objects.filter(id=1).select_related(
-                #             ["devices","events"]
-                #         ).all()
-                # print(Data)
-                dn_dvs_mf['Device_Name'] = dvs
-                dn_dvs_mf['AOI_measure'] = measure
+                # print(data)
+                # print(data.events)
+                dn_dvs_mf['Device_Name'] = data.devices[0].id
+                dn_dvs_mf['AOI_measure'] = data.events[0].id
                 print(dn_dvs_mf)
                 dn_mf = dn_mf.append(dn_dvs_mf)
                 
@@ -342,9 +333,5 @@ async def CreateTable():
 
                 aoi_feature = aoi_feature.append(aoi_fea)
                 print(aoi_feature)
-
-
-
             return
-        
 # async def 

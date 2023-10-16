@@ -43,19 +43,6 @@ async def login_routine(form_data, handler=[], checkFoxlink:bool = False):
         raise HTTPException(
             status_code=400, detail="user badge doesnt exist."
         )
-    
-    # login_data={
-    #     "type":"login",
-    #     "user_id":user.badge,
-    #     "password":user.password_hash,
-    #     "system":"001"
-    # }
-    
-    # if user.status == WorkerStatusEnum.working.value:
-    #     raise HTTPException(403, detail=f'{user.current_UUID} 现在正在工作')
-
-    # form_data.client_id
-    # auth_foxlink_gateway
 
     access_token = create_access_token(
         data={
