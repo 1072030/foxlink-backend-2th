@@ -205,6 +205,10 @@ class AuditActionEnum(Enum):
     MISSION_ACCEPT_OVERTIME = "MISSION_ACCEPT_OVERTIME"
     NOTIFY_MISSION_NO_WORKER = "NOTIFY_MISSION_NO_WORKER"
 
+    DATA_PREPROCESSING_STARTED = "DATA_PREPROCESSING_STARTED"
+    DATA_PREPROCESSING_SUCCEEDED = "DATA_PREPROCESSING_SUCCESS"
+    DATA_PREPROCESSING_FAILED = "DATA_PREPROCESSING_FAILED"
+
 
 
 
@@ -270,15 +274,6 @@ class User(ormar.Model):
     #     return User.objects.filter(flag=True)
 
 
-class PendingApproval(ormar.Model):
-    class Meta(MainMeta):
-        tablename="pending_approvals"
-    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
-    badge: str = ormar.String(max_length=100, index=True)
-    username:str = ormar.String(max_length=50, nullable=False)
-    password_hash: str = ormar.String(max_length=100, nullable=True)
-    created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
-
 class Project(ormar.Model):
     class Meta(MainMeta):
         tablename="projects"
@@ -290,6 +285,7 @@ class Device(ormar.Model):
     class Meta(MainMeta):
         tablename="devices"
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
+    line:int = ormar.Integer(nullable=False)
     device_name:str = ormar.String(max_length=100,nullable=False)
     project:int = ormar.ForeignKey(Project, index=True, nullable=False,ondelete="CASCADE")
     created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
@@ -315,12 +311,6 @@ class ProjectEvent(ormar.Model):
     
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
     
-    project:ProjectRef = ormar.ForeignKey(
-        ProjectRef,
-        index=True,
-        ondelete="CASCADE",
-        related_name="events"
-    )
     device:DeviceRef = ormar.ForeignKey(
         DeviceRef,
         index=True,
@@ -332,16 +322,16 @@ class ProjectEvent(ormar.Model):
 
 class Aoi_measure(ormar.Model):
     class Meta(MainMeta):
-        tablename="aoi_measure"
+        tablename="aoi_measures"
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
-    device = ormar.ForeignKey(Device, index=True, nullable=False)
+    device:int = ormar.ForeignKey(Device, index=True, nullable=False,ondelete="CASCADE")
     aoi_measure_name:str = ormar.String(max_length=100,index=True)
     created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
 class Hourly_mf(ormar.Model):
     class Meta(MainMeta):
         tablename="hourly_mf"
-    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
+    id:int = ormar.Integer(primary_key=True,autoincrement=True,nulaoi_measurelable=False)
     date:datetime = ormar.DateTime(timezone=True)
     hour:int = ormar.Integer(nullable=False)
     shift:str = ormar.String(max_length=100,index=True)
@@ -351,8 +341,8 @@ class Hourly_mf(ormar.Model):
     first_prod_time:datetime = ormar.DateTime(nullable=True)
     last_prod_time:datetime = ormar.DateTime(nullable=True)
     operation_time:time = ormar.Time(nullable=True)
-    device = ormar.ForeignKey(Device, index=True, nullable=False)
-    aoi_measure:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False)
+    device:int = ormar.ForeignKey(Device, index=True, nullable=False,ondelete="CASCADE")
+    aoi_measure:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False,ondelete="CASCADE")
     # created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
 class Dn_mf(ormar.Model):
@@ -360,11 +350,11 @@ class Dn_mf(ormar.Model):
         tablename="dn_mf"
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
     date:datetime = ormar.DateTime(timezone=True)
-    shift:bool = ormar.Boolean(default=True)
+    shift:str = ormar.String(max_length=100,index=True)
     pcs:int = ormar.Integer(nullable=True)
     operation_time:time = ormar.Time(nullable=True)
-    device = ormar.ForeignKey(Device, index=True, nullable=False)
-    aoi_measure:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False)
+    device = ormar.ForeignKey(Device, index=True, nullable=False,ondelete="CASCADE")
+    aoi_measure:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False,ondelete="CASCADE")
     # created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
 class Aoi_feature(ormar.Model):
@@ -381,8 +371,8 @@ class Aoi_feature(ormar.Model):
     ct_mean:float = ormar.Float(nullable=True)
     ct_min:float = ormar.Float(nullable=True)
 
-    device = ormar.ForeignKey(Device, index=True, nullable=False)
-    aoi_measure:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False)
+    device = ormar.ForeignKey(Device, index=True, nullable=False,ondelete="CASCADE")
+    aoi_measure:int = ormar.ForeignKey(Aoi_measure, index=True, nullable=False,ondelete="CASCADE")
     # created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
 class Error_featur(ormar.Model):

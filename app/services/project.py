@@ -16,16 +16,26 @@ from app.core.database import (
     ProjectEvent,
     UserLevel,
     Device,
-    Hourly_mf
+    Aoi_measure,
 )
-from app.env import FOXLINK_EVENT_DB_HOSTS,FOXLINK_EVENT_DB_NAME
-from app.foxlink.db import foxlink_dbs
+from app.env import FOXLINK_EVENT_DB_HOSTS,FOXLINK_EVENT_DB_NAME,FOXLINK_DEVICE_DB_NAME
+from app.foxlink.db import (
+    foxlink_dbs
+)
 # from app.foxlink.sql import foxlink_sql
 
 FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
 
 async def DeleteProject(project_id:int):
-    return await Project.objects.delete(id=project_id)
+    project = await Project.objects.filter(id=project_id).get_or_none()
+    if project is None:
+        raise HTTPException(404, 'user is not found')
+    try:
+        await project.delete()
+        return f"Success delete project:{project.name}"
+    except:
+        raise HTTPException(400, 'project can not delete')
+   
 
 async def AddNewProjectWorker(project_id:int,user_id:str,permission:int=UserLevel):
     user = await User.objects.filter(badge=user_id).get_or_none()
@@ -51,35 +61,34 @@ async def AddNewProjectWorker(project_id:int,user_id:str,permission:int=UserLeve
     else:
         raise HTTPException(400, 'this user is already in the project')
 
-async def SearchProjectDevices(project_id:str):
+async def SearchProjectDevices(project_name:str):
 
-    stmt = (
-        f"SELECT DISTINCT Device_Name ,Message FROM aoi.`{project_id}_event`"
-        "where ((Category >= 1 AND Category <= 199) OR (Category >= 300 AND Category <= 699))"
-    )
-    try:
-        await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-        devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
-    except:
-        raise HTTPException(
-            status_code=400, detail="can not connect foxlink database or sql parameter is wrong")
-    # print(devices)
-    dvs_aoi = {}
+    return await foxlink_dbs.get_device_names(project_name=project_name)
 
-    for device_name,message in devices:
-        if device_name not in dvs_aoi.keys():
-            dvs_aoi[device_name] = dvs_aoi.get(device_name,[])
-        dvs_aoi[device_name].append(message.lower())
+    # stmt = (
+    #     f"SELECT DISTINCT Device_Name ,Message FROM aoi.`{project_name}_event`"
+    #     "where ((Category >= 1 AND Category <= 199) OR (Category >= 300 AND Category <= 699))"
+    # )
+    # try:
+    #     await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+    #     devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+    # except:
+    #     raise HTTPException(
+    #         status_code=400, detail="can not connect foxlink database or sql parameter is wrong")
+    # # print(devices)
+    # dvs_aoi = {}
 
-    # return list(dvs_aoi.keys())
-    return dvs_aoi
+    # for device_name,message in devices:
+    #     if device_name not in dvs_aoi.keys():
+    #         dvs_aoi[device_name] = dvs_aoi.get(device_name,[])
+    #     dvs_aoi[device_name].append(message.lower())
+
     
 @transaction()
-async def AddNewProjectEvents(dto:NewProjectDto):
-    project_name = dto.project_name
-    devices = dto.devices.keys()
+async def AddNewProjectEvents(dto:List[NewProjectDto]):
+    project_name = dto[0].project
     # check selected devices
-    if len(devices) == 0:
+    if len(dto) == 0:
         raise HTTPException(
             status_code=400, detail="please select devices")
     
@@ -94,6 +103,13 @@ async def AddNewProjectEvents(dto:NewProjectDto):
     except:
         raise HTTPException(
             status_code=400, detail="cant query foxlink database")
+    
+    dvs_aoi={}
+    for device,measure in device:
+        if device not in dvs_aoi.keys():
+            dvs_aoi[device] = dvs_aoi.get(device,[])
+        dvs_aoi[device].append(measure.lower())
+
     # check project in system duplicated
     check_duplicate = await Project.objects.get_or_none(name=project_name)
 
@@ -111,12 +127,39 @@ async def AddNewProjectEvents(dto:NewProjectDto):
     admin = await User.objects.filter(badge='admin').get_or_none()
     await ProjectUser.objects.create(project=project.id,user=admin.badge,permission=5)
 
+    event_data = {}
+    for selected in dto:
+        stmt = (
+            f"""
+            SELECT DISTINCT Device_Name,Line ,Message FROM aoi.`{project_name}_event`
+            where 
+                Device_Name = '{selected.device}' and
+                Line = {selected.line} and
+                ((Category >= 1 AND Category <= 199) OR (Category >= 300 AND Category <= 699))
+            """
+        )
+        try:
+            for i in await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt):
+                name = i.Device_Name + "-" + i.Line
+                if name not in event_data.keys():
+                    event_data[name] = event_data.get(name,[i.Message])
+                else:
+                    event_data[name].append(i.Message)
+        except:
+            raise HTTPException(
+                status_code=400, detail="can not connect foxlink database or sql parameter is wrong")
+
+
+
     # add devices and events in project
     bulk_create_device:List[Device] = []
     bulk_create_events:List[ProjectEvent]=[]
-    for device_name in devices:
+    bulk_create_aoi_measure:List[Aoi_measure]=[]
+
+    for content in event_data.keys():
         device = Device(
-            device_name = device_name,
+            device_name = content.split('-')[0],
+            line = content.split('-')[1],
             project = project.id
         )
         bulk_create_device.append(device)
@@ -124,78 +167,71 @@ async def AddNewProjectEvents(dto:NewProjectDto):
     # bulk create device
     await Device.objects.bulk_create(bulk_create_device)
     
+    # get device detail
     new_devices = await Device.objects.filter(
         project = project.id
     ).all()
-
-    for devices in new_devices:
+    for device in new_devices:
         # check selected events
-        if len(dto.devices[devices.device_name]) == 0:
-            raise HTTPException(
-                status_code=400, detail="some devices you selected and you dont selected events")
-        
-        for events in dto.devices[devices.device_name]:
+        for events in event_data[device.device_name + '-' + str(device.line)]:
             event = ProjectEvent(
-                project = project.id,
-                device = devices.id,
+                device = device.id,
                 name = events
             )
             bulk_create_events.append(event)
     
     # bulk create events
     await ProjectEvent.objects.bulk_create(bulk_create_events)
+
+    for device in new_devices:
+        for aoi_measures in dvs_aoi[device.device_name]:
+            aoi_measure = Aoi_measure(
+                device=device.id,
+                aoi_measure_name = aoi_measures
+            )
+            bulk_create_aoi_measure.append(aoi_measure)
+
+    await Aoi_measure.objects.bulk_create(bulk_create_aoi_measure)
     return
 
-async def CreateTable():
+async def CreateTable(project_id:int):
     foxlink_engine = create_engine(f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi')
     ntust_engine = create_engine(f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink')
-    stmt = (
-        f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = 'd7x e75'"
-    )
-    try:
-        await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-        devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
-    except:
+
+
+    project = await Project.objects.filter(id=project_id).select_related(
+        ["devices","devices__aoi_measures"]
+    ).all()
+    if project is None:
         raise HTTPException(
-            status_code=400, detail="cant query foxlink database")
-    # print(device)
-    dvs_aoi = {}
-    # print(devices)
-    for device,measure in devices:
-        if device not in dvs_aoi.keys():
-            dvs_aoi[device] = dvs_aoi.get(device,[])
-        dvs_aoi[device].append(measure.lower())
-    # print(dvs_aoi)
-
-
-    # data = await Project.objects.filter(id=1).select_related(
-    #             ["devices","events"]
-    #         ).get_or_none()
-    # print(data)
-    # print(data.events)
+                status_code=400, detail="this project doesnt existed.")
 
     hourly_mf = pd.DataFrame()
     dn_mf = pd.DataFrame()
     operation_day={}
     aoi_feature = pd.DataFrame()
+    
+    # print(project[0])
+    # print("")
+    # print(project[0].devices)
+    # print("")
+    # for dvs in project[0].devices:
+    #     print(dvs.device_name)
+    #     for measure in dvs.aoi_measures:
+    #         print(measure.aoi_measure_name)
 
-# for dvs in list(dvs_aoi)[:2]:
-    for dvs in dvs_aoi:
-        if dvs == "Device_5":
-            for measure in dvs_aoi[dvs]:
-                print(dvs, measure)
-                # stmt = (
-                #     f"SELECT Code1,Code2,Code3,Code4,Code6 FROM aoi.`d7x e75_{measure}_data`"
-                # )
-                # aoi = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
-                # aoi = pd.DataFrame() # 批次讀取後再合併
+    for dvs in project[0].devices:
+            for measure in dvs.aoi_measures:
+                print(dvs.device_name, measure.aoi_measure_name)
+                print(dvs.id,measure.id)
+
                 aoi = pd.DataFrame()
-                sql = f"SELECT * FROM `d7x e75_{measure}_data` LIMIT 1;" # 資料表第一筆資料
+                sql = f"SELECT * FROM `{project[0].name}_{measure.aoi_measure_name}_data` LIMIT 1;" # 資料表第一筆資料
                 first_data_date = pd.read_sql(sql, foxlink_engine)['Code3'].values[0] # 第一筆資料的日期
-                dr = pd.date_range(first_data_date, datetime.now().date(), freq='3M').astype(str) # 每六個月為一個週期，批次讀取
+                dr = pd.date_range(first_data_date, datetime.now().date(), freq='2M').astype(str) # 每六個月為一個週期，批次讀取
 
                 sql = f"""
-                    SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `d7x e75_{measure}_data`
+                    SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.aoi_measure_name}_data`
                     WHERE 
                         (Code3 = '{str(first_data_date)}' AND Code4 >= '07:40:00') OR
                         (Code3 > '{str(first_data_date)}' AND Code3 < '{dr[0]}') OR
@@ -206,17 +242,18 @@ async def CreateTable():
                 aoi = aoi.append(tmp_data)
             
                 # 先測試三個月的 之後再進行到1年
-                # for index in range(1, len(dr)):
-                #     sql = f"""
-                #     SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `d7x e75_{measure}_data`
-                #     WHERE 
-                #         (Code3 = '{dr[index-1]}' AND Code4 >= '07:40:00') OR
-                #         (Code3 > '{dr[index-1]}' AND Code3 < '{dr[index]}') OR
-                #         (Code3 = '{dr[index]}' AND Code4 <= '07:40:00')
-                #         AND Code2 < 3 ;
-                #     """
-                #     tmp_data = pd.read_sql(sql, foxlink_engine)
-                #     aoi = aoi.append(tmp_data)
+                for index in range(1, len(dr)):
+                    sql = f"""
+                    SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.aoi_measure_name}_data`
+                    WHERE 
+                        (Code3 = '{dr[index-1]}' AND Code4 >= '07:40:00') OR
+                        (Code3 > '{dr[index-1]}' AND Code3 < '{dr[index]}') OR
+                        (Code3 = '{dr[index]}' AND Code4 <= '07:40:00')
+                        AND Code2 < 3 ;
+                    """
+                    print(f"{get_ntz_now()} starting query {dr[index - 1]} to {dr[index]}")
+                    tmp_data = pd.read_sql(sql, foxlink_engine)
+                    aoi = aoi.append(tmp_data)
                 
                 # aoi = pd.read_csv(f'../d7x/AOI/2022/{dvs}_{measure}.csv', usecols=['ID', 'Code1','Code2','Code3','Code4','Code6'])
                 # test = pd.DataFrame(columns=["Code1","Code2","Code3","Code4","Code6"])
@@ -228,13 +265,15 @@ async def CreateTable():
                 # aoi = test
                 # aoi = pd.DataFrame.from_records(aoi,columns=["Code1","Code2","Code3","Code4","Code6"])
                 # print(aoi)
+
                 aoi = aoi[(aoi['Code2']<3)]
+
                 aoi['MF_Time'] = pd.to_datetime(aoi['Code3'])+ aoi['Code4']
                 aoi["Time_shift"] = aoi["MF_Time"] - pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
                 aoi['date'] = aoi['Time_shift'].dt.date # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
                 aoi['hour'] = aoi['Time_shift'].dt.hour+1 # 工作日期的第幾個小時 1~12為早班 13~24為晚班
                 aoi['shift'] = pd.cut(aoi['hour'], bins=[0,12,24], labels=['D','N']) # 班別 1~12為早班(D) 13~24為晚班(N)
-                
+
                 # 每小時生產資訊
                 hourly_dvs_mf = pd.DataFrame()
                 hourly_dvs_mf['time'] = pd.date_range(aoi['date'].min(), pd.Timestamp(aoi['date'].max()) + pd.Timedelta(hours= 23), freq='h')
@@ -247,7 +286,7 @@ async def CreateTable():
                 hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi['Code2']==0].groupby(['date','hour']).ID.count().reset_index().rename(columns={'ID':'ng_num'}), on=['date','hour'], how='outer') # 不良品量
                 hourly_dvs_mf['pcs'].fillna(0, inplace=True)
                 hourly_dvs_mf['ng_num'].fillna(0, inplace=True)
-                hourly_dvs_mf['ng_rate(%)'] = hourly_dvs_mf['ng_num'] / hourly_dvs_mf['pcs'] * 100 # 不良率
+                hourly_dvs_mf['ng_rate'] = hourly_dvs_mf['ng_num'] / hourly_dvs_mf['pcs'] * 100 # 不良率
 
                 hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.drop_duplicates(['date','hour'], keep='first')[['date','hour','Time_shift']].rename(columns={'Time_shift':'first_prod_time'}) , on=['date','hour'], how='outer') # 各小時第一筆生產時間
                 hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.drop_duplicates(['date','hour'], keep='last')[['date','hour','Time_shift']].rename(columns={'Time_shift':'last_prod_time'}) , on=['date','hour'], how='outer') # 各小時最後一筆生產時間
@@ -258,23 +297,19 @@ async def CreateTable():
                 hourly_dvs_mf['operation_time'] = hourly_dvs_mf['operation_time'].map(lambda x:x.time())
 
 
-                data = await Project.objects.filter(id=1).select_related(
-                            ["devices","events"]
-                        ).get_or_none()
-
-                hourly_dvs_mf['device'] = data.devices[0].id
-                hourly_dvs_mf['aoi_measure'] = data.events[0].id
+                hourly_dvs_mf['device'] = dvs.id
+                hourly_dvs_mf['aoi_measure'] = measure.id
                 
                 hourly_dvs_mf['pcs'] = hourly_dvs_mf['pcs'].astype(int)
                 hourly_dvs_mf['ng_num'] = hourly_dvs_mf['ng_num'].astype(int)
 
+                try:
+                    print("starting input hourly_mf...")
+                    print(hourly_dvs_mf)
+                    hourly_dvs_mf.to_sql(con=ntust_engine,name="hourly_mf",if_exists='append',index= False)
+                except:
+                    return
 
-                
-
-                print(hourly_dvs_mf)
-                hourly_mf.to_sql(con=ntust_engine,name="hourly_mf",if_exists='append',index_label='id')
-                test = await Hourly_mf.objects.all()
-                print(test)
                 hourly_mf = hourly_mf.append(hourly_dvs_mf)
                 
                 # 日夜班 生產量 運作時間
@@ -285,9 +320,20 @@ async def CreateTable():
                 
                 # print(data)
                 # print(data.events)
-                dn_dvs_mf['Device_Name'] = data.devices[0].id
-                dn_dvs_mf['AOI_measure'] = data.events[0].id
-                print(dn_dvs_mf)
+                dn_dvs_mf['device'] = dvs.id
+                dn_dvs_mf['aoi_measure'] = measure.id
+                temp_operation = dn_dvs_mf['operation_time']
+                dn_dvs_mf['operation_time'] = (datetime.combine(date.today(), time(0,0,0)) + dn_dvs_mf['operation_time'])
+                dn_dvs_mf['operation_time'] = dn_dvs_mf['operation_time'].map(lambda x:x.time())
+
+                # to sql
+                try:
+                    print("starting input dn_mf...")
+                    print(dn_dvs_mf)
+                    dn_dvs_mf.to_sql(con=ntust_engine,name="dn_mf",if_exists='append',index= False)
+                except:
+                    return
+                dn_dvs_mf['operation_time'] = temp_operation
                 dn_mf = dn_mf.append(dn_dvs_mf)
                 
                 # 計算operation day
@@ -306,7 +352,7 @@ async def CreateTable():
                     set(dn_mf[(dn_mf['shift']=='D') & ((dn_mf['operation_time']>=d_timelower) | (dn_mf['pcs']>=d_pcslower))]['date']) 
                     & set(dn_mf[(dn_mf['shift']=='N') & ((dn_mf['operation_time']>=n_timelower) | (dn_mf['pcs']>=n_pcslower))]['date'])
                 )
-                operation_day[dvs] = dvs_operation_day
+                operation_day[dvs.device_name] = dvs_operation_day
                 op_day = pd.DataFrame()
                 op_day['date'] = sorted(list(dvs_operation_day))
                 op_day['operation_day'] = 1
@@ -315,13 +361,13 @@ async def CreateTable():
                 aoi_fea = pd.DataFrame()
                 aoi_fea['date'] = pd.date_range(aoi['date'].min(), aoi['date'].max())
                 aoi_fea['date'] = aoi_fea['date'].dt.date
-                aoi_fea['Device_Name'] = dvs
-                aoi_fea['AOI_measure'] = measure
+                aoi_fea['device'] = dvs.id
+                aoi_fea['aoi_measure'] = measure.id
                 aoi_fea = pd.merge(aoi_fea, op_day, on='date', how='outer')
                 
                 aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).ID.count().reset_index().rename(columns={'ID':'pcs'}), on='date', how='outer')
                 aoi_fea = pd.merge(aoi_fea, aoi[aoi['Code2']==0].groupby(['date']).ID.count().reset_index().rename(columns={'ID':'ng_num'}), on='date', how='outer')
-                aoi_fea['ng_rate(%)'] = aoi_fea['ng_num'] / aoi_fea['pcs'] * 100
+                aoi_fea['ng_rate'] = aoi_fea['ng_num'] / aoi_fea['pcs'] * 100
                 
                 aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.max().reset_index().rename(columns={'Code6':'ct_max'}), on='date', how='outer')
                 aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.mean().reset_index().rename(columns={'Code6':'ct_mean'}), on='date', how='outer')
@@ -332,7 +378,14 @@ async def CreateTable():
                 aoi_fea['ng_num'] = aoi_fea['ng_num'].astype(int)
                 aoi_fea['operation_day'] = aoi_fea['operation_day'].astype(int)
 
+                print(aoi_fea)
+                try:
+                    print("starting input aoi_feature...")
+                    aoi_fea.to_sql(con=ntust_engine,name="aoi_feature",if_exists='append',index= False)
+                except:
+                    return
                 aoi_feature = aoi_feature.append(aoi_fea)
-                print(aoi_feature)
+
+                
             return
 # async def 

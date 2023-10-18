@@ -7,6 +7,8 @@ from app.core.database import (
     Project,
     ProjectUser,
     User,
+    AuditActionEnum,
+    AuditLogHeader
 )
 from app.services.project import(
     AddNewProjectWorker,
@@ -85,14 +87,14 @@ async def add_new_workers(project_id:int,user_id:str,permission:int,user:User = 
     
 
 @router.get("/search-project-devices",tags=["project"])
-async def search_project_devices(project_id:str):
+async def search_project_devices(project_name:str):
     """
     搜尋專案擁有的devices
     """
-    return await SearchProjectDevices(project_id)
+    return await SearchProjectDevices(project_name)
 
 @router.post("/add-project-events",status_code=200,tags=["project"])
-async def add_project_and_events(dto:NewProjectDto,user:User = Depends(get_current_user())):
+async def add_project_and_events(dto:List[NewProjectDto],user:User = Depends(get_current_user())):
     """
     搜尋專案內的所有事件(會確認新增者權限 = admin)
     """
@@ -106,8 +108,27 @@ async def add_project_and_events(dto:NewProjectDto,user:User = Depends(get_curre
     # user:User = await checkUserProjectPermission(project_id,user,5)
 
 @router.get("/create_table",tags=["project"])
-async def create_table():
-    return await CreateTable()
+async def create_table(project_id:int,user:User = Depends(get_current_user())):
+    await AuditLogHeader.objects.create(
+            action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
+            user=user.badge
+        )
+    try:
+        await CreateTable(project_id)
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
+            user=user.badge
+        )
+        return 
+    except:
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
+            user=user.badge
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="DATA_PREPROCESSING_FAILED"
+        )
+
 # @router.get("/testssh")
 # async def sshconnect():
 #     return await checkFoxlinkAuth()

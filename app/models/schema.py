@@ -239,8 +239,11 @@ class DeviceExp(BaseModel):
     exp: int
 
 class NewProjectDto(BaseModel):
-    project_name:str
-    devices:Dict[str,List[str]]
+    project:str
+    line:int
+    device:str
+    ename:str
+    cname:str
 
 
 
