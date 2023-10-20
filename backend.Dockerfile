@@ -35,6 +35,9 @@ RUN apt-get install procps -y
 #
 RUN apt-get install bmon -y
 
+#
+RUN apt-get install cron -y
+
 # copy dependencies
 COPY requirements.txt /app/
 
