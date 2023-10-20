@@ -8,7 +8,8 @@ from app.core.database import (
     ProjectUser,
     User,
     AuditActionEnum,
-    AuditLogHeader
+    AuditLogHeader,
+    transaction
 )
 from app.services.project import(
     AddNewProjectWorker,
@@ -66,7 +67,13 @@ async def delete_project(project_id:int,user:User = Depends(get_current_user()))
     """
     user = await checkUserProjectPermission(project_id,user,5)
     if user is not None:
-        return await DeleteProject(project_id)
+        project_name = await DeleteProject(project_id)
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.ADD_PROJECT_WORKER.value,
+            user=user.badge,
+            description=f"{project_name}"
+        )
+        return
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
@@ -80,6 +87,11 @@ async def add_new_workers(project_id:int,user_id:str,permission:int,user:User = 
     user = await checkUserProjectPermission(project_id,user,5)
     if user is not None:
         return await AddNewProjectWorker(project_id,user_id,permission)
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.ADD_PROJECT_WORKER.value,
+            user=user.badge,
+            description=f"{user_id}"
+        )
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
@@ -93,6 +105,7 @@ async def search_project_devices(project_name:str):
     """
     return await SearchProjectDevices(project_name)
 
+
 @router.post("/add-project-events",status_code=200,tags=["project"])
 async def add_project_and_events(dto:List[NewProjectDto],user:User = Depends(get_current_user())):
     """
@@ -101,6 +114,11 @@ async def add_project_and_events(dto:List[NewProjectDto],user:User = Depends(get
     user = await checkAdminPermission(user)
     if user is not None:
         return await AddNewProjectEvents(dto)
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.ADD_NEW_PROJECT.value,
+            user=user.badge,
+            description=f"{dto[0].project}"
+        )
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"

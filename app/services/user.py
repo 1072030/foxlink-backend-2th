@@ -30,7 +30,6 @@ from app.core.database import (
     AuditActionEnum,
     AuditLogHeader,
     User,
-    PendingApproval,
     UserLevel,
     WorkerStatusEnum,
     api_db,
@@ -40,51 +39,9 @@ from app.core.database import (
 pwd_context = CryptContext(schemes=[PWD_SCHEMA], deprecated="auto")
 
 
-def get_password_hash(password: str):
-    return pwd_context.hash(password, salt=PWD_SALT, rounds=10000)
-
-
 async def get_users() -> List[User]:
     # need flag
     return await User.objects().all()
-
-
-async def add_pending_user(dto: UserPedding) -> User:
-    if dto.password is None or dto.password == "":
-        raise HTTPException(
-            status_code=400, detail="password can not be empty")
-
-    pw_hash = get_password_hash(dto.password)
-
-    new_dto = dto.dict()
-    del new_dto["password"]
-    new_dto["password_hash"] = pw_hash
-
-    user_duplicate = await User.objects.filter(badge=new_dto["badge"]).get_or_none()
-    approvals_duplicate = await PendingApproval.objects.filter(badge=new_dto["badge"]).get_or_none()
-    if approvals_duplicate is not None or user_duplicate is not None:
-        raise HTTPException(
-            status_code=400, detail="User account already exist")
-
-    if dto.badge is None or dto.badge == "":
-        raise HTTPException(
-            status_code=400, detail="User account can not be empty")
-    
-    if dto.username is None or dto.username == "":
-        raise HTTPException(
-            status_code=400, detail="Username can not be empty")
-    
-    user = PendingApproval(
-        badge=new_dto["badge"],
-        username=new_dto["username"],
-        password_hash=new_dto["password_hash"]
-    )
-
-    try:
-        return await user.save()
-    except Exception as e:
-        raise HTTPException(
-            status_code=400, detail="cannot add user:" + str(e))
 
 
 async def get_worker_by_badge(

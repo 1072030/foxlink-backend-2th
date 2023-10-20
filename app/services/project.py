@@ -32,7 +32,7 @@ async def DeleteProject(project_id:int):
         raise HTTPException(404, 'user is not found')
     try:
         await project.delete()
-        return f"Success delete project:{project.name}"
+        return project.name
     except:
         raise HTTPException(400, 'project can not delete')
    
