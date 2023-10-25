@@ -19,9 +19,18 @@ from app.services.auth import (
     get_manager_active_user,
     verify_password,
     get_admin_active_user,
+    getFoxlinkUser
 )
 
 router = APIRouter(prefix="/users")
+
+@router.post("/foxlink",tags=["users"])
+async def get_foxlink_user(user_id:str,system_id:str):
+    """
+    暫時無功能
+    """
+    return await getFoxlinkUser(user_id,system_id,True)
+
 
 @router.post("/get-off-work", tags=["users"])
 async def get_off_work(

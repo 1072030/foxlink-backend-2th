@@ -9,7 +9,7 @@ uploaded*
 # C extensions
 *.so
 
-
+/backup
 
 # Distribution / packaging
 .Python

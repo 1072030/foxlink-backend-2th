@@ -38,12 +38,16 @@ RUN apt-get install bmon -y
 #
 RUN apt-get install cron -y
 
+#
+RUN apt install default-mysql-client -y
+
 # copy dependencies
 COPY requirements.txt /app/
 
 # install dependencies
 RUN pip install --no-deps -r requirements.txt
 
+#default-mysql-client
 
 COPY prestart.sh /app/
 

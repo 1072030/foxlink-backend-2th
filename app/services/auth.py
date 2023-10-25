@@ -1,7 +1,7 @@
 import requests
 from fastapi import FastAPI
 import logging
-# import paramiko
+import paramiko
 import json
 import requests
 from jose.constants import ALGORITHMS
@@ -158,6 +158,7 @@ async def authenticate_foxlink(dto:UserLoginFoxlink):
     response = await requests.post()
     return
 
+
 async def checkUserProjectPermission(project_id:int,user:User,permission:int):
     project = await Project.objects.filter(id=project_id).get_or_none()
     if project is None:
@@ -172,7 +173,7 @@ async def checkUserProjectPermission(project_id:int,user:User,permission:int):
     if not project_user.permission == permission:
         raise HTTPException(
             status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
-            )
+        )
     
     return user
 
@@ -216,3 +217,23 @@ async def checkFoxlinkAuth(type:str,user_id:str,password:str,system:str,checkSSH
         x = requests.post(url, data = json.dumps(myobj))
         print(x)
         return
+    
+async def getFoxlinkUser(user_id:str,system_id:str,checkSSH:bool=False):
+    if checkSSH:
+        ip = "192.168.65.210"
+        username = "ntust"
+        password = "aa946809"
+        command = f'curl -X POST -d "user_id={user_id}&system_id={system_id}" http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(ip, port=22, username=username, password=password, timeout=20)
+        stdin, stdout, stderr = client.exec_command(command)
+        return json.loads(stdout.read().decode("utf-8"))
+    else:
+        url = 'http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
+        myobj = {
+            "user_id":user_id,
+            "system":system_id
+        }
+        x = requests.post(url, data = json.dumps(myobj))
+        return x

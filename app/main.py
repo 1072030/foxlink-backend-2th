@@ -12,7 +12,8 @@ from app.routes import (
     log,
     system,
     backup,
-    project
+    project,
+    test
 )
 from app.core.database import api_db
 # from app.mqtt import mqtt_client
@@ -60,7 +61,7 @@ app.include_router(auth.router)
 app.include_router(project.router)
 app.include_router(log.router)
 app.include_router(backup.router)
-
+app.include_router(test.router)
 # if PY_ENV == 'dev':
 #     app.include_router(test.router)
 

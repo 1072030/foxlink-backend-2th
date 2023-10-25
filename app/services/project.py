@@ -61,6 +61,29 @@ async def AddNewProjectWorker(project_id:int,user_id:str,permission:int=UserLeve
     else:
         raise HTTPException(400, 'this user is already in the project')
 
+async def RemoveProjectWorker(project_id:int,user_id:str):
+    user = await User.objects.filter(badge=user_id).get_or_none()
+    if user is None:
+        raise HTTPException(404, 'user is not found')
+    
+    project = await Project.objects.filter(id=project_id).get_or_none()
+
+    if project is None:
+        raise HTTPException(404, 'project is not found')
+    
+    check_duplicate = await ProjectUser.objects.filter(
+        project=project_id,user=user_id
+    ).get_or_none()
+    
+    if check_duplicate is not None:
+        await ProjectUser.objects.filter(
+           project=project_id,
+           user=user.badge,
+        ).delete()
+        return True
+    else:
+        raise HTTPException(400, 'can not delete this user in this project with some error')
+
 async def SearchProjectDevices(project_name:str):
 
     return await foxlink_dbs.get_device_names(project_name=project_name)

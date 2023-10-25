@@ -246,6 +246,10 @@ class NewProjectDto(BaseModel):
     cname:str
 
 
+class NewUserDto(BaseModel):
+    project_id:int
+    user_id:str
+    permission:int
 
 
 

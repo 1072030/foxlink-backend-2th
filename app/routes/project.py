@@ -16,6 +16,7 @@ from app.services.project import(
     SearchProjectDevices,
     AddNewProjectEvents,
     DeleteProject,
+    RemoveProjectWorker,
     CreateTable
 )
 from app.services.auth import (
@@ -26,7 +27,7 @@ from app.services.auth import (
     checkFoxlinkAuth,
     get_manager_active_user
 )
-from app.models.schema import NewProjectDto
+from app.models.schema import NewProjectDto,NewUserDto
 
 router = APIRouter(prefix="/project")
 
@@ -52,9 +53,18 @@ async def get_all_project(project_id:int,user:User = Depends(get_current_user())
     取得對應專案內的所有人員(當前使用者權限內的專案)
     """
     user = await checkUserProjectPermission(project_id,user,5)
-    if user is not None:
-        return await ProjectUser.objects.filter(project=project_id).fields(['user']).values()
-    else:
+
+    try:
+        user =  await ProjectUser.objects.select_related(['user']).filter(project=project_id).all()
+        format_data = []
+        for i in user:
+            format_data.append({
+                'badge':i.user.badge,
+                'username':i.user.username,
+                'permission':i.permission
+            })
+        return format_data
+    except:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
         )
@@ -79,19 +89,40 @@ async def delete_project(project_id:int,user:User = Depends(get_current_user()))
             status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
         )
 
+
 @router.post("/add-project-worker", tags=["project"])
-async def add_new_workers(project_id:int,user_id:str,permission:int,user:User = Depends(get_current_user())):
+async def add_new_workers(dto:NewUserDto,user:User = Depends(get_current_user())):
+    """
+    新增專案內人員(會確認新增者權限)
+    """
+    user = await checkUserProjectPermission(dto.project_id,user,5)
+    if user is not None:
+        await AddNewProjectWorker(dto.project_id,dto.user_id,dto.permission)
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.ADD_PROJECT_WORKER.value,
+            user=user.badge,
+            description=f"{dto.user_id}"
+        )
+        return
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
+        )
+
+@router.delete("/remove-project-worker", tags=["project"])
+async def delete_workers(project_id:int,user_id:str,user:User = Depends(get_current_user())):
     """
     新增專案內人員(會確認新增者權限)
     """
     user = await checkUserProjectPermission(project_id,user,5)
     if user is not None:
-        return await AddNewProjectWorker(project_id,user_id,permission)
+        await RemoveProjectWorker(project_id,user_id)
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.ADD_PROJECT_WORKER.value,
             user=user.badge,
             description=f"{user_id}"
         )
+        return
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
