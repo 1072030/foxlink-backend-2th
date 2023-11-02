@@ -17,7 +17,8 @@ from app.services.project import(
     AddNewProjectEvents,
     DeleteProject,
     RemoveProjectWorker,
-    CreateTable
+    CreateTable,
+    UpdateTrainingData
 )
 from app.services.auth import (
     get_current_user,
@@ -178,9 +179,14 @@ async def create_table(project_id:int,user:User = Depends(get_current_user())):
             status_code=status.HTTP_400_BAD_REQUEST, detail="DATA_PREPROCESSING_FAILED"
         )
 
-# @router.get("/testssh")
-# async def sshconnect():
-#     return await checkFoxlinkAuth()
+@router.get("/training_table",tags=["project"])
+async def training_table(project_id:int,user:User = Depends(get_current_user())):
+    await UpdateTrainingData(project_id)
+    return
+
+@router.get("/testssh")
+async def sshconnect():
+    return await checkFoxlinkAuth(True)
     
 
 # from fastapi import APIRouter, Depends, File, UploadFile

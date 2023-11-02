@@ -24,7 +24,7 @@ from app.services.auth import (
 
 router = APIRouter(prefix="/users")
 
-@router.post("/foxlink",tags=["users"])
+@router.get("/foxlink",tags=["users"])
 async def get_foxlink_user(user_id:str,system_id:str):
     """
     暫時無功能
