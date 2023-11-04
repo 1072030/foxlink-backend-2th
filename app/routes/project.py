@@ -17,8 +17,10 @@ from app.services.project import(
     AddNewProjectEvents,
     DeleteProject,
     RemoveProjectWorker,
-    CreateTable,
-    UpdateTrainingData
+    PreprocessingData,
+    UpdatePreprocessingData,
+    TrainingData,
+    PredictData
 )
 from app.services.auth import (
     get_current_user,
@@ -157,32 +159,43 @@ async def add_project_and_events(dto:List[NewProjectDto],user:User = Depends(get
         )
     # user:User = await checkUserProjectPermission(project_id,user,5)
 
-@router.get("/create_table",tags=["project"])
-async def create_table(project_id:int,user:User = Depends(get_current_user())):
+@router.get("/preprocessing-data",tags=["project"])
+async def preprocessing_data(project_id:int,user:User = Depends(get_current_user())):
     await AuditLogHeader.objects.create(
             action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
             user=user.badge
         )
     try:
-        await CreateTable(project_id)
+        await PreprocessingData(project_id)
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
             user=user.badge
         )
-        return 
-    except:
+        return
+    except Exception as e:
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
             user=user.badge
         )
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="DATA_PREPROCESSING_FAILED"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"DATA_PREPROCESSING_FAILED : {repr(e)}"
         )
 
-@router.get("/training_table",tags=["project"])
-async def training_table(project_id:int,user:User = Depends(get_current_user())):
-    await UpdateTrainingData(project_id)
+@router.get("/update-preprocessing-data",tags=["project"])
+async def update_preprocessing_data(project_id:int,user:User = Depends(get_current_user())):
+    await UpdatePreprocessingData(project_id)
     return
+
+@router.get("/training-data",tags=["project"])
+async def training_data(project_id:int,user:User = Depends(get_current_user())):
+    await TrainingData(project_id)
+    return
+@router.get("/predict-data",tags=["project"])
+async def predict_data(project_id:int,user:User = Depends(get_current_user())):
+    await PredictData(project_id)
+    return
+
+
 
 @router.get("/testssh")
 async def sshconnect():

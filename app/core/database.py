@@ -268,7 +268,7 @@ class Device(ormar.Model):
         tablename="devices"
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
     line:int = ormar.Integer(nullable=False)
-    device_name:str = ormar.String(max_length=100,nullable=False)
+    name:str = ormar.String(max_length=100,nullable=False)
     project:int = ormar.ForeignKey(Project, index=True, nullable=False,ondelete="CASCADE")
     created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
@@ -307,7 +307,7 @@ class AoiMeasure(ormar.Model):
         tablename="aoi_measures"
     id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
     device:int = ormar.ForeignKey(Device, index=True, nullable=False,ondelete="CASCADE")
-    aoi_measure_name:str = ormar.String(max_length=100,index=True)
+    name:str = ormar.String(max_length=100,index=True)
     created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
 
 class HourlyMf(ormar.Model):
@@ -368,7 +368,7 @@ class ErrorFeature(ormar.Model):
     category = ormar.Integer(nullable=True)
     operation_day:bool=ormar.Boolean(default=False)
 
-    happened:bool=ormar.Boolean(default=False)
+    happened:bool=ormar.Integer(nullable=True)
     dur_max:int = ormar.Integer(nullable=True)
     dur_mean:float = ormar.Float(nullable=True)
     dur_min:int = ormar.Integer(nullable=True)
@@ -384,6 +384,39 @@ class PredTarget(ormar.Model):
     category = ormar.Integer(nullable=True)
     message = ormar.String(max_length=100,index=True)
     target:bool=ormar.Boolean(default=False)
+
+class TrainPerformance(ormar.Model):
+    class Meta(MainMeta):
+        tablename="train_performance"
+
+    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
+    device:int = ormar.ForeignKey(Device,index=True,nullable=False,ondelete="CASCADE")
+    category:int = ormar.Integer(nullable=True)
+    message:str = ormar.String(max_length=100,index=True)
+    threshold:float=ormar.Float(nullable=True)
+    actual_cutpoint:int = ormar.Integer(nullable=True)
+    arf:float = ormar.Float(nullable=True)
+    acc:float = ormar.Float(nullable=True)
+    red_recall:float = ormar.Float(nullable=True)
+    red_f1score:float = ormar.Float(nullable=True)
+    used_col:str = ormar.Text()
+    freq:str = ormar.String(max_length=100,index=True)
+    created_date:str = ormar.String(max_length=100,index=True)
+
+class PredictResult(ormar.Model):
+    class Meta(MainMeta):
+        tablename="predict_result"
+
+    id:int = ormar.Integer(primary_key=True,autoincrement=True,nullable=False)
+    device:int = ormar.ForeignKey(Device,index=True,nullable=False,ondelete="CASCADE")
+    category:int = ormar.Integer(nullable=True)
+    message:str = ormar.String(max_length=100,index=True)
+
+    pred:str = ormar.String(max_length=100,index=True)
+    ori_date:datetime = ormar.DateTime(timezone=True)
+    pred_date:datetime = ormar.DateTime(timezone=True)
+    created_date:datetime = ormar.DateTime(default=get_ntz_now,timezone=True)
+
 # class Device(ormar.Model):
 #     class Meta(MainMeta):
 #         tablename = "devices"
