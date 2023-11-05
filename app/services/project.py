@@ -18,7 +18,7 @@ from app.core.database import (
     AoiFeature,
     PredTarget
 )
-from app.env import FOXLINK_EVENT_DB_HOSTS,FOXLINK_EVENT_DB_NAME,FOXLINK_DEVICE_DB_NAME
+from app.env import FOXLINK_EVENT_DB_HOSTS, FOXLINK_EVENT_DB_NAME, FOXLINK_DEVICE_DB_NAME
 from app.foxlink.db import (
     foxlink_dbs
 )
@@ -28,7 +28,7 @@ import datetime
 
 from natsort import natsort_keygen
 from sqlalchemy import create_engine
-#----
+# ----
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, StackingClassifier
 from sklearn.metrics import classification_report
@@ -41,11 +41,12 @@ from xgboost import XGBClassifier
 
 from tqdm import tqdm
 import joblib
-#----
+# ----
 
 FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
 
-async def DeleteProject(project_id:int):
+
+async def DeleteProject(project_id: int):
     project = await Project.objects.filter(id=project_id).get_or_none()
     if project is None:
         raise HTTPException(404, 'user is not found')
@@ -54,84 +55,87 @@ async def DeleteProject(project_id:int):
         return project.name
     except:
         raise HTTPException(400, 'project can not delete')
-   
 
-async def AddNewProjectWorker(project_id:int,user_id:str,permission:int=UserLevel):
+
+async def AddNewProjectWorker(project_id: int, user_id: str, permission: int = UserLevel):
     user = await User.objects.filter(badge=user_id).get_or_none()
     if user is None:
         raise HTTPException(404, 'user is not found')
-    
+
     project = await Project.objects.filter(id=project_id).get_or_none()
 
     if project is None:
         raise HTTPException(404, 'project is not found')
 
     check_duplicate = await ProjectUser.objects.filter(
-        project=project_id,user=user_id
-        ).get_or_none()
-    
+        project=project_id, user=user_id
+    ).get_or_none()
+
     if check_duplicate is None:
         await ProjectUser.objects.create(
-           project=project_id,
-           user=user.badge,
-           permission=permission
-        ) 
+            project=project_id,
+            user=user.badge,
+            permission=permission
+        )
         return True
     else:
         raise HTTPException(400, 'this user is already in the project')
 
-async def RemoveProjectWorker(project_id:int,user_id:str):
+
+async def RemoveProjectWorker(project_id: int, user_id: str):
     user = await User.objects.filter(badge=user_id).get_or_none()
     if user is None:
         raise HTTPException(404, 'user is not found')
-    
+
     project = await Project.objects.filter(id=project_id).get_or_none()
 
     if project is None:
         raise HTTPException(404, 'project is not found')
-    
+
     check_duplicate = await ProjectUser.objects.filter(
-        project=project_id,user=user_id
+        project=project_id, user=user_id
     ).get_or_none()
-    
+
     if check_duplicate is not None:
         await ProjectUser.objects.filter(
-           project=project_id,
-           user=user.badge,
+            project=project_id,
+            user=user.badge,
         ).delete()
         return True
     else:
-        raise HTTPException(400, 'can not delete this user in this project with some error')
+        raise HTTPException(
+            400, 'can not delete this user in this project with some error')
 
-async def SearchProjectDevices(project_name:str):
+
+async def SearchProjectDevices(project_name: str):
 
     return await foxlink_dbs.get_device_names(project_name=project_name)
 
-    
+
 @transaction()
-async def AddNewProjectEvents(dto:List[NewProjectDto]):
+async def AddNewProjectEvents(dto: List[NewProjectDto]):
     project_name = dto[0].project
     # check selected devices
     if len(dto) == 0:
         raise HTTPException(
             status_code=400, detail="please select devices")
-    
+
     # foxlink db project select
     stmt = (
         f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
     )
     try:
-    # check query project
+        # check query project
         await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
         device = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
     except:
         raise HTTPException(
             status_code=400, detail="cant query foxlink database")
-    
-    dvs_aoi={}
-    for device,measure in device:
+
+    dvs_aoi = {}
+    for device, measure in device:
         if device not in dvs_aoi.keys():
-            dvs_aoi[device] = dvs_aoi.get(device,[])
+            dvs_aoi[device] = dvs_aoi.get(device, [])
         dvs_aoi[device].append(measure.lower())
 
     # check project in system duplicated
@@ -149,7 +153,7 @@ async def AddNewProjectEvents(dto:List[NewProjectDto]):
 
     # add admin into project
     admin = await User.objects.filter(badge='admin').get_or_none()
-    await ProjectUser.objects.create(project=project.id,user=admin.badge,permission=5)
+    await ProjectUser.objects.create(project=project.id, user=admin.badge, permission=5)
 
     event_data = {}
     for selected in dto:
@@ -159,51 +163,49 @@ async def AddNewProjectEvents(dto:List[NewProjectDto]):
             where 
                 Device_Name = '{selected.device}' and
                 Line = {selected.line} and
-                ((Category >= 1 AND Category <= 199) OR (Category >= 300 AND Category <= 699))
+                (Category >= 1 AND Category <= 199)
             """
         )
         try:
             for i in await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt):
                 name = i.Device_Name + "-" + i.Line
                 if name not in event_data.keys():
-                    event_data[name] = event_data.get(name,[i.Message])
+                    event_data[name] = event_data.get(name, [i.Message])
                 else:
                     event_data[name].append(i.Message)
         except:
             raise HTTPException(
                 status_code=400, detail="can not connect foxlink database or sql parameter is wrong")
 
-
-
     # add devices and events in project
-    bulk_create_device:List[Device] = []
-    bulk_create_events:List[ProjectEvent]=[]
-    bulk_create_aoi_measure:List[AoiMeasure]=[]
+    bulk_create_device: List[Device] = []
+    bulk_create_events: List[ProjectEvent] = []
+    bulk_create_aoi_measure: List[AoiMeasure] = []
 
     for content in event_data.keys():
         device = Device(
-            name = content.split('-')[0],
-            line = content.split('-')[1],
-            project = project.id
+            name=content.split('-')[0],
+            line=content.split('-')[1],
+            project=project.id
         )
         bulk_create_device.append(device)
 
     # bulk create device
     await Device.objects.bulk_create(bulk_create_device)
-    
+
     # get device detail
     new_devices = await Device.objects.filter(
-        project = project.id
+        project=project.id
     ).all()
     for device in new_devices:
         # check selected events
         for events in event_data[device.name + '-' + str(device.line)]:
             event = ProjectEvent(
-                device = device.id,
-                name = events
+                device=device.id,
+                name=events
             )
             bulk_create_events.append(event)
-    
+
     # bulk create events
     await ProjectEvent.objects.bulk_create(bulk_create_events)
 
@@ -211,40 +213,50 @@ async def AddNewProjectEvents(dto:List[NewProjectDto]):
         for aoi_measures in dvs_aoi[device.name]:
             aoi_measure = AoiMeasure(
                 device=device.id,
-                name = aoi_measures
+                name=aoi_measures
             )
             bulk_create_aoi_measure.append(aoi_measure)
 
     await AoiMeasure.objects.bulk_create(bulk_create_aoi_measure)
     return
 
-async def PreprocessingData(project_id:int):
-    foxlink_engine = create_engine(f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi')
-    ntust_engine = create_engine(f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink')
 
-    now_workday = (get_ntz_now() - pd.Timedelta(hours=7,minutes=40)).date() # 工作日期 (現在時間於10/9 07:40:00 ~ 10/10 07:39:59之間，工作日期為 10/9)
-    yesterday_workday_endtime = pd.to_datetime(now_workday) + pd.Timedelta(hours=7,minutes=40) # 前一個工作日期的結束時間 (即 10/8 工作日的結束時間 : 10/9 07:40:00) 
+async def PreprocessingData(project_id: int):
+    foxlink_engine = create_engine(
+        f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi')
+    ntust_engine = create_engine(
+        f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink')
+
+    # 工作日期 (現在時間於10/9 07:40:00 ~ 10/10 07:39:59之間，工作日期為 10/9)
+    now_workday = (get_ntz_now() - pd.Timedelta(hours=7, minutes=40)).date()
+    # 前一個工作日期的結束時間 (即 10/8 工作日的結束時間 : 10/9 07:40:00)
+    yesterday_workday_endtime = pd.to_datetime(
+        now_workday) + pd.Timedelta(hours=7, minutes=40)
     project = await Project.objects.filter(id=project_id).select_related(
-        ["devices","devices__aoimeasures"]
+        ["devices", "devices__aoimeasures"]
     ).all()
     if project is None:
         raise HTTPException(
-                status_code=400, detail="this project doesnt existed.")
+            status_code=400, detail="this project doesnt existed.")
 
     hourly_mf = pd.DataFrame()
     dn_mf = pd.DataFrame()
-    operation_day={}
+    operation_day = {}
     aoi_feature = pd.DataFrame()
 
     for dvs in project[0].devices:
-            for measure in dvs.aoimeasures:
-                aoi = pd.DataFrame()
-                sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;" # 資料表第一筆資料
-                first_data_date = pd.read_sql(sql, foxlink_engine)['Code3'].values[0] # 第一筆資料的日期
-                dr = pd.date_range(first_data_date, datetime.datetime.now().date(), freq='2M').astype(str) # 
-                
-                print(f"{get_ntz_now()} : starting query {first_data_date} to {dr[0]}")
-                sql = f"""
+        for measure in dvs.aoimeasures:
+            aoi = pd.DataFrame()
+            # 資料表第一筆資料
+            sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;"
+            first_data_date = pd.read_sql(sql, foxlink_engine)[
+                'Code3'].values[0]  # 第一筆資料的日期
+            dr = pd.date_range(
+                first_data_date, datetime.datetime.now().date(), freq='2M').astype(str)
+
+            print(
+                f"{get_ntz_now()} : starting query {first_data_date} to {dr[0]}")
+            sql = f"""
                     SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
                     WHERE 
                         (Code3 = '{str(first_data_date)}' AND Code4 >= '07:40:00') OR
@@ -252,21 +264,21 @@ async def PreprocessingData(project_id:int):
                         (Code3 = '{dr[0]}' AND Code4 <= '07:40:00')
                         AND Code2 < 3 ;
                     """
-                # print(f"{get_ntz_now()} : starting query {dr[3]} to {dr[4]}")
-                # sql = f"""
-                #     SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.aoi_measure_name}_data`
-                #     WHERE 
-                #         (Code3 = '{dr[3]}' AND Code4 >= '07:40:00') OR
-                #         (Code3 > '{dr[3]}' AND Code3 < '{dr[4]}') OR
-                #         (Code3 = '{dr[4]}' AND Code4 <= '07:40:00')
-                #         AND Code2 < 3 ;
-                #     """
-                tmp_data = pd.read_sql(sql, foxlink_engine)
-                aoi = aoi.append(tmp_data)
-            
-                # 先測試三個月的 之後再進行到1年
-                for index in range(1, len(dr)):
-                    sql = f"""
+            # print(f"{get_ntz_now()} : starting query {dr[3]} to {dr[4]}")
+            # sql = f"""
+            #     SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.aoi_measure_name}_data`
+            #     WHERE
+            #         (Code3 = '{dr[3]}' AND Code4 >= '07:40:00') OR
+            #         (Code3 > '{dr[3]}' AND Code3 < '{dr[4]}') OR
+            #         (Code3 = '{dr[4]}' AND Code4 <= '07:40:00')
+            #         AND Code2 < 3 ;
+            #     """
+            tmp_data = pd.read_sql(sql, foxlink_engine)
+            aoi = aoi.append(tmp_data)
+
+            # 先測試三個月的 之後再進行到1年
+            for index in range(1, len(dr)):
+                sql = f"""
                     SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
                     WHERE 
                         (Code3 = '{dr[index-1]}' AND Code4 >= '07:40:00') OR
@@ -274,149 +286,184 @@ async def PreprocessingData(project_id:int):
                         (Code3 = '{dr[index]}' AND Code4 <= '07:40:00')
                         AND Code2 < 3 ;
                     """
-                    print(f"{get_ntz_now()} : starting query {dr[index - 1]} to {dr[index]}")
-                    tmp_data = pd.read_sql(sql, foxlink_engine)
-                    aoi = aoi.append(tmp_data)
+                print(
+                    f"{get_ntz_now()} : starting query {dr[index - 1]} to {dr[index]}")
+                tmp_data = pd.read_sql(sql, foxlink_engine)
+                aoi = aoi.append(tmp_data)
 
-                aoi = aoi[(aoi['Code2']<3)]
+            aoi = aoi[(aoi['Code2'] < 3)]
 
-                aoi['MF_Time'] = pd.to_datetime(aoi['Code3'])+ aoi['Code4']
-                aoi["Time_shift"] = aoi["MF_Time"] - pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
-                aoi['date'] = aoi['Time_shift'].dt.date # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
-                aoi['hour'] = aoi['Time_shift'].dt.hour+1 # 工作日期的第幾個小時 1~12為早班 13~24為晚班
-                aoi['shift'] = pd.cut(aoi['hour'], bins=[0,12,24], labels=['D','N']) # 班別 1~12為早班(D) 13~24為晚班(N)
+            aoi['MF_Time'] = pd.to_datetime(aoi['Code3']) + aoi['Code4']
+            aoi["Time_shift"] = aoi["MF_Time"] - \
+                pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
+            # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
+            aoi['date'] = aoi['Time_shift'].dt.date
+            aoi['hour'] = aoi['Time_shift'].dt.hour + \
+                1  # 工作日期的第幾個小時 1~12為早班 13~24為晚班
+            aoi['shift'] = pd.cut(aoi['hour'], bins=[0, 12, 24], labels=[
+                                  'D', 'N'])  # 班別 1~12為早班(D) 13~24為晚班(N)
 
-                # 每小時生產資訊
-                hourly_dvs_mf = pd.DataFrame()
-                hourly_dvs_mf['time'] = pd.date_range(aoi['date'].min(), now_workday, freq='h', closed='left')
-                hourly_dvs_mf['date'] = hourly_dvs_mf['time'].dt.date
-                hourly_dvs_mf['hour'] = hourly_dvs_mf['time'].dt.hour+1
-                hourly_dvs_mf['shift'] = pd.cut(hourly_dvs_mf['hour'], bins=[0,12,24], labels=['D','N'])
-                hourly_dvs_mf.drop('time',axis=1, inplace=True)
+            # 每小時生產資訊
+            hourly_dvs_mf = pd.DataFrame()
+            hourly_dvs_mf['time'] = pd.date_range(
+                aoi['date'].min(), now_workday, freq='h', closed='left')
+            hourly_dvs_mf['date'] = hourly_dvs_mf['time'].dt.date
+            hourly_dvs_mf['hour'] = hourly_dvs_mf['time'].dt.hour+1
+            hourly_dvs_mf['shift'] = pd.cut(hourly_dvs_mf['hour'], bins=[
+                                            0, 12, 24], labels=['D', 'N'])
+            hourly_dvs_mf.drop('time', axis=1, inplace=True)
 
-                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.groupby(['date','hour']).ID.count().reset_index().rename(columns={'ID':'pcs'}), on=['date','hour'], how='outer') # 生產量
-                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi['Code2']==0].groupby(['date','hour']).ID.count().reset_index().rename(columns={'ID':'ng_num'}), on=['date','hour'], how='outer') # 不良品量
-                hourly_dvs_mf['pcs'].fillna(0, inplace=True)
-                hourly_dvs_mf['ng_num'].fillna(0, inplace=True)
-                hourly_dvs_mf['ng_rate'] = hourly_dvs_mf['ng_num'] / hourly_dvs_mf['pcs'] * 100 # 不良率
+            hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.groupby(['date', 'hour']).ID.count(
+            ).reset_index().rename(columns={'ID': 'pcs'}), on=['date', 'hour'], how='outer')  # 生產量
+            hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi['Code2'] == 0].groupby(['date', 'hour']).ID.count(
+            ).reset_index().rename(columns={'ID': 'ng_num'}), on=['date', 'hour'], how='outer')  # 不良品量
+            hourly_dvs_mf['pcs'].fillna(0, inplace=True)
+            hourly_dvs_mf['ng_num'].fillna(0, inplace=True)
+            hourly_dvs_mf['ng_rate'] = hourly_dvs_mf['ng_num'] / \
+                hourly_dvs_mf['pcs'] * 100  # 不良率
 
-                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.drop_duplicates(['date','hour'], keep='first')[['date','hour','Time_shift']].rename(columns={'Time_shift':'first_prod_time'}) , on=['date','hour'], how='outer') # 各小時第一筆生產時間
-                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.drop_duplicates(['date','hour'], keep='last')[['date','hour','Time_shift']].rename(columns={'Time_shift':'last_prod_time'}) , on=['date','hour'], how='outer') # 各小時最後一筆生產時間
-                hourly_dvs_mf['operation_time'] = hourly_dvs_mf['last_prod_time'] - hourly_dvs_mf['first_prod_time']
-                hourly_dvs_mf['operation_time'].fillna(pd.Timedelta(0), inplace=True)
-                temp = hourly_dvs_mf['operation_time']
+            hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.drop_duplicates(['date', 'hour'], keep='first')[['date', 'hour', 'Time_shift']].rename(
+                columns={'Time_shift': 'first_prod_time'}), on=['date', 'hour'], how='outer')  # 各小時第一筆生產時間
+            hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.drop_duplicates(['date', 'hour'], keep='last')[['date', 'hour', 'Time_shift']].rename(
+                columns={'Time_shift': 'last_prod_time'}), on=['date', 'hour'], how='outer')  # 各小時最後一筆生產時間
+            hourly_dvs_mf['operation_time'] = hourly_dvs_mf['last_prod_time'] - \
+                hourly_dvs_mf['first_prod_time']
+            hourly_dvs_mf['operation_time'].fillna(
+                pd.Timedelta(0), inplace=True)
+            temp = hourly_dvs_mf['operation_time']
 
-                hourly_dvs_mf['operation_time'] = (datetime.datetime.combine(date.today(), datetime.time(0,0,0)) + hourly_dvs_mf['operation_time'])
-                hourly_dvs_mf['operation_time'] = hourly_dvs_mf['operation_time'].map(lambda x:x.time())
+            hourly_dvs_mf['operation_time'] = (datetime.datetime.combine(
+                date.today(), datetime.time(0, 0, 0)) + hourly_dvs_mf['operation_time'])
+            hourly_dvs_mf['operation_time'] = hourly_dvs_mf['operation_time'].map(
+                lambda x: x.time())
 
+            hourly_dvs_mf['device'] = dvs.id
+            hourly_dvs_mf['aoi_measure'] = measure.id
 
-                hourly_dvs_mf['device'] = dvs.id
-                hourly_dvs_mf['aoi_measure'] = measure.id
-                
-                hourly_dvs_mf['pcs'] = hourly_dvs_mf['pcs'].astype(int)
-                hourly_dvs_mf['ng_num'] = hourly_dvs_mf['ng_num'].astype(int)
+            hourly_dvs_mf['pcs'] = hourly_dvs_mf['pcs'].astype(int)
+            hourly_dvs_mf['ng_num'] = hourly_dvs_mf['ng_num'].astype(int)
 
-                try:
-                    print("starting input hourly_mf...")
-                    print(hourly_dvs_mf)
-                    hourly_dvs_mf.to_sql(con=ntust_engine,name="hourly_mf",if_exists='append',index= False)
-                except:
-                    return
+            try:
+                print("starting input hourly_mf...")
+                print(hourly_dvs_mf)
+                hourly_dvs_mf.to_sql(
+                    con=ntust_engine, name="hourly_mf", if_exists='append', index=False)
+            except:
+                return
 
-                hourly_mf = hourly_mf.append(hourly_dvs_mf)
-                
-                # 日夜班 生產量 運作時間
-                hourly_dvs_mf['operation_time'] = temp
-                dn_dvs_mf = hourly_dvs_mf.groupby(['date','shift']).pcs.sum().reset_index() # 生產量
-                dn_dvs_mf = pd.merge(dn_dvs_mf, hourly_dvs_mf.groupby(['date','shift'])['operation_time'].sum().reset_index(), on=['date','shift'], how='outer')
-                dn_dvs_mf['pcs'] = dn_dvs_mf['pcs'].astype(int)
-                
-                # print(data)
-                # print(data.events)
-                dn_dvs_mf['device'] = dvs.id
-                dn_dvs_mf['aoi_measure'] = measure.id
-                temp_operation = dn_dvs_mf['operation_time']
-                dn_dvs_mf['operation_time'] = (datetime.datetime.combine(date.today(), datetime.time(0,0,0)) + dn_dvs_mf['operation_time'])
-                dn_dvs_mf['operation_time'] = dn_dvs_mf['operation_time'].map(lambda x:x.time())
+            hourly_mf = hourly_mf.append(hourly_dvs_mf)
 
-                # to sql
-                try:
-                    print("starting input dn_mf...")
-                    print(dn_dvs_mf)
-                    dn_dvs_mf.to_sql(con=ntust_engine,name="dn_mf",if_exists='append',index= False)
-                except:
-                    return
-                dn_dvs_mf['operation_time'] = temp_operation
-                dn_mf = dn_mf.append(dn_dvs_mf)
-                
-                # 計算operation day
-                working = dn_dvs_mf[dn_dvs_mf['pcs']>0]
-                dtime = working[working['shift']=='D']['operation_time']
-                ntime = working[working['shift']=='N']['operation_time']
-                dpcs = working[working['shift']=='D']['pcs']
-                npcs = working[working['shift']=='N']['pcs']
+            # 日夜班 生產量 運作時間
+            hourly_dvs_mf['operation_time'] = temp
+            dn_dvs_mf = hourly_dvs_mf.groupby(
+                ['date', 'shift']).pcs.sum().reset_index()  # 生產量
+            dn_dvs_mf = pd.merge(dn_dvs_mf, hourly_dvs_mf.groupby(['date', 'shift'])[
+                                 'operation_time'].sum().reset_index(), on=['date', 'shift'], how='outer')
+            dn_dvs_mf['pcs'] = dn_dvs_mf['pcs'].astype(int)
 
-                d_timelower = np.percentile(dtime,25) - 1.5*(np.percentile(dtime,75)-np.percentile(dtime,25)) #25%-1.5IQR
-                n_timelower = np.percentile(ntime,25) - 1.5*(np.percentile(ntime,75)-np.percentile(ntime,25)) #25%-1.5IQR
-                d_pcslower = np.percentile(dpcs,25) - 1.5*(np.percentile(dpcs,75)-np.percentile(dpcs,25)) #25%-1.5IQR
-                n_pcslower = np.percentile(npcs,25) - 1.5*(np.percentile(npcs,75)-np.percentile(npcs,25)) #25%-1.5IQR
+            # print(data)
+            # print(data.events)
+            dn_dvs_mf['device'] = dvs.id
+            dn_dvs_mf['aoi_measure'] = measure.id
+            temp_operation = dn_dvs_mf['operation_time']
+            dn_dvs_mf['operation_time'] = (datetime.datetime.combine(
+                date.today(), datetime.time(0, 0, 0)) + dn_dvs_mf['operation_time'])
+            dn_dvs_mf['operation_time'] = dn_dvs_mf['operation_time'].map(
+                lambda x: x.time())
 
-                dvs_operation_day = (
-                    set(dn_mf[(dn_mf['shift']=='D') & ((dn_mf['operation_time']>=d_timelower) | (dn_mf['pcs']>=d_pcslower))]['date']) 
-                    & set(dn_mf[(dn_mf['shift']=='N') & ((dn_mf['operation_time']>=n_timelower) | (dn_mf['pcs']>=n_pcslower))]['date'])
-                )
-                operation_day[dvs.name] = dvs_operation_day
-                op_day = pd.DataFrame()
-                op_day['date'] = sorted(list(dvs_operation_day))
-                op_day['operation_day'] = 1
-                
-                # AOI 特徵 (每天)
-                aoi_fea = pd.DataFrame()
-                aoi_fea['date'] = pd.date_range(aoi['date'].min(), now_workday, closed = 'left')
-                aoi_fea['date'] = aoi_fea['date'].dt.date
-                aoi_fea['device'] = dvs.id
-                aoi_fea['aoi_measure'] = measure.id
-                aoi_fea = pd.merge(aoi_fea, op_day, on='date', how='outer')
-                
-                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).ID.count().reset_index().rename(columns={'ID':'pcs'}), on='date', how='outer')
-                aoi_fea = pd.merge(aoi_fea, aoi[aoi['Code2']==0].groupby(['date']).ID.count().reset_index().rename(columns={'ID':'ng_num'}), on='date', how='outer')
-                aoi_fea['ng_rate'] = aoi_fea['ng_num'] / aoi_fea['pcs'] * 100
-                
-                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.max().reset_index().rename(columns={'Code6':'ct_max'}), on='date', how='outer')
-                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.mean().reset_index().rename(columns={'Code6':'ct_mean'}), on='date', how='outer')
-                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.min().reset_index().rename(columns={'Code6':'ct_min'}), on='date', how='outer')
-                aoi_fea.fillna(0, inplace=True)
-                
-                aoi_fea['pcs'] = aoi_fea['pcs'].astype(int)
-                aoi_fea['ng_num'] = aoi_fea['ng_num'].astype(int)
-                aoi_fea['operation_day'] = aoi_fea['operation_day'].astype(int)
+            # to sql
+            try:
+                print("starting input dn_mf...")
+                print(dn_dvs_mf)
+                dn_dvs_mf.to_sql(con=ntust_engine, name="dn_mf",
+                                 if_exists='append', index=False)
+            except:
+                return
+            dn_dvs_mf['operation_time'] = temp_operation
+            dn_mf = dn_mf.append(dn_dvs_mf)
 
-                try:
-                    print(aoi_fea)
-                    print("starting input aoi_feature...")
-                    aoi_fea.to_sql(con=ntust_engine,name="aoi_feature",if_exists='append',index= False)
-                except:
-                    return
-                aoi_feature = aoi_feature.append(aoi_fea)
+            # 計算operation day
+            working = dn_dvs_mf[dn_dvs_mf['pcs'] > 0]
+            dtime = working[working['shift'] == 'D']['operation_time']
+            ntime = working[working['shift'] == 'N']['operation_time']
+            dpcs = working[working['shift'] == 'D']['pcs']
+            npcs = working[working['shift'] == 'N']['pcs']
 
-    def target_label(x): # 用operation day中發生異常天數比例 判斷目標
-        error = dvs_event[dvs_event['Message']==x['Message']]
+            d_timelower = np.percentile(
+                dtime, 25) - 1.5*(np.percentile(dtime, 75)-np.percentile(dtime, 25))  # 25%-1.5IQR
+            n_timelower = np.percentile(
+                ntime, 25) - 1.5*(np.percentile(ntime, 75)-np.percentile(ntime, 25))  # 25%-1.5IQR
+            d_pcslower = np.percentile(
+                dpcs, 25) - 1.5*(np.percentile(dpcs, 75)-np.percentile(dpcs, 25))  # 25%-1.5IQR
+            n_pcslower = np.percentile(
+                npcs, 25) - 1.5*(np.percentile(npcs, 75)-np.percentile(npcs, 25))  # 25%-1.5IQR
+
+            dvs_operation_day = (
+                set(dn_mf[(dn_mf['shift'] == 'D') & (
+                    (dn_mf['operation_time'] >= d_timelower) | (dn_mf['pcs'] >= d_pcslower))]['date'])
+                & set(dn_mf[(dn_mf['shift'] == 'N') & ((dn_mf['operation_time'] >= n_timelower) | (dn_mf['pcs'] >= n_pcslower))]['date'])
+            )
+            operation_day[dvs.name] = dvs_operation_day
+            op_day = pd.DataFrame()
+            op_day['date'] = sorted(list(dvs_operation_day))
+            op_day['operation_day'] = 1
+
+            # AOI 特徵 (每天)
+            aoi_fea = pd.DataFrame()
+            aoi_fea['date'] = pd.date_range(
+                aoi['date'].min(), now_workday, closed='left')
+            aoi_fea['date'] = aoi_fea['date'].dt.date
+            aoi_fea['device'] = dvs.id
+            aoi_fea['aoi_measure'] = measure.id
+            aoi_fea = pd.merge(aoi_fea, op_day, on='date', how='outer')
+
+            aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).ID.count(
+            ).reset_index().rename(columns={'ID': 'pcs'}), on='date', how='outer')
+            aoi_fea = pd.merge(aoi_fea, aoi[aoi['Code2'] == 0].groupby(['date']).ID.count(
+            ).reset_index().rename(columns={'ID': 'ng_num'}), on='date', how='outer')
+            aoi_fea['ng_rate'] = aoi_fea['ng_num'] / aoi_fea['pcs'] * 100
+
+            aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.max().reset_index(
+            ).rename(columns={'Code6': 'ct_max'}), on='date', how='outer')
+            aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.mean().reset_index(
+            ).rename(columns={'Code6': 'ct_mean'}), on='date', how='outer')
+            aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.min().reset_index(
+            ).rename(columns={'Code6': 'ct_min'}), on='date', how='outer')
+            aoi_fea.fillna(0, inplace=True)
+
+            aoi_fea['pcs'] = aoi_fea['pcs'].astype(int)
+            aoi_fea['ng_num'] = aoi_fea['ng_num'].astype(int)
+            aoi_fea['operation_day'] = aoi_fea['operation_day'].astype(int)
+
+            try:
+                print(aoi_fea)
+                print("starting input aoi_feature...")
+                aoi_fea.to_sql(con=ntust_engine, name="aoi_feature",
+                               if_exists='append', index=False)
+            except:
+                return
+            aoi_feature = aoi_feature.append(aoi_fea)
+
+    def target_label(x):  # 用operation day中發生異常天數比例 判斷目標
+        error = dvs_event[dvs_event['Message'] == x['Message']]
         error_happen = error.groupby('date').ID.count().reset_index()
-        op_day_err_happen = error_happen[error_happen['date'].isin(operation_day[dvs])]
+        op_day_err_happen = error_happen[error_happen['date'].isin(
+            operation_day[dvs])]
 
-        if len(op_day_err_happen) / len(operation_day[dvs]) <= 0.1: # 若發生異常天數少於正常運作天數10%，則非預知維修目標(0)
+        # 若發生異常天數少於正常運作天數10%，則非預知維修目標(0)
+        if len(op_day_err_happen) / len(operation_day[dvs]) <= 0.1:
             return 0
-        elif x['Message'] in ['轴2-IM送料马达故障','IM插入站故障','轴4马达故障','轴7马达故障','1#插针站故障','2#插针站故障','轴7-Shell 送料马达故障','Bracket组装站故障']: # 正崴指定排除之異常事件(2)
+        # 正崴指定排除之異常事件(2)
+        elif x['Message'] in ['轴2-IM送料马达故障', 'IM插入站故障', '轴4马达故障', '轴7马达故障', '1#插针站故障', '2#插针站故障', '轴7-Shell 送料马达故障', 'Bracket组装站故障']:
             return 2
-        else: # 預知維修目標(1)
+        else:  # 預知維修目標(1)
             return 1
-        
 
     # testTime = datetime.datetime(2023,9,30,7,40)
-    
+
     # print(project_device[0].devices)
     dvs_name = [dvs.name for dvs in project[0].devices]
-    
+
     sql = f"""
         SELECT * FROM aoi.`{project[0].name}_event` 
         WHERE 
@@ -425,14 +472,15 @@ async def PreprocessingData(project_id:int):
             Device_Name IN {tuple(dvs_name)};
         """
     # sql = f"""
-    #     SELECT * FROM aoi.`{project[0].name}_event` 
-    #     WHERE 
-    #         Category < 200 AND 
-    #         (Start_Time < '{testTime}') AND 
+    #     SELECT * FROM aoi.`{project[0].name}_event`
+    #     WHERE
+    #         Category < 200 AND
+    #         (Start_Time < '{testTime}') AND
     #         Device_Name IN {tuple(dvs_name)};
     #     """
-    df = pd.read_sql(sql, foxlink_engine) # 讀取異常事件歷史資料
-    df_auto = df[(df["START_FILE_NAME"] == "auto") | (df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
+    df = pd.read_sql(sql, foxlink_engine)  # 讀取異常事件歷史資料
+    df_auto = df[(df["START_FILE_NAME"] == "auto") | (
+        df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
     # 合併有 auto 的 event
     df_auto_merge = pd.DataFrame()  # 儲存處理後的event
 
@@ -455,62 +503,75 @@ async def PreprocessingData(project_id:int):
                     continue  # 繼續往後檢查有沒有
                 st["End_Time"] = ed["End_Time"]
                 st["END_FILE_NAME"] = ed["END_FILE_NAME"]
-                df_auto = df_auto.drop(j).reset_index(drop=True)  # 移除該 row, 重新排序index
+                df_auto = df_auto.drop(j).reset_index(
+                    drop=True)  # 移除該 row, 重新排序index
                 break  # 結束
         df_auto = df_auto.drop(0).reset_index(drop=True)  # 最後判斷完，移除掉第一row
-        df_auto_merge = pd.concat([df_auto_merge, st.to_frame().T], ignore_index=1)  # 最後判斷完，另存起來
+        df_auto_merge = pd.concat(
+            [df_auto_merge, st.to_frame().T], ignore_index=1)  # 最後判斷完，另存起來
     # 排除"原"有 auto 的項目
-    df = df[~((df["START_FILE_NAME"] == "auto") | (df["END_FILE_NAME"] == "auto"))]
+    df = df[~((df["START_FILE_NAME"] == "auto")
+              | (df["END_FILE_NAME"] == "auto"))]
     # 處理好的 auto 合併回去，重新排序
-    df_new_logs = pd.concat([df, df_auto_merge]).sort_values(by=["Start_Time"]).reset_index(drop=True)
+    df_new_logs = pd.concat([df, df_auto_merge]).sort_values(
+        by=["Start_Time"]).reset_index(drop=True)
     event = df_new_logs
     event['Start_Time'] = pd.to_datetime(event['Start_Time'])
     event['End_Time'] = pd.to_datetime(event['End_Time'])
     event['duration'] = event['End_Time'] - event['Start_Time']
-    event["Time_shift"] = event["Start_Time"] - pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
-    event['date'] = event['Time_shift'].dt.date # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
-    event['hour'] = event['Time_shift'].dt.hour+1 # 工作日期的第幾個小時 1~12為早班 13~24為晚班
-    event['shift'] = pd.cut(event['hour'], bins=[0,12,24], labels=['D','N']) # 班別 1~12為早班(D) 13~24為晚班(N)
+    event["Time_shift"] = event["Start_Time"] - \
+        pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
+    # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
+    event['date'] = event['Time_shift'].dt.date
+    event['hour'] = event['Time_shift'].dt.hour + \
+        1  # 工作日期的第幾個小時 1~12為早班 13~24為晚班
+    event['shift'] = pd.cut(event['hour'], bins=[0, 12, 24], labels=[
+                            'D', 'N'])  # 班別 1~12為早班(D) 13~24為晚班(N)
     event.sort_values('Start_Time', inplace=True)
     pred_target = pd.DataFrame()
     error_feature = pd.DataFrame()
     for dvs in dvs_name:
-        
+
         # 判斷預知維修目標
         op_day = pd.DataFrame()
         op_day['date'] = sorted(list(operation_day[dvs]))
         op_day['operation_day'] = 1
-        
-        dvs_event = event[event['Device_Name']==dvs]
-        dcm = dvs_event.drop_duplicates(['Device_Name','Category','Message'])[['Device_Name','Category','Message']].sort_values(['Device_Name', 'Category'], key = natsort_keygen()).reset_index(drop=True)
-        dcm['target'] = dcm.apply(lambda x : target_label(x), axis=1)
+
+        dvs_event = event[event['Device_Name'] == dvs]
+        dcm = dvs_event.drop_duplicates(['Device_Name', 'Category', 'Message'])[['Device_Name', 'Category', 'Message']].sort_values([
+            'Device_Name', 'Category'], key=natsort_keygen()).reset_index(drop=True)
+        dcm['target'] = dcm.apply(lambda x: target_label(x), axis=1)
         dcm_id = await Device.objects.filter(name=dvs).get_or_none()
         if dcm_id is None:
             raise HTTPException(
                 status_code=400, detail="cant find dcm device")
         # format data columns
-        dcm = dcm.rename(columns={'Device_Name':'device','Category':'category','Message':'message'})
+        dcm = dcm.rename(
+            columns={'Device_Name': 'device', 'Category': 'category', 'Message': 'message'})
         dcm['device'] = dcm_id.id
         pred_target = pred_target.append(dcm)
-        
+
         # 異常每天發生次數(預知維修目標)
-        target = dcm[dcm['target']==1]
+        target = dcm[dcm['target'] == 1]
         for row in target.itertuples():
             print(row)
             message = row.message
             category = row.category
 
-            error = dvs_event[dvs_event['Message']==message]
+            error = dvs_event[dvs_event['Message'] == message]
             error['duration'] = error['duration'].dt.total_seconds()
-            error['happened_last_time'] = (error['Start_Time'] - error['End_Time'].shift(1)).dt.total_seconds()
-            error['happened_last_time'].fillna(error['happened_last_time'].median(), inplace=True)
+            error['happened_last_time'] = (
+                error['Start_Time'] - error['End_Time'].shift(1)).dt.total_seconds()
+            error['happened_last_time'].fillna(
+                error['happened_last_time'].median(), inplace=True)
 
             err_fea = pd.DataFrame()
             dvs_id = await Device.objects.filter(name=dvs).get_or_none()
             if dvs_id is None:
                 raise HTTPException(
                     status_code=400, detail="cant find this device")
-            err_fea['date'] = pd.date_range(aoi_feature[aoi_feature['device']==dvs_id.id].date.min(), now_workday, closed = 'left')
+            err_fea['date'] = pd.date_range(
+                aoi_feature[aoi_feature['device'] == dvs_id.id].date.min(), now_workday, closed='left')
             err_fea['date'] = err_fea['date'].dt.date
             print(err_fea['date'])
             err_fea['device'] = dvs_id.id
@@ -518,13 +579,20 @@ async def PreprocessingData(project_id:int):
             err_fea['message'] = message
             err_fea['category'] = category
             err_fea = pd.merge(err_fea, op_day, on='date', how='outer')
-            err_fea = pd.merge(err_fea, error.groupby('date').ID.count().reset_index().rename(columns={'ID':'happened'}), on='date', how='outer')        
-            err_fea = pd.merge(err_fea, error.groupby('date').duration.max().reset_index().rename(columns={'duration':'dur_max'}), on='date', how='outer')
-            err_fea = pd.merge(err_fea, round(error.groupby('date').duration.mean(),1).reset_index().rename(columns={'duration':'dur_mean'}), on='date', how='outer')
-            err_fea = pd.merge(err_fea, error.groupby('date').duration.min().reset_index().rename(columns={'duration':'dur_min'}), on='date', how='outer')
-            err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.max().reset_index().rename(columns={'happened_last_time':'last_time_max'}), on='date', how='outer')
-            err_fea = pd.merge(err_fea, round(error.groupby('date').happened_last_time.mean(),1).reset_index().rename(columns={'happened_last_time':'last_time_mean'}), on='date', how='outer')
-            err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.min().reset_index().rename(columns={'happened_last_time':'last_time_min'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, error.groupby('date').ID.count().reset_index(
+            ).rename(columns={'ID': 'happened'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, error.groupby('date').duration.max().reset_index(
+            ).rename(columns={'duration': 'dur_max'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, round(error.groupby('date').duration.mean(), 1).reset_index(
+            ).rename(columns={'duration': 'dur_mean'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, error.groupby('date').duration.min().reset_index(
+            ).rename(columns={'duration': 'dur_min'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.max().reset_index(
+            ).rename(columns={'happened_last_time': 'last_time_max'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, round(error.groupby('date').happened_last_time.mean(), 1).reset_index(
+            ).rename(columns={'happened_last_time': 'last_time_mean'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.min().reset_index(
+            ).rename(columns={'happened_last_time': 'last_time_min'}), on='date', how='outer')
 
             err_fea.fillna(0, inplace=True)
 
@@ -534,11 +602,13 @@ async def PreprocessingData(project_id:int):
             err_fea['dur_min'] = err_fea['dur_min'].astype(int)
             err_fea['last_time_max'] = err_fea['last_time_max'].astype(int)
             err_fea['last_time_min'] = err_fea['last_time_min'].astype(int)
-            
-            err_fea = err_fea[err_fea['project']!=0]
+
+            err_fea = err_fea[err_fea['project'] != 0]
             print(err_fea)
-            err_fea.to_csv(r'/app/pandas.txt', header=None, index=None, sep=' ', mode='a')
-            err_fea.to_sql(con=ntust_engine,name="error_feature",if_exists='append',index=False)
+            err_fea.to_csv(r'/app/pandas.txt', header=None,
+                           index=None, sep=' ', mode='a')
+            err_fea.to_sql(con=ntust_engine, name="error_feature",
+                           if_exists='append', index=False)
             # try:
             #     err_fea = err_fea[err_fea['project']!=0]
             #     print(err_fea)
@@ -551,7 +621,8 @@ async def PreprocessingData(project_id:int):
     try:
         print("starting input pred_target...")
         print(pred_target)
-        pred_target.to_sql(con=ntust_engine,name="pred_targets",if_exists='append',index=False)
+        pred_target.to_sql(con=ntust_engine, name="pred_targets",
+                           if_exists='append', index=False)
     except:
         raise HTTPException(
             status_code=400, detail="cant write into database")
@@ -559,29 +630,33 @@ async def PreprocessingData(project_id:int):
 
 
 @transaction()
-async def UpdatePreprocessingData(project_id:int):
+async def UpdatePreprocessingData(project_id: int):
     # now = datetime.datetime(2022,11,1,7,39)
-    foxlink_engine = create_engine(f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi')
-    ntust_engine = create_engine(f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink')
+    foxlink_engine = create_engine(
+        f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi')
+    ntust_engine = create_engine(
+        f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink')
 
-    now = datetime.datetime(2023,9,30) # 更新資料時間
-    update_workday = (now - pd.Timedelta(hours=7,minutes=40)).date() # 更新資料的工作日期
-    update_workday_endtime = pd.to_datetime(update_workday) + pd.Timedelta(hours=7,minutes=40)
-    
+    now = datetime.datetime(2023, 9, 30)  # 更新資料時間
+    update_workday = (now - pd.Timedelta(hours=7, minutes=40)
+                      ).date()  # 更新資料的工作日期
+    update_workday_endtime = pd.to_datetime(
+        update_workday) + pd.Timedelta(hours=7, minutes=40)
+
     project = await Project.objects.filter(id=project_id).select_related(
-        ["devices","devices__aoimeasures"]
+        ["devices", "devices__aoimeasures"]
     ).all()
     if project is None:
         raise HTTPException(
-                status_code=400, detail="this project doesnt existed.")
-    
+            status_code=400, detail="this project doesnt existed.")
+
     hourly_mf = pd.DataFrame()
     dn_mf = pd.DataFrame()
     aoi_feature = pd.DataFrame()
 
     for dvs in project[0].devices:
         for measure in dvs.aoimeasures:
-            
+
             sql = f"""
                 SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
                 WHERE 
@@ -590,29 +665,35 @@ async def UpdatePreprocessingData(project_id:int):
                     AND Code2 < 3 ;
                 """
             aoi = pd.read_sql(sql, foxlink_engine)
-            
-            if aoi.empty: # 沒有新的資料
-                
+
+            if aoi.empty:  # 沒有新的資料
+
                 # 小時
-                hourly_dvs_mf = pd.DataFrame(columns=['date', 'hour', 'shift', 'pcs', 'ng_num', 'ng_rate(%)', 'first_prod_time', 'last_prod_time', 'operation_time', 'Device_Name', 'AOI_measure'])
-                hourly_dvs_mf['time'] = pd.date_range(update_workday, update_workday + pd.Timedelta(days=1), freq='h', closed='left')
+                hourly_dvs_mf = pd.DataFrame(columns=['date', 'hour', 'shift', 'pcs', 'ng_num', 'ng_rate(%)',
+                                             'first_prod_time', 'last_prod_time', 'operation_time', 'Device_Name', 'AOI_measure'])
+                hourly_dvs_mf['time'] = pd.date_range(
+                    update_workday, update_workday + pd.Timedelta(days=1), freq='h', closed='left')
                 hourly_dvs_mf['date'] = hourly_dvs_mf['time'].dt.date
                 hourly_dvs_mf['hour'] = hourly_dvs_mf['time'].dt.hour+1
-                hourly_dvs_mf['shift'] = pd.cut(hourly_dvs_mf['hour'], bins=[0,12,24], labels=['D','N'])
-                hourly_dvs_mf.drop('time',axis=1, inplace=True)
+                hourly_dvs_mf['shift'] = pd.cut(hourly_dvs_mf['hour'], bins=[
+                                                0, 12, 24], labels=['D', 'N'])
+                hourly_dvs_mf.drop('time', axis=1, inplace=True)
 
                 hourly_dvs_mf['pcs'].fillna(0, inplace=True)
                 hourly_dvs_mf['ng_num'].fillna(0, inplace=True)
-                hourly_dvs_mf['operation_time'].fillna(pd.Timedelta(0), inplace=True)
+                hourly_dvs_mf['operation_time'].fillna(
+                    pd.Timedelta(0), inplace=True)
                 hourly_dvs_mf['device'] = dvs.id
                 hourly_dvs_mf['aoi_measure'] = measure.id
                 print("hourly dvs mf")
                 print(hourly_dvs_mf)
                 hourly_mf = hourly_mf.append(hourly_dvs_mf)
-                
-                #早晚班
-                dn_dvs_mf = hourly_dvs_mf.groupby(['date','shift']).pcs.sum().reset_index() # 生產量
-                dn_dvs_mf = pd.merge(dn_dvs_mf, hourly_dvs_mf.groupby(['date','shift'])['operation_time'].sum().reset_index(), on=['date','shift'], how='outer')
+
+                # 早晚班
+                dn_dvs_mf = hourly_dvs_mf.groupby(
+                    ['date', 'shift']).pcs.sum().reset_index()  # 生產量
+                dn_dvs_mf = pd.merge(dn_dvs_mf, hourly_dvs_mf.groupby(['date', 'shift'])[
+                                     'operation_time'].sum().reset_index(), on=['date', 'shift'], how='outer')
                 dn_dvs_mf['pcs'] = dn_dvs_mf['pcs'].astype(int)
 
                 dn_dvs_mf['device'] = dvs.id
@@ -620,42 +701,56 @@ async def UpdatePreprocessingData(project_id:int):
                 print("dn_dvs_mf")
                 print(dn_dvs_mf)
                 dn_mf = dn_mf.append(dn_dvs_mf)
-                
-                #日
-                aoi_fea = pd.DataFrame(columns=['date', 'device', 'aoi_measure', 'operation_day', 'pcs', 'ng_num', 'ng_rate(%)', 'ct_max', 'ct_mean', 'ct_min'])
+
+                # 日
+                aoi_fea = pd.DataFrame(columns=['date', 'device', 'aoi_measure', 'operation_day',
+                                       'pcs', 'ng_num', 'ng_rate(%)', 'ct_max', 'ct_mean', 'ct_min'])
                 aoi_fea['date'] = [update_workday]
                 aoi_fea['device'] = [dvs.id]
                 aoi_fea['aoi_measure'] = [measure.id]
-                aoi_fea.fillna(0,inplace=True)
+                aoi_fea.fillna(0, inplace=True)
                 print("aoi_feature")
                 print(aoi_feature)
                 aoi_feature = aoi_feature.append(aoi_fea)
 
             else:
                 aoi['MF_Time'] = pd.to_datetime(aoi['Code3']) + aoi['Code4']
-                aoi["Time_shift"] = aoi["MF_Time"] - pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
-                aoi['date'] = aoi['Time_shift'].dt.date # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
-                aoi['hour'] = aoi['Time_shift'].dt.hour+1 # 工作日期的第幾個小時 1~12為早班 13~24為晚班
-                aoi['shift'] = pd.cut(aoi['hour'], bins=[0,12,24], labels=['D','N']) # 班別 1~12為早班(D) 13~24為晚班(N)
+                aoi["Time_shift"] = aoi["MF_Time"] - \
+                    pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
+                # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
+                aoi['date'] = aoi['Time_shift'].dt.date
+                aoi['hour'] = aoi['Time_shift'].dt.hour + \
+                    1  # 工作日期的第幾個小時 1~12為早班 13~24為晚班
+                aoi['shift'] = pd.cut(aoi['hour'], bins=[0, 12, 24], labels=[
+                                      'D', 'N'])  # 班別 1~12為早班(D) 13~24為晚班(N)
 
                 # 每小時生產資訊
                 hourly_dvs_mf = pd.DataFrame()
-                hourly_dvs_mf['time'] = pd.date_range(update_workday, update_workday + pd.Timedelta(days=1), freq='h', closed='left')
+                hourly_dvs_mf['time'] = pd.date_range(
+                    update_workday, update_workday + pd.Timedelta(days=1), freq='h', closed='left')
                 hourly_dvs_mf['date'] = hourly_dvs_mf['time'].dt.date
                 hourly_dvs_mf['hour'] = hourly_dvs_mf['time'].dt.hour+1
-                hourly_dvs_mf['shift'] = pd.cut(hourly_dvs_mf['hour'], bins=[0,12,24], labels=['D','N'])
-                hourly_dvs_mf.drop('time',axis=1, inplace=True)
+                hourly_dvs_mf['shift'] = pd.cut(hourly_dvs_mf['hour'], bins=[
+                                                0, 12, 24], labels=['D', 'N'])
+                hourly_dvs_mf.drop('time', axis=1, inplace=True)
 
-                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.groupby(['date','hour']).ID.count().reset_index().rename(columns={'ID':'pcs'}), on=['date','hour'], how='outer') # 生產量
-                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi['Code2']==0].groupby(['date','hour']).ID.count().reset_index().rename(columns={'ID':'ng_num'}), on=['date','hour'], how='outer') # 不良品量
+                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.groupby(['date', 'hour']).ID.count(
+                ).reset_index().rename(columns={'ID': 'pcs'}), on=['date', 'hour'], how='outer')  # 生產量
+                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi['Code2'] == 0].groupby(['date', 'hour']).ID.count(
+                ).reset_index().rename(columns={'ID': 'ng_num'}), on=['date', 'hour'], how='outer')  # 不良品量
                 hourly_dvs_mf['pcs'].fillna(0, inplace=True)
                 hourly_dvs_mf['ng_num'].fillna(0, inplace=True)
-                hourly_dvs_mf['ng_rate'] = hourly_dvs_mf['ng_num'] / hourly_dvs_mf['pcs'] * 100 # 不良率
+                hourly_dvs_mf['ng_rate'] = hourly_dvs_mf['ng_num'] / \
+                    hourly_dvs_mf['pcs'] * 100  # 不良率
 
-                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.drop_duplicates(['date','hour'], keep='first')[['date','hour','Time_shift']].rename(columns={'Time_shift':'first_prod_time'}) , on=['date','hour'], how='outer') # 各小時第一筆生產時間
-                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.drop_duplicates(['date','hour'], keep='last')[['date','hour','Time_shift']].rename(columns={'Time_shift':'last_prod_time'}) , on=['date','hour'], how='outer') # 各小時最後一筆生產時間
-                hourly_dvs_mf['operation_time'] = hourly_dvs_mf['last_prod_time'] - hourly_dvs_mf['first_prod_time']
-                hourly_dvs_mf['operation_time'].fillna(pd.Timedelta(0), inplace=True)
+                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.drop_duplicates(['date', 'hour'], keep='first')[['date', 'hour', 'Time_shift']].rename(
+                    columns={'Time_shift': 'first_prod_time'}), on=['date', 'hour'], how='outer')  # 各小時第一筆生產時間
+                hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.drop_duplicates(['date', 'hour'], keep='last')[['date', 'hour', 'Time_shift']].rename(
+                    columns={'Time_shift': 'last_prod_time'}), on=['date', 'hour'], how='outer')  # 各小時最後一筆生產時間
+                hourly_dvs_mf['operation_time'] = hourly_dvs_mf['last_prod_time'] - \
+                    hourly_dvs_mf['first_prod_time']
+                hourly_dvs_mf['operation_time'].fillna(
+                    pd.Timedelta(0), inplace=True)
 
                 hourly_dvs_mf['device'] = dvs.id
                 hourly_dvs_mf['aoi_measure'] = measure.id
@@ -666,8 +761,10 @@ async def UpdatePreprocessingData(project_id:int):
                 hourly_mf = hourly_mf.append(hourly_dvs_mf)
 
                 # 日夜班 生產量 運作時間
-                dn_dvs_mf = hourly_dvs_mf.groupby(['date','shift']).pcs.sum().reset_index() # 生產量
-                dn_dvs_mf = pd.merge(dn_dvs_mf, hourly_dvs_mf.groupby(['date','shift'])['operation_time'].sum().reset_index(), on=['date','shift'], how='outer')
+                dn_dvs_mf = hourly_dvs_mf.groupby(
+                    ['date', 'shift']).pcs.sum().reset_index()  # 生產量
+                dn_dvs_mf = pd.merge(dn_dvs_mf, hourly_dvs_mf.groupby(['date', 'shift'])[
+                                     'operation_time'].sum().reset_index(), on=['date', 'shift'], how='outer')
                 dn_dvs_mf['pcs'] = dn_dvs_mf['pcs'].astype(int)
 
                 dn_dvs_mf['device'] = dvs.id
@@ -684,16 +781,20 @@ async def UpdatePreprocessingData(project_id:int):
                     """
                 working = pd.read_sql(sql, ntust_engine)
 
-                dtime = working[working['shift']=='D']['operation_time']
-                ntime = working[working['shift']=='N']['operation_time']
-                dpcs = working[working['shift']=='D']['pcs']
-                npcs = working[working['shift']=='N']['pcs']
+                dtime = working[working['shift'] == 'D']['operation_time']
+                ntime = working[working['shift'] == 'N']['operation_time']
+                dpcs = working[working['shift'] == 'D']['pcs']
+                npcs = working[working['shift'] == 'N']['pcs']
 
-                d_timelower = np.percentile(dtime,25) - 1.5*(np.percentile(dtime,75)-np.percentile(dtime,25)) #25%-1.5IQR
-                n_timelower = np.percentile(ntime,25) - 1.5*(np.percentile(ntime,75)-np.percentile(ntime,25)) #25%-1.5IQR
-                d_pcslower = np.percentile(dpcs,25) - 1.5*(np.percentile(dpcs,75)-np.percentile(dpcs,25)) #25%-1.5IQR
-                n_pcslower = np.percentile(npcs,25) - 1.5*(np.percentile(npcs,75)-np.percentile(npcs,25)) #25%-1.5IQR
-                if ((dn_dvs_mf[dn_dvs_mf['shift']=='D']['operation_time'].iloc[0]>=d_timelower) | (dn_dvs_mf[dn_dvs_mf['shift']=='D']['pcs'].iloc[0]>=d_pcslower)) & ((dn_dvs_mf[dn_dvs_mf['shift']=='N']['operation_time'].iloc[0]>=n_timelower) | (dn_dvs_mf[dn_dvs_mf['shift']=='N']['pcs'].iloc[0]>=n_pcslower)):
+                d_timelower = np.percentile(
+                    dtime, 25) - 1.5*(np.percentile(dtime, 75)-np.percentile(dtime, 25))  # 25%-1.5IQR
+                n_timelower = np.percentile(
+                    ntime, 25) - 1.5*(np.percentile(ntime, 75)-np.percentile(ntime, 25))  # 25%-1.5IQR
+                d_pcslower = np.percentile(
+                    dpcs, 25) - 1.5*(np.percentile(dpcs, 75)-np.percentile(dpcs, 25))  # 25%-1.5IQR
+                n_pcslower = np.percentile(
+                    npcs, 25) - 1.5*(np.percentile(npcs, 75)-np.percentile(npcs, 25))  # 25%-1.5IQR
+                if ((dn_dvs_mf[dn_dvs_mf['shift'] == 'D']['operation_time'].iloc[0] >= d_timelower) | (dn_dvs_mf[dn_dvs_mf['shift'] == 'D']['pcs'].iloc[0] >= d_pcslower)) & ((dn_dvs_mf[dn_dvs_mf['shift'] == 'N']['operation_time'].iloc[0] >= n_timelower) | (dn_dvs_mf[dn_dvs_mf['shift'] == 'N']['pcs'].iloc[0] >= n_pcslower)):
                     operation = 1
                 else:
                     operation = 0
@@ -703,13 +804,19 @@ async def UpdatePreprocessingData(project_id:int):
                 aoi_fea['aoi_measure'] = measure.id
                 aoi_fea['operation_day'] = operation
 
-                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).ID.count().reset_index().rename(columns={'ID':'pcs'}), on='date', how='outer')
-                aoi_fea = pd.merge(aoi_fea, aoi[aoi['Code2']==0].groupby(['date']).ID.count().reset_index().rename(columns={'ID':'ng_num'}), on='date', how='outer')
-                aoi_fea['ng_rate(%)'] = aoi_fea['ng_num'] / aoi_fea['pcs'] * 100
+                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).ID.count(
+                ).reset_index().rename(columns={'ID': 'pcs'}), on='date', how='outer')
+                aoi_fea = pd.merge(aoi_fea, aoi[aoi['Code2'] == 0].groupby(['date']).ID.count(
+                ).reset_index().rename(columns={'ID': 'ng_num'}), on='date', how='outer')
+                aoi_fea['ng_rate(%)'] = aoi_fea['ng_num'] / \
+                    aoi_fea['pcs'] * 100
 
-                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.max().reset_index().rename(columns={'Code6':'ct_max'}), on='date', how='outer')
-                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.mean().reset_index().rename(columns={'Code6':'ct_mean'}), on='date', how='outer')
-                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.min().reset_index().rename(columns={'Code6':'ct_min'}), on='date', how='outer')
+                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.max().reset_index(
+                ).rename(columns={'Code6': 'ct_max'}), on='date', how='outer')
+                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.mean().reset_index(
+                ).rename(columns={'Code6': 'ct_mean'}), on='date', how='outer')
+                aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.min().reset_index(
+                ).rename(columns={'Code6': 'ct_min'}), on='date', how='outer')
                 aoi_fea.fillna(0, inplace=True)
 
                 aoi_fea['pcs'] = aoi_fea['pcs'].astype(int)
@@ -717,12 +824,13 @@ async def UpdatePreprocessingData(project_id:int):
                 aoi_fea['operation_day'] = aoi_fea['operation_day'].astype(int)
 
                 aoi_feature = aoi_feature.append(aoi_fea)
-                hourly_mf['operation_time'] = hourly_mf['operation_time'].astype(str).apply(lambda x : x[7:])
-                dn_mf['operation_time'] = dn_mf['operation_time'].astype(str).apply(lambda x : x[7:])
-
+                hourly_mf['operation_time'] = hourly_mf['operation_time'].astype(
+                    str).apply(lambda x: x[7:])
+                dn_mf['operation_time'] = dn_mf['operation_time'].astype(
+                    str).apply(lambda x: x[7:])
 
     dvs_name = [dvs.name for dvs in project[0].devices]
-    
+
     sql = f"""
         SELECT * FROM aoi.`{project[0].name}_event` 
         WHERE 
@@ -731,8 +839,9 @@ async def UpdatePreprocessingData(project_id:int):
             (Start_Time < '{update_workday_endtime + pd.Timedelta(days=1)}') AND
             Device_Name IN {tuple(dvs_name)};
         """
-    df = pd.read_sql(sql, foxlink_engine) # 讀取異常事件歷史資料
-    df_auto = df[(df["START_FILE_NAME"] == "auto") | (df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
+    df = pd.read_sql(sql, foxlink_engine)  # 讀取異常事件歷史資料
+    df_auto = df[(df["START_FILE_NAME"] == "auto") | (
+        df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
     # 合併有 auto 的 event
     df_auto_merge = pd.DataFrame()  # 儲存處理後的event
     while len(df_auto) != 0:
@@ -754,26 +863,34 @@ async def UpdatePreprocessingData(project_id:int):
                     continue  # 繼續往後檢查有沒有
                 st["End_Time"] = ed["End_Time"]
                 st["END_FILE_NAME"] = ed["END_FILE_NAME"]
-                df_auto = df_auto.drop(j).reset_index(drop=True)  # 移除該 row, 重新排序index
+                df_auto = df_auto.drop(j).reset_index(
+                    drop=True)  # 移除該 row, 重新排序index
                 break  # 結束
         df_auto = df_auto.drop(0).reset_index(drop=True)  # 最後判斷完，移除掉第一row
-        df_auto_merge = pd.concat([df_auto_merge, st.to_frame().T], ignore_index=1)  # 最後判斷完，另存起來
-    df = df[~((df["START_FILE_NAME"] == "auto") | (df["END_FILE_NAME"] == "auto"))]
+        df_auto_merge = pd.concat(
+            [df_auto_merge, st.to_frame().T], ignore_index=1)  # 最後判斷完，另存起來
+    df = df[~((df["START_FILE_NAME"] == "auto")
+              | (df["END_FILE_NAME"] == "auto"))]
     # 處理好的 auto 合併回去，重新排序
-    df_new_logs = pd.concat([df, df_auto_merge]).sort_values(by=["Start_Time"]).reset_index(drop=True)
+    df_new_logs = pd.concat([df, df_auto_merge]).sort_values(
+        by=["Start_Time"]).reset_index(drop=True)
     event = df_new_logs
     event['Start_Time'] = pd.to_datetime(event['Start_Time'])
     event['End_Time'] = pd.to_datetime(event['End_Time'])
     event['duration'] = event['End_Time'] - event['Start_Time']
-    event["Time_shift"] = event["Start_Time"] - pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
-    event['date'] = event['Time_shift'].dt.date # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
-    event['hour'] = event['Time_shift'].dt.hour+1 # 工作日期的第幾個小時 1~12為早班 13~24為晚班
-    event['shift'] = pd.cut(event['hour'], bins=[0,12,24], labels=['D','N']) # 班別 1~12為早班(D) 13~24為晚班(N)
+    event["Time_shift"] = event["Start_Time"] - \
+        pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
+    # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
+    event['date'] = event['Time_shift'].dt.date
+    event['hour'] = event['Time_shift'].dt.hour + \
+        1  # 工作日期的第幾個小時 1~12為早班 13~24為晚班
+    event['shift'] = pd.cut(event['hour'], bins=[0, 12, 24], labels=[
+                            'D', 'N'])  # 班別 1~12為早班(D) 13~24為晚班(N)
     event.sort_values('Start_Time', inplace=True)
     error_feature = pd.DataFrame()
     for dvs in dvs_name:
         print(dvs)
-        dvs_event = event[event['Device_Name']==dvs]
+        dvs_event = event[event['Device_Name'] == dvs]
 
         operation = (await AoiFeature.objects.filter(
             device=dvs,
@@ -782,7 +899,7 @@ async def UpdatePreprocessingData(project_id:int):
         print(operation.operation_day)
 
         # sql = f"""
-        # SELECT operation_day FROM aoi_feature 
+        # SELECT operation_day FROM aoi_feature
         # WHERE project = {project_id} AND
         # WHERE device = '{dvs}' AND
         # date = '{update_workday}' ;
@@ -794,7 +911,7 @@ async def UpdatePreprocessingData(project_id:int):
             target=1
         ).all())
         # sql = f"""
-        # SELECT * FROM pred_target 
+        # SELECT * FROM pred_target
         # WHERE project = {project_id} AND
         # WHERE device = '{dvs}' AND
         # target = 1 ;
@@ -803,11 +920,13 @@ async def UpdatePreprocessingData(project_id:int):
         for row in target.itertuples():
             message = row.Message
             category = row.Category
-            
-            error = dvs_event[dvs_event['Message']==message]
+
+            error = dvs_event[dvs_event['Message'] == message]
             error['duration'] = error['duration'].dt.total_seconds()
-            error['happened_last_time'] = (error['Start_Time'] - error['End_Time'].shift(1)).dt.total_seconds()
-            error['happened_last_time'].fillna(error['happened_last_time'].median(), inplace=True)
+            error['happened_last_time'] = (
+                error['Start_Time'] - error['End_Time'].shift(1)).dt.total_seconds()
+            error['happened_last_time'].fillna(
+                error['happened_last_time'].median(), inplace=True)
 
             err_fea = pd.DataFrame()
             err_fea['date'] = [update_workday]
@@ -815,13 +934,20 @@ async def UpdatePreprocessingData(project_id:int):
             err_fea['Message'] = message
             err_fea['Category'] = category
             err_fea['operation_day'] = operation.operation_day
-            err_fea = pd.merge(err_fea, error.groupby('date').ID.count().reset_index().rename(columns={'ID':'happened'}), on='date', how='outer')        
-            err_fea = pd.merge(err_fea, error.groupby('date').duration.max().reset_index().rename(columns={'duration':'dur_max'}), on='date', how='outer')
-            err_fea = pd.merge(err_fea, round(error.groupby('date').duration.mean(),1).reset_index().rename(columns={'duration':'dur_mean'}), on='date', how='outer')
-            err_fea = pd.merge(err_fea, error.groupby('date').duration.min().reset_index().rename(columns={'duration':'dur_min'}), on='date', how='outer')
-            err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.max().reset_index().rename(columns={'happened_last_time':'last_time_max'}), on='date', how='outer')
-            err_fea = pd.merge(err_fea, round(error.groupby('date').happened_last_time.mean(),1).reset_index().rename(columns={'happened_last_time':'last_time_mean'}), on='date', how='outer')
-            err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.min().reset_index().rename(columns={'happened_last_time':'last_time_min'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, error.groupby('date').ID.count().reset_index(
+            ).rename(columns={'ID': 'happened'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, error.groupby('date').duration.max().reset_index(
+            ).rename(columns={'duration': 'dur_max'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, round(error.groupby('date').duration.mean(), 1).reset_index(
+            ).rename(columns={'duration': 'dur_mean'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, error.groupby('date').duration.min().reset_index(
+            ).rename(columns={'duration': 'dur_min'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.max().reset_index(
+            ).rename(columns={'happened_last_time': 'last_time_max'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, round(error.groupby('date').happened_last_time.mean(), 1).reset_index(
+            ).rename(columns={'happened_last_time': 'last_time_mean'}), on='date', how='outer')
+            err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.min().reset_index(
+            ).rename(columns={'happened_last_time': 'last_time_min'}), on='date', how='outer')
             err_fea.fillna(0, inplace=True)
 
             err_fea['operation_day'] = err_fea['operation_day'].astype(int)
@@ -835,7 +961,8 @@ async def UpdatePreprocessingData(project_id:int):
 
     return
 
-async def TrainingData(project_id:int,select_type:str="day"):
+
+async def TrainingData(project_id: int, select_type: str = "day"):
     input_data_dict = await foxlink_train.data_preprocessing_from_sql(project_id=project_id)
     every_error_performance = {}
     timenow = get_ntz_now().strftime("%Y%m%d%H%M")
@@ -847,70 +974,74 @@ async def TrainingData(project_id:int,select_type:str="day"):
             temp = []
             count = 0
             for t in foxlink_train.Threshold:
-                count+=1
-                print(dv + ' '+events + ' T = ',t)
+                count += 1
+                print(dv + ' '+events + ' T = ', t)
                 df = input_data_dict[dv][events]
-                if select_type == "week" and count==1:
+                if select_type == "week" and count == 1:
                     df['date'] = pd.to_datetime(df['date'])
-                    df.set_index('date',inplace=True)
+                    df.set_index('date', inplace=True)
                     # df = df.resample('W').sum()
-                    df = df.resample('W').agg({col: foxlink_train.choose_agg_func(col) for col in df.columns})
-                ## 透過device與Message去Map出Category
+                    df = df.resample('W').agg(
+                        {col: foxlink_train.choose_agg_func(col) for col in df.columns})
+                # 透過device與Message去Map出Category
                 for i in devices:
                     if dv == i.name:
                         device_id = i.id
                 ca = foxlink_train.map_category(device_id, events)
                 try:
-                    ## 貼標
-                    df, lights, cutting_point  = foxlink_train.light_labeling(df, events=events, Threshold = t)
-                    ## 把欄位提取出來
+                    # 貼標
+                    df, lights, cutting_point = foxlink_train.light_labeling(
+                        df, events=events, Threshold=t)
+                    # 把欄位提取出來
                     used_col = df.columns.to_list()
                     used_col.remove('light')
-                    ## 訓練模型前的最後資料前處理
+                    # 訓練模型前的最後資料前處理
                     foxlink_train.training_data_preprocessing(df)
-                    ## 挑選了哪些模型
+                    # 挑選了哪些模型
                     es = foxlink_train.select_model()
-                    ## 訓練模型
+                    # 訓練模型
                     model, report = foxlink_train.stacking(es)
-                    ## 計算評估指標
-                    acc,red_recall,red_f1 ,arf = foxlink_train.ARF(report)
-                    ## 存至暫存器
+                    # 計算評估指標
+                    acc, red_recall, red_f1, arf = foxlink_train.ARF(report)
+                    # 存至暫存器
                     temp.append((t, arf))
                     if dv not in every_error_performance:
                         every_error_performance[dv] = {}
                     if events not in every_error_performance[dv]:
                         every_error_performance[dv][events] = {}
                     if t not in every_error_performance[dv][events]:
-                        every_error_performance[dv][events][t] = {'device':device_id,
-                                                                'category': ca,
-                                                                'message': events ,
-                                                                'threshold':t ,
-                                                                'actual_cutpoint': cutting_point ,
-                                                                'model': model, 
-                                                                'arf':arf, 
-                                                                'acc': acc, 
-                                                                'red_recall': red_recall, 
-                                                                'red_f1score': red_f1, 
-                                                                'used_col': str(used_col),
-                                                                'created_date':timenow}
+                        every_error_performance[dv][events][t] = {'device': device_id,
+                                                                  'category': ca,
+                                                                  'message': events,
+                                                                  'threshold': t,
+                                                                  'actual_cutpoint': cutting_point,
+                                                                  'model': model,
+                                                                  'arf': arf,
+                                                                  'acc': acc,
+                                                                  'red_recall': red_recall,
+                                                                  'red_f1score': red_f1,
+                                                                  'used_col': str(used_col),
+                                                                  'created_date': timenow}
                 except:
                     print('無法訓練')
-            ## 找最佳ARF的Threshold
-            best_t = sorted(temp, key= lambda x:(x[1]), reverse=True)[0][0]
+            # 找最佳ARF的Threshold
+            best_t = sorted(temp, key=lambda x: (x[1]), reverse=True)[0][0]
             best_model = every_error_performance[dv][events][best_t]['model']
-            ## 儲存模型
+            # 儲存模型
             if select_type == 'week':
                 joblib.dump(best_model, f'{dv}_{ca}_{timenow}.pkl')
             else:
                 joblib.dump(best_model, f'{dv}_{ca}_{timenow}.pkl')
-                
-            every_error_performance[dv][events][best_t]['freq'] = select_type
-            ## 寫入資料庫
-            ntust = foxlink_train.ntust_engine
-            pd.DataFrame(every_error_performance[dv][events][best_t], index=[0]).drop(columns='model').to_sql('train_performance', con = ntust, if_exists= 'append', index=False)
-    return 
 
-async def PredictData(project_id:int,select_type:str="day"):
+            every_error_performance[dv][events][best_t]['freq'] = select_type
+            # 寫入資料庫
+            ntust = foxlink_train.ntust_engine
+            pd.DataFrame(every_error_performance[dv][events][best_t], index=[0]).drop(
+                columns='model').to_sql('train_performance', con=ntust, if_exists='append', index=False)
+    return
+
+
+async def PredictData(project_id: int, select_type: str = "day"):
     input_data_dict, infos = await foxlink_predict.data_preprocessing_from_sql(project_id=project_id)
     devices = await Device.objects.filter(project=project_id).all()
     for dv in input_data_dict:
@@ -920,19 +1051,22 @@ async def PredictData(project_id:int,select_type:str="day"):
             if dv == i.name:
                 device_id = i.id
         for events in tqdm(input_data_dict[dv]):
-            count+=1
+            count += 1
             df = input_data_dict[dv][events]
             if select_type == 'week' and count == 1:
                 df['date'] = pd.to_datetime(df['date'])
-                df.set_index('date',inplace=True)
+                df.set_index('date', inplace=True)
                 # df = df.resample('W').sum()
-                df = df.resample('W').agg({col: foxlink_predict.choose_agg_func(col) for col in df.columns})
+                df = df.resample('W').agg(
+                    {col: foxlink_predict.choose_agg_func(col) for col in df.columns})
                 df['date'] = df.index
             category = infos[dv][events]['category'].values[0]
 
-            time = pd.to_datetime(infos[dv][events]['created_date'].values[0]).strftime('%Y%m%d%H%M')
+            time = pd.to_datetime(
+                infos[dv][events]['created_date'].values[0]).strftime('%Y%m%d%H%M')
             X = foxlink_predict.fit_model_data_preprocessing(df)
-            model = foxlink_predict.map_model(dv,device_id, events, time,select_type)
+            model = foxlink_predict.map_model(
+                dv, device_id, events, time, select_type)
             pred = model.predict(X)
             df['pred'] = pred
             df['device'] = device_id
@@ -940,8 +1074,10 @@ async def PredictData(project_id:int,select_type:str="day"):
             df['message'] = events
             df['pred_date'] = df.date.apply(lambda x: x + pd.Timedelta(days=1))
             print(df.info)
-            df.rename(columns = {'date':'ori_date'}, inplace = True)
-            df = df[['device', 'category', 'message', 'ori_date','pred_date', 'pred']]
+            df.rename(columns={'date': 'ori_date'}, inplace=True)
+            df = df[['device', 'category', 'message',
+                     'ori_date', 'pred_date', 'pred']]
             ntust = foxlink_predict.ntust_engine
-            df.to_sql('predict_result', con = ntust, if_exists= 'append', index=False)
+            df.to_sql('predict_result', con=ntust,
+                      if_exists='append', index=False)
     return

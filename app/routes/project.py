@@ -1,7 +1,6 @@
-from typing import Dict
 from fastapi import APIRouter,Depends,status
 from fastapi.exceptions import HTTPException
-from typing import List,Dict
+from typing import List
 # from fastapi import Query
 from app.core.database import (
     Project,
@@ -45,10 +44,10 @@ async def get_all_project(user:User = Depends(get_current_user())):
         return await (Project.objects.filter(
             id__in=project_id_list
         ).all())
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
-        )
+    # else:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
+    #     )
 
 @router.get("/users", tags=["project"])
 async def get_all_project(project_id:int,user:User = Depends(get_current_user())):

@@ -13,6 +13,7 @@ from app.routes import (
     system,
     backup,
     project,
+    statistics,
     test
 )
 from app.core.database import api_db
@@ -61,6 +62,7 @@ app.include_router(auth.router)
 app.include_router(project.router)
 app.include_router(log.router)
 app.include_router(backup.router)
+app.include_router(statistics.router)
 app.include_router(test.router)
 # if PY_ENV == 'dev':
 #     app.include_router(test.router)
