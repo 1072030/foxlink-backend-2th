@@ -1,3 +1,6 @@
+"""
+儲存資料庫中的環境變數
+"""
 import logging
 import shutil
 from app.log import LOGGER_NAME

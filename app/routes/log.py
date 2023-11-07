@@ -1,3 +1,6 @@
+"""
+主要適用於取得Log資訊
+"""
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 import datetime
