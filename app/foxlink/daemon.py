@@ -1,3 +1,10 @@
+"""
+daemon功能主要在派工系統的功能，在第二期預知保養不會使用到
+設定是每3秒執行一次loop
+"""
+
+
+
 import argparse
 parser = argparse.ArgumentParser()
 # parser.add_argument('-i', dest='interval', type=int, default=10)
