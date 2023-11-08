@@ -213,7 +213,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
         for aoi_measures in dvs_aoi[device.name]:
             aoi_measure = AoiMeasure(
                 device=device.id,
-                name=aoi_measures
+                name=aoi_measures,
             )
             bulk_create_aoi_measure.append(aoi_measure)
 

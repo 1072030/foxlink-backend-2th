@@ -397,9 +397,9 @@ class ErrorFeature(ormar.Model):
         Project, index=True, nullable=False, ondelete="CASCADE")
     device = ormar.ForeignKey(
         Device, index=True, nullable=False, ondelete="CASCADE")
-    # event = ormar.ForeignKey(ProjectEvent,index=True, nullable=False,ondelete="CASCADE")
-    message = ormar.String(max_length=100, index=True)
-    category = ormar.Integer(nullable=True)
+    event = ormar.ForeignKey(ProjectEvent,index=True, nullable=False,ondelete="CASCADE")
+    # message = ormar.String(max_length=100, index=True)
+    # category = ormar.Integer(nullable=True)
     operation_day: bool = ormar.Boolean(default=False)
 
     happened: bool = ormar.Integer(nullable=True)
@@ -418,8 +418,9 @@ class PredTarget(ormar.Model):
         primary_key=True, autoincrement=True, nullable=False)
     device = ormar.ForeignKey(
         Device, index=True, nullable=False, ondelete="CASCADE")
-    category = ormar.Integer(nullable=True)
-    message = ormar.String(max_length=100, index=True)
+    event = ormar.ForeignKey(ProjectEvent,index=True, nullable=False,ondelete="CASCADE")
+    # category = ormar.Integer(nullable=True)
+    # message = ormar.String(max_length=100, index=True)
     target: bool = ormar.Boolean(default=False)
 
 
@@ -431,8 +432,9 @@ class TrainPerformance(ormar.Model):
         primary_key=True, autoincrement=True, nullable=False)
     device: int = ormar.ForeignKey(
         Device, index=True, nullable=False, ondelete="CASCADE")
-    category: int = ormar.Integer(nullable=True)
-    message: str = ormar.String(max_length=100, index=True)
+    # category: int = ormar.Integer(nullable=True)
+    # message: str = ormar.String(max_length=100, index=True)
+    event = ormar.ForeignKey(ProjectEvent,index=True, nullable=False,ondelete="CASCADE")
     threshold: float = ormar.Float(nullable=True)
     actual_cutpoint: int = ormar.Integer(nullable=True)
     arf: float = ormar.Float(nullable=True)
@@ -452,9 +454,9 @@ class PredictResult(ormar.Model):
         primary_key=True, autoincrement=True, nullable=False)
     device: int = ormar.ForeignKey(
         Device, index=True, nullable=False, ondelete="CASCADE")
-    category: int = ormar.Integer(nullable=True)
-    message: str = ormar.String(max_length=100, index=True)
-
+    # category: int = ormar.Integer(nullable=True)
+    # message: str = ormar.String(max_length=100, index=True)
+    event = ormar.ForeignKey(ProjectEvent,index=True, nullable=False,ondelete="CASCADE")
     pred: str = ormar.String(max_length=100, index=True)
     ori_date: datetime = ormar.DateTime(timezone=True)
     pred_date: datetime = ormar.DateTime(timezone=True)
