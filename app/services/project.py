@@ -1053,13 +1053,17 @@ async def PredictData(project_id: int, select_type: str = "day"):
         for events in tqdm(input_data_dict[dv]):
             count += 1
             df = input_data_dict[dv][events]
-            if select_type == 'week' and count == 1:
-                df['date'] = pd.to_datetime(df['date'])
-                df.set_index('date', inplace=True)
+            if select_type == 'week':
+                try:
+                    df['date1'] = pd.to_datetime(df['date'].iloc[:,0])
+                except:
+                    df['date1'] = pd.to_datetime(df['date'])
+                df.set_index('date1',inplace=True)
                 # df = df.resample('W').sum()
-                df = df.resample('W').agg(
-                    {col: foxlink_predict.choose_agg_func(col) for col in df.columns})
+                df.drop(['date'], axis =1,inplace=True)
+                df = df.resample('W').agg({col: foxlink_predict.choose_agg_func(col) for col in df.columns})
                 df['date'] = df.index
+           
             category = infos[dv][events]['category'].values[0]
 
             time = pd.to_datetime(
@@ -1068,15 +1072,24 @@ async def PredictData(project_id: int, select_type: str = "day"):
             model = foxlink_predict.map_model(
                 dv, device_id, events, time, select_type)
             pred = model.predict(X)
+
             df['pred'] = pred
             df['device'] = device_id
             df['category'] = category
             df['message'] = events
-            df['pred_date'] = df.date.apply(lambda x: x + pd.Timedelta(days=1))
-            print(df.info)
+
+            if select_type == 'week':
+                df['pred_date'] = df.date.apply(lambda x: x + pd.Timedelta(days=7))
+                df['pred_type'] = 'week'
+                df.reset_index(inplace = True,drop = True)
+            else:
+                df['pred_date'] = df.date.apply(lambda x: x + pd.Timedelta(days=1))
+                df['pred_type'] = 'day'
+
+
             df.rename(columns={'date': 'ori_date'}, inplace=True)
             df = df[['device', 'category', 'message',
-                     'ori_date', 'pred_date', 'pred']]
+                     'ori_date', 'pred_date', 'pred','pred_type']]
             ntust = foxlink_predict.ntust_engine
             df.to_sql('predict_result', con=ntust,
                       if_exists='append', index=False)

@@ -1,3 +1,6 @@
+"""
+主要是和登入的認證與權限有關
+"""
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel

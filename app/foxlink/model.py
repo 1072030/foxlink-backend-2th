@@ -1,4 +1,6 @@
-
+"""
+派工使用，預知保養無用
+"""
 # from typing import Optional
 # from datetime import datetime
 # from pydantic import BaseModel

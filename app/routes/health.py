@@ -1,3 +1,7 @@
+"""
+基礎api model
+"""
+
 from typing import Dict
 from fastapi import APIRouter
 

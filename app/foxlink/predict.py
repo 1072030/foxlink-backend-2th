@@ -1,3 +1,7 @@
+"""
+預測機台發生時間
+"""
+
 import pandas as pd
 import numpy as np
 from datetime import datetime

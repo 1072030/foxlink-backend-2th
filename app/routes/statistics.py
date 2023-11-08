@@ -1,3 +1,7 @@
+"""
+網頁前端特別顯示內容
+"""
+
 from fastapi import APIRouter, Depends, status
 from fastapi.exceptions import HTTPException
 from typing import List, Dict, Optional, Union

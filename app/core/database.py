@@ -1,3 +1,7 @@
+"""
+主要用來撰寫資料庫相關資訊
+"""
+
 import databases
 import ormar
 import uuid

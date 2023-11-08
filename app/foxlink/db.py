@@ -1,3 +1,6 @@
+"""
+主要是連線到正崴資料庫的function
+"""
 import asyncio
 import logging
 from typing import Optional, Dict, Tuple, List
