@@ -89,7 +89,10 @@ class FoxlinkTrain:
                 device=dvs.id,
                 project=project_id
             ).all()
-            event = set([row.message for row in event])
+            event = set([row.event.id for row in event])
+            events = await ProjectEvent.objects.filter(id__in=event).all()
+            # event = set([row.name for row in events])
+
             sql = f"""
                 SELECT Measure_Workno FROM aoi.measure_info 
                 WHERE 
@@ -111,17 +114,17 @@ class FoxlinkTrain:
             # """
             # first_aoi_measure = pd.read_sql(sql, self.foxlink_engine)['Measure_Workno'][0].lower()
             
-            for row in event: # 預測目標異常 Y
+            for row in events: # 預測目標異常 Y
                 # print(f"{get_ntz_now} : starting preprocessing {row.message}")
                 sql = f"""
                     SELECT * FROM error_feature
                     WHERE 
                         device = '{dvs.id}' and 
                         project = {project_id} and 
-                        message = '{row}'
+                        event = '{row.id}'
                 """
                 target_Y = pd.read_sql(sql, self.ntust_engine)
-                target_Y.rename(columns={'happened':row}, inplace=True)
+                target_Y.rename(columns={'happened':row.name}, inplace=True)
                 target_feature = target_Y.drop('operation_day', axis=1)
                 
                 # 加入AOI檢測特徵
@@ -162,14 +165,14 @@ class FoxlinkTrain:
                         op_day_total_pcs = aoi_fea[aoi_fea['operation_day']==1][measure+'_pcs'].sum()
 
                         #將發生次數總和
-                        op_day_total_error = target_feature[target_feature['operation_day']==1][row].sum()
+                        op_day_total_error = target_feature[target_feature['operation_day']==1][row.name].sum()
 
                         #計算平均發生次數
                         error_per_pcs = op_day_total_error / op_day_total_pcs # 計算比例
 
                         #
                         invalid_date_index = target_feature[target_feature['operation_day']==0].index
-                        target_feature.loc[invalid_date_index, row] = round(target_feature.loc[invalid_date_index, measure+'_pcs'] * error_per_pcs) # 依照生產比例補值
+                        target_feature.loc[invalid_date_index, row.name] = round(target_feature.loc[invalid_date_index, measure+'_pcs'] * error_per_pcs) # 依照生產比例補值
                         
                     else:
                         sql = f"SELECT * FROM aoi_feature WHERE device = '{dvs.name}' and aoi_measure = '{measure_id}';"
@@ -177,47 +180,57 @@ class FoxlinkTrain:
                         aoi_fea.rename(columns={
                             'pcs':measure+'_pcs',
                             'ng_num':measure+'_ng_num',
-                            'ng_rate(%)':measure+'_ng_rate(%)',
+                            'ng_rate':measure+'_ng_rate',
                             'ct_max':measure+'_ct_max',
                             'ct_mean':measure+'_ct_mean',
                             'ct_min':measure+'_ct_min'
                             }, inplace=True
                         )
-                        aoi_fea.drop(['Device_Name','AOI_measure','operation_day'],axis=1, inplace=True)
+                        aoi_fea.drop(['device','aoi_measure','operation_day'],axis=1, inplace=True)
                         target_feature = pd.merge(target_feature, aoi_fea, on=['date'], how='outer')
                 # 加入同機台其他異常事件發生次數
-                for others in event:
-                    if others == row:
+                for others in events:
+                    if others.name == row.name:
                         continue
                     else:
-                        sql = f"SELECT date, category, happened FROM error_feature WHERE device = {dvs.id} and message = '{others}' and project={project_id};"
+                        # SELECT e.date, p.name, e.happened FROM error_feature as e JOIN project_events as p ON p.id=e.event WHERE e.device = 35 and event = 371 and project=26;
+                        sql = f"""
+                        SELECT e.date, p.category, e.happened 
+                        FROM error_feature as e 
+                        JOIN project_events as p 
+                        ON p.id=e.event 
+                        WHERE 
+                            e.device = {dvs.id} and 
+                            e.event = {others.id} and 
+                            e.project={project_id};
+                        """
                         other_error_happened = pd.read_sql(sql, self.ntust_engine) # 預測目標異常的特徵
                         category = str(other_error_happened['category'].iloc[0])
                         other_error_happened.rename(columns={'happened':category}, inplace=True)
                         target_feature = pd.merge(target_feature, other_error_happened[['date', category]], on='date', how='outer')
-                
+                        
                 target_feature.sort_values('date', inplace=True)
                 target_feature.reset_index(drop=True, inplace=True)
                 steady_index = target_feature[target_feature['operation_day']==1].index.min() # 穩定生產第一天
                 target_feature = target_feature[steady_index:]
-                
-                target_feature.drop(['device', 'message', 'category', 'operation_day'], axis=1, inplace=True)
+
+                target_feature.drop(['device', 'event', 'operation_day'], axis=1, inplace=True)
                 target_feature.fillna(0, inplace=True)
                 target_feature.set_index('date', inplace=True)
                 # feature selection
                 pearson = target_feature.corr(method='pearson') # 線性相關
                 spearman = target_feature.corr(method='spearman') # 非線性相關
 
-                pf = set(pearson[row][pearson[row].abs()>0.4].index) # 選擇特徵
-                sf = set(spearman[row][spearman[row].abs()>0.4].index) # 選擇特徵
+                pf = set(pearson[row.name][pearson[row.name].abs()>0.4].index) # 選擇特徵
+                sf = set(spearman[row.name][spearman[row.name].abs()>0.4].index) # 選擇特徵
                 pnsf = list(pf|sf)
                 target_feature.reset_index(inplace=True)
-                input_data = pd.merge(target_feature[['date',row]], target_feature[['date']+pnsf])
+                input_data = pd.merge(target_feature[['date',row.name]], target_feature[['date']+pnsf])
 
                 if dvs.name not in input_data_dict:
                     input_data_dict[dvs.name] = {}
                     
-                input_data_dict[dvs.name][row] = input_data
+                input_data_dict[dvs.name][row.name] = input_data
     
         return input_data_dict
     
@@ -319,8 +332,17 @@ class FoxlinkTrain:
         else:
             return acc, 0, 0, 0
         
-    def map_category(self, dv, events):
-        sql = f"SELECT category FROM pred_targets WHERE device={dv} and message='{events}';"
+    def map_category(self, dv, event_id):
+        
+        sql = f"""
+        SELECT pe.category 
+        FROM pred_targets as pt
+        JOIN project_events as pe
+        ON pe.id=pt.event
+        WHERE 
+            pt.device={dv} and 
+            pt.event='{event_id}';
+        """
         ca = pd.read_sql(sql, self.ntust_engine)['category'].iloc[0]
         return ca
     

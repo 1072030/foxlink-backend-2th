@@ -193,8 +193,8 @@ async def training_data(project_id:int,user:User = Depends(get_current_user())):
     await TrainingData(project_id)
     return
 @router.get("/predict-data",tags=["project"])
-async def predict_data(project_id:int,user:User = Depends(get_current_user())):
-    await PredictData(project_id)
+async def predict_data(project_id:int,pred_type:str,user:User = Depends(get_current_user())):
+    await PredictData(project_id,pred_type)
     return
 
 
