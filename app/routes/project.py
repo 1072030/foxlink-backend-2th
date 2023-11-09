@@ -149,12 +149,13 @@ async def add_project_and_events(dto:List[NewProjectDto],user:User = Depends(get
     """
     user = await checkAdminPermission(user)
     if user is not None:
-        return await AddNewProjectEvents(dto)
+        await AddNewProjectEvents(dto)
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.ADD_NEW_PROJECT.value,
             user=user.badge,
             description=f"{dto[0].project}"
         )
+        return
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
