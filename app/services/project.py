@@ -173,8 +173,6 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
                     event_data[name] = event_data.get(name, [{"message":i.Message,"category":i.Category}])
                 else:
                     event_data[name].append({"message":i.Message,"category":i.Category})
-                    
-                print(event_data)
         except:
             raise HTTPException(
                 status_code=400, detail="can not connect foxlink database or sql parameter is wrong")
@@ -202,7 +200,6 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
     for device in new_devices:
         # check selected events
         for events in event_data[device.name + '-' + str(device.line)]:
-            print(events)
             event = ProjectEvent(
                 device=device.id,
                 name=events['message'],
@@ -268,15 +265,6 @@ async def PreprocessingData(project_id: int):
                         (Code3 = '{dr[0]}' AND Code4 <= '07:40:00')
                         AND Code2 < 3 ;
                     """
-            # print(f"{get_ntz_now()} : starting query {dr[3]} to {dr[4]}")
-            # sql = f"""
-            #     SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.aoi_measure_name}_data`
-            #     WHERE
-            #         (Code3 = '{dr[3]}' AND Code4 >= '07:40:00') OR
-            #         (Code3 > '{dr[3]}' AND Code3 < '{dr[4]}') OR
-            #         (Code3 = '{dr[4]}' AND Code4 <= '07:40:00')
-            #         AND Code2 < 3 ;
-            #     """
             tmp_data = pd.read_sql(sql, foxlink_engine)
             aoi = aoi.append(tmp_data)
 
@@ -365,8 +353,6 @@ async def PreprocessingData(project_id: int):
                                  'operation_time'].sum().reset_index(), on=['date', 'shift'], how='outer')
             dn_dvs_mf['pcs'] = dn_dvs_mf['pcs'].astype(int)
 
-            # print(data)
-            # print(data.events)
             dn_dvs_mf['device'] = dvs.id
             dn_dvs_mf['aoi_measure'] = measure.id
             temp_operation = dn_dvs_mf['operation_time']
@@ -465,7 +451,6 @@ async def PreprocessingData(project_id: int):
 
     # testTime = datetime.datetime(2023,9,30,7,40)
 
-    # print(project_device[0].devices)
     df = pd.DataFrame()
     dvs_name = [dvs.name for dvs in project[0].devices]
     for dvs in  project[0].devices:
@@ -485,7 +470,6 @@ async def PreprocessingData(project_id: int):
     df_auto_merge = pd.DataFrame()  # 儲存處理後的event
 
     while len(df_auto) != 0:
-        # print(len(df_auto))
         st = df_auto.iloc[0]  # 取第一個row
         if st["END_FILE_NAME"] != "auto":  # 排除開班 auto 並完成的事件
             df_auto_merge = pd.concat(
@@ -493,7 +477,6 @@ async def PreprocessingData(project_id: int):
             df_auto = df_auto.drop(0).reset_index(drop=True)  # 移除掉~, 重新排序index
             continue  # 重新while 開始檢查
         for j in range(1, len(df_auto)):
-            # print(j)
             ed = df_auto.loc[j]  # 關鍵
             if (st[["Line", "Device_Name", "Category", "Message"]] == ed[["Line", "Device_Name", "Category", "Message"]]).all():  # 找到相同的項目
                 # 注意是否有雙 auto ，代表 event 又跨一個班別
@@ -553,7 +536,6 @@ async def PreprocessingData(project_id: int):
         dcm['device'] = dcm_id.id
 
         pred_target_evnets = await ProjectEvent.objects.filter(device=dcm_id).all()
-        print(pred_target_evnets)
         events_id = []
         for index,row in dcm.iterrows():
             for i in pred_target_evnets:
@@ -568,7 +550,6 @@ async def PreprocessingData(project_id: int):
 
         pred_target = pred_target.append(dcm)
         for row in target.itertuples():
-            print(row)
             message = row.message
             category = row.category
 
@@ -619,19 +600,9 @@ async def PreprocessingData(project_id: int):
             err_fea = err_fea[err_fea['project'] != 0]
             target_event = await ProjectEvent.objects.filter(device=dvs_id,name=message,category=category).get()
             err_fea['event'] = target_event.id
-            # print(err_fea)
-            # err_fea.to_csv(r'/app/pandas.txt', header=None,
-            #                index=None, sep=' ', mode='a')
+
             err_fea.to_sql(con=ntust_engine, name="error_feature",
                            if_exists='append', index=False)
-            # try:
-            #     err_fea = err_fea[err_fea['project']!=0]
-            #     print(err_fea)
-            #     err_fea.to_csv(r'/app/pandas.txt', header=None, index=None, sep=' ', mode='a')
-            #     err_fea.to_sql(con=ntust_engine,name="error_feature",if_exists='append',index=False)
-            # except:
-            #     raise HTTPException(
-            #         status_code=400, detail="cant write into database")
 
     try:
         print("starting input pred_target...")
@@ -871,7 +842,6 @@ async def UpdatePreprocessingData(project_id: int):
     # 合併有 auto 的 event
     df_auto_merge = pd.DataFrame()  # 儲存處理後的event
     while len(df_auto) != 0:
-        # print(len(df_auto))
         st = df_auto.iloc[0]  # 取第一個row
         if st["END_FILE_NAME"] != "auto":  # 排除開班 auto 並完成的事件
             df_auto_merge = pd.concat(
@@ -879,7 +849,6 @@ async def UpdatePreprocessingData(project_id: int):
             df_auto = df_auto.drop(0).reset_index(drop=True)  # 移除掉~, 重新排序index
             continue  # 重新while 開始檢查
         for j in range(1, len(df_auto)):
-            # print(j)
             ed = df_auto.loc[j]  # 關鍵
             if (st[["Line", "Device_Name", "Category", "Message"]] == ed[["Line", "Device_Name", "Category", "Message"]]).all():  # 找到相同的項目
                 # 注意是否有雙 auto ，代表 event 又跨一個班別
@@ -915,7 +884,6 @@ async def UpdatePreprocessingData(project_id: int):
     event.sort_values('Start_Time', inplace=True)
     error_feature = pd.DataFrame()
     for dvs in dvs_name:
-        print(dvs)
         dvs_event = event[event['Device_Name'] == dvs]
         dvs_data = await Device.objects.filter(name=dvs,project=project_id).get()
         test = datetime.datetime(2023,11,8,0,0,0)
@@ -924,18 +892,6 @@ async def UpdatePreprocessingData(project_id: int):
             date=update_workday
         ).all())
 
-
-        # sql = f"""
-        # SELECT operation_day FROM aoi_feature
-        # WHERE project = {project_id} AND
-        # WHERE device = '{dvs}' AND
-        # date = '{update_workday}' ;
-        # """
-        # operation = pd.read_sql(sql, ntust_engine) # 合格運作
-        # target = (await PredTarget.objects.filter(
-        #     device=dvs_data.id,
-        #     target=1
-        # ).all())
         sql = f"""
         SELECT pt.device,pt.target,pt.event,pe.name,pe.category FROM pred_targets as pt
         JOIN project_events as pe
@@ -986,7 +942,6 @@ async def UpdatePreprocessingData(project_id: int):
             err_fea['dur_min'] = err_fea['dur_min'].astype(int)
             err_fea['last_time_max'] = err_fea['last_time_max'].astype(int)
             err_fea['last_time_min'] = err_fea['last_time_min'].astype(int)
-            print(err_fea.info())
             error_feature = error_feature.append(err_fea)
     try:
         # with ntust_engine.begin() as conn:
@@ -1007,7 +962,6 @@ async def TrainingData(project_id: int, select_type: str = "day"):
     devices = await Device.objects.filter(project=project_id).all()
 
     for dv in input_data_dict:
-        print('Device:', dv)
         for events in tqdm(input_data_dict[dv]):
             temp = []
             count = 0
@@ -1015,7 +969,6 @@ async def TrainingData(project_id: int, select_type: str = "day"):
                 count += 1
                 print(dv + ' '+events + ' T = ', t)
                 df = input_data_dict[dv][events]
-                print(df.info())
                 if select_type == "week" and count == 1:
                     df['date'] = pd.to_datetime(df['date'])
                     df.set_index('date', inplace=True)
@@ -1036,7 +989,6 @@ async def TrainingData(project_id: int, select_type: str = "day"):
                     used_col = df.columns.to_list()
                     used_col.remove('light')
                     # 訓練模型前的最後資料前處理
-                    print(df.info())
                     foxlink_train.training_data_preprocessing(df)
                     # 挑選了哪些模型
                     es = foxlink_train.select_model()
@@ -1076,7 +1028,6 @@ async def TrainingData(project_id: int, select_type: str = "day"):
             every_error_performance[dv][events][best_t]['freq'] = select_type
             # 寫入資料庫
             ntust = foxlink_train.ntust_engine
-            print(every_error_performance[dv][events][best_t])
             pd.DataFrame(every_error_performance[dv][events][best_t], index=[0]).drop(
                 columns='model').to_sql('train_performance', con=ntust, if_exists='append', index=False)
     return
@@ -1094,7 +1045,6 @@ async def PredictData(project_id: int, select_type: str):
         for events in tqdm(input_data_dict[dv]):
 
             df = input_data_dict[dv][events]
-            print(df.info())
             if select_type == 'week':
                 try:
                     df['date1'] = pd.to_datetime(df['date'].iloc[:,0])
