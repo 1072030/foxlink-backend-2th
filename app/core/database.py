@@ -620,7 +620,6 @@ class AuditLogHeader(ormar.Model):
     action: str = ormar.String(
         max_length=50, nullable=False, index=True, choices=list(AuditActionEnum)
     )
-    table_name: str = ormar.String(max_length=30, index=True)
     user: str = ormar.String(max_length=30, index=True, nullable=True)
     created_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
     description: str = ormar.String(max_length=256, nullable=True)
