@@ -1,6 +1,6 @@
 from typing import List
 from fastapi.exceptions import HTTPException
-from datetime import date, datetime
+from datetime import date, datetime,timedelta
 import pandas as pd
 import numpy as np
 from app.models.schema import NewProjectDto
@@ -16,9 +16,20 @@ from app.core.database import (
     Device,
     AoiMeasure,
     AoiFeature,
-    PredTarget
+    PredTarget,
+    PredictResult
 )
-from app.env import FOXLINK_EVENT_DB_HOSTS, FOXLINK_EVENT_DB_NAME, FOXLINK_DEVICE_DB_NAME
+from app.env import (
+    FOXLINK_EVENT_DB_HOSTS,
+    FOXLINK_EVENT_DB_USER,
+    FOXLINK_EVENT_DB_PWD,
+    FOXLINK_EVENT_DB_NAME,
+    DATABASE_HOST,
+    DATABASE_PORT,
+    DATABASE_USER,
+    DATABASE_PASSWORD,
+    DATABASE_NAME
+)
 from app.foxlink.db import (
     foxlink_dbs
 )
@@ -45,6 +56,19 @@ import joblib
 
 FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
 
+
+def engine(user: str, password: str, host: str, database: str):
+    return f'mysql+pymysql://{user}:{password}@{host}/{database}'
+
+
+foxlink_engine = create_engine(
+    engine(FOXLINK_EVENT_DB_USER, FOXLINK_EVENT_DB_PWD, FOXLINK_EVENT_DB_HOSTS[0], FOXLINK_EVENT_DB_NAME[0]))
+ntust_engine = create_engine(engine(
+    DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST+":"+str(DATABASE_PORT), DATABASE_NAME))
+# foxlink_engine = create_engine(
+#         f'mysql+pymysql://ntust:ntustpwd@172.20.0.1:12345/aoi')
+# ntust_engine = create_engine(
+#         f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink')
 
 async def DeleteProject(project_id: int):
     project = await Project.objects.filter(id=project_id).get_or_none()
@@ -170,9 +194,11 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
             for i in await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt):
                 name = i.Device_Name + "-" + i.Line
                 if name not in event_data.keys():
-                    event_data[name] = event_data.get(name, [{"message":i.Message,"category":i.Category}])
+                    event_data[name] = event_data.get(
+                        name, [{"message": i.Message, "category": i.Category}])
                 else:
-                    event_data[name].append({"message":i.Message,"category":i.Category})
+                    event_data[name].append(
+                        {"message": i.Message, "category": i.Category})
         except:
             raise HTTPException(
                 status_code=400, detail="can not connect foxlink database or sql parameter is wrong")
@@ -223,10 +249,6 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
 
 
 async def PreprocessingData(project_id: int):
-    foxlink_engine = create_engine(
-        f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi')
-    ntust_engine = create_engine(
-        f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink')
 
     # 工作日期 (現在時間於10/9 07:40:00 ~ 10/10 07:39:59之間，工作日期為 10/9)
     now_workday = (get_ntz_now() - pd.Timedelta(hours=7, minutes=40)).date()
@@ -249,9 +271,15 @@ async def PreprocessingData(project_id: int):
         for measure in dvs.aoimeasures:
             aoi = pd.DataFrame()
             # 資料表第一筆資料
+
             sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;"
-            first_data_date = pd.read_sql(sql, foxlink_engine)[
-                'Code3'].values[0]  # 第一筆資料的日期
+            first_data_date = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=sql)
+            # [5] = Code3
+
+            # get keys
+            # print(first_data_date._fields)
+            first_data_date = first_data_date['Code3']
+
             dr = pd.date_range(
                 first_data_date, datetime.datetime.now().date(), freq='2M').astype(str)
 
@@ -265,6 +293,8 @@ async def PreprocessingData(project_id: int):
                         (Code3 = '{dr[0]}' AND Code4 <= '07:40:00')
                         AND Code2 < 3 ;
                     """
+            # tmp_data = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=sql)
+            # tmp_data = foxlink_dbs.FormatDataFrame(tmp_data._fields, tmp_data)
             tmp_data = pd.read_sql(sql, foxlink_engine)
             aoi = aoi.append(tmp_data)
 
@@ -340,8 +370,8 @@ async def PreprocessingData(project_id: int):
                 print(hourly_dvs_mf)
                 hourly_dvs_mf.to_sql(
                     con=ntust_engine, name="hourly_mf", if_exists='append', index=False)
-            except:
-                return
+            except Exception as e:
+                print(f"error in to sql: {repr(e)}")
 
             hourly_mf = hourly_mf.append(hourly_dvs_mf)
 
@@ -367,8 +397,8 @@ async def PreprocessingData(project_id: int):
                 print(dn_dvs_mf)
                 dn_dvs_mf.to_sql(con=ntust_engine, name="dn_mf",
                                  if_exists='append', index=False)
-            except:
-                return
+            except Exception as e:
+                print(f"error in to sql: {repr(e)}")
             dn_dvs_mf['operation_time'] = temp_operation
             dn_mf = dn_mf.append(dn_dvs_mf)
 
@@ -426,12 +456,13 @@ async def PreprocessingData(project_id: int):
             aoi_fea['operation_day'] = aoi_fea['operation_day'].astype(int)
 
             try:
-                print(aoi_fea)
+
                 print("starting input aoi_feature...")
+                print(aoi_fea)
                 aoi_fea.to_sql(con=ntust_engine, name="aoi_feature",
                                if_exists='append', index=False)
-            except:
-                return
+            except Exception as e:
+                print(f"error in to sql: {repr(e)}")
             aoi_feature = aoi_feature.append(aoi_fea)
 
     def target_label(x):  # 用operation day中發生異常天數比例 判斷目標
@@ -453,7 +484,7 @@ async def PreprocessingData(project_id: int):
 
     df = pd.DataFrame()
     dvs_name = [dvs.name for dvs in project[0].devices]
-    for dvs in  project[0].devices:
+    for dvs in project[0].devices:
         sql = f"""
             SELECT * FROM aoi.`{project[0].name}_event` 
             WHERE 
@@ -463,7 +494,7 @@ async def PreprocessingData(project_id: int):
                 Line= {dvs.line};
             """
         temp = pd.read_sql(sql, foxlink_engine)  # 讀取異常事件歷史資料
-        df = pd.concat([temp,df],ignore_index=True)
+        df = pd.concat([temp, df], ignore_index=True)
     df_auto = df[(df["START_FILE_NAME"] == "auto") | (
         df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
     # 合併有 auto 的 event
@@ -526,7 +557,7 @@ async def PreprocessingData(project_id: int):
             'Device_Name', 'Category'], key=natsort_keygen()).reset_index(drop=True)
         dcm['target'] = dcm.apply(lambda x: target_label(x), axis=1)
 
-        dcm_id = await Device.objects.filter(name=dvs,project=project_id).get_or_none()
+        dcm_id = await Device.objects.filter(name=dvs, project=project_id).get_or_none()
         if dcm_id is None:
             raise HTTPException(
                 status_code=400, detail="cant find dcm device")
@@ -537,15 +568,14 @@ async def PreprocessingData(project_id: int):
 
         pred_target_evnets = await ProjectEvent.objects.filter(device=dcm_id).all()
         events_id = []
-        for index,row in dcm.iterrows():
+        for index, row in dcm.iterrows():
             for i in pred_target_evnets:
                 if row['message'] == i.name and row['category'] == i.category:
                     events_id.append(i.id)
 
-
         # 異常每天發生次數(預知維修目標)
         target = dcm[dcm['target'] == 1]
-        dcm = dcm.drop(['category','message'],axis=1)
+        dcm = dcm.drop(['category', 'message'], axis=1)
         dcm['event'] = events_id
 
         pred_target = pred_target.append(dcm)
@@ -598,7 +628,7 @@ async def PreprocessingData(project_id: int):
             err_fea['last_time_min'] = err_fea['last_time_min'].astype(int)
 
             err_fea = err_fea[err_fea['project'] != 0]
-            target_event = await ProjectEvent.objects.filter(device=dvs_id,name=message,category=category).get()
+            target_event = await ProjectEvent.objects.filter(device=dvs_id, name=message, category=category).get()
             err_fea['event'] = target_event.id
 
             err_fea.to_sql(con=ntust_engine, name="error_feature",
@@ -615,13 +645,8 @@ async def PreprocessingData(project_id: int):
     return
 
 
-
 async def UpdatePreprocessingData(project_id: int):
     # now = datetime.datetime(2022,11,1,7,39)
-    foxlink_engine = create_engine(
-        f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi')
-    ntust_engine = create_engine(
-        f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink')
 
     now = get_ntz_now()  # 更新資料時間
     update_workday = (now - pd.Timedelta(hours=7, minutes=40)
@@ -809,23 +834,25 @@ async def UpdatePreprocessingData(project_id: int):
                 dn_mf['operation_time'] = dn_mf['operation_time'].astype(
                     str).apply(lambda x: x[7:])
 
-
     # insert data
     try:
         # with ntust_engine.begin() as conn:
-            print('import houly_mf')
-            print(hourly_mf)
-            hourly_mf.to_sql(name='hourly_mf',con=ntust_engine,if_exists='append',index=False)
-            print('import dn_mf')
-            print(dn_mf)
-            dn_mf.to_sql(name='dn_mf',con=ntust_engine,if_exists='append',index=False)
-            print('import aoi_feature')
-            print(aoi_feature)
-            aoi_feature.to_sql(name='aoi_feature',con=ntust_engine,if_exists='append',index=False)
+        print('import houly_mf')
+        print(hourly_mf)
+        hourly_mf.to_sql(name='hourly_mf', con=ntust_engine,
+                         if_exists='append', index=False)
+        print('import dn_mf')
+        print(dn_mf)
+        dn_mf.to_sql(name='dn_mf', con=ntust_engine,
+                     if_exists='append', index=False)
+        print('import aoi_feature')
+        print(aoi_feature)
+        aoi_feature.to_sql(name='aoi_feature', con=ntust_engine,
+                           if_exists='append', index=False)
     except Exception as e:
         print(f"error in to sql: {repr(e)}")
         raise e
-    
+
     dvs_name = [dvs.name for dvs in project[0].devices]
 
     sql = f"""
@@ -885,8 +912,8 @@ async def UpdatePreprocessingData(project_id: int):
     error_feature = pd.DataFrame()
     for dvs in dvs_name:
         dvs_event = event[event['Device_Name'] == dvs]
-        dvs_data = await Device.objects.filter(name=dvs,project=project_id).get()
-        test = datetime.datetime(2023,11,8,0,0,0)
+        dvs_data = await Device.objects.filter(name=dvs, project=project_id).get()
+        test = datetime.datetime(2023, 11, 8, 0, 0, 0)
         operation = (await AoiFeature.objects.filter(
             device=dvs_data.id,
             date=update_workday
@@ -900,12 +927,11 @@ async def UpdatePreprocessingData(project_id: int):
             pt.device = {dvs_data.id} AND
             pt.target = 1 ;
         """
-        target = pd.read_sql(sql, ntust_engine) # 預知維修目標
+        target = pd.read_sql(sql, ntust_engine)  # 預知維修目標
 
         for row in target.itertuples():
             print(row)
             message = row.name
-
 
             error = dvs_event[dvs_event['Message'] == message]
             error['duration'] = error['duration'].dt.total_seconds()
@@ -918,7 +944,7 @@ async def UpdatePreprocessingData(project_id: int):
             err_fea['date'] = [update_workday]
             err_fea['project'] = project_id
             err_fea['device'] = row.device
-            err_fea['event']=row.event
+            err_fea['event'] = row.event
             err_fea['operation_day'] = operation[0].operation_day
             err_fea = pd.merge(err_fea, error.groupby('date').ID.count().reset_index(
             ).rename(columns={'ID': 'happened'}), on='date', how='outer')
@@ -945,9 +971,10 @@ async def UpdatePreprocessingData(project_id: int):
             error_feature = error_feature.append(err_fea)
     try:
         # with ntust_engine.begin() as conn:
-            print('import error_feature')
-            print(error_feature)
-            error_feature.to_sql(name='error_feature',con=ntust_engine,if_exists='append',index=False)
+        print('import error_feature')
+        print(error_feature)
+        error_feature.to_sql(name='error_feature',
+                             con=ntust_engine, if_exists='append', index=False)
     except Exception as e:
         print(f"error in to sql: {repr(e)}")
         raise e
@@ -955,7 +982,7 @@ async def UpdatePreprocessingData(project_id: int):
     return
 
 
-async def TrainingData(project_id: int, select_type: str = "day"):
+async def TrainingData(project_id: int, select_type: str):
     input_data_dict = await foxlink_train.data_preprocessing_from_sql(project_id=project_id)
     every_error_performance = {}
     timenow = get_ntz_now().strftime("%Y%m%d%H%M")
@@ -979,7 +1006,7 @@ async def TrainingData(project_id: int, select_type: str = "day"):
                 for i in devices:
                     if dv == i.name:
                         device_id = i.id
-                event = await ProjectEvent.objects.filter(name=events,device=device_id).get()
+                event = await ProjectEvent.objects.filter(name=events, device=device_id).get()
                 ca = foxlink_train.map_category(device_id, event.id)
                 try:
                     # 貼標
@@ -1004,7 +1031,7 @@ async def TrainingData(project_id: int, select_type: str = "day"):
                         every_error_performance[dv][events] = {}
                     if t not in every_error_performance[dv][events]:
                         every_error_performance[dv][events][t] = {'device': device_id,
-                                                                  'event':event.id,
+                                                                  'event': event.id,
                                                                   'threshold': t,
                                                                   'actual_cutpoint': cutting_point,
                                                                   'model': model,
@@ -1029,7 +1056,7 @@ async def TrainingData(project_id: int, select_type: str = "day"):
             # 寫入資料庫
             ntust = foxlink_train.ntust_engine
             pd.DataFrame(every_error_performance[dv][events][best_t], index=[0]).drop(
-                columns='model').to_sql('train_performance', con=ntust, if_exists='append', index=False)
+                columns='model').to_sql('train_performances', con=ntust, if_exists='append', index=False)
     return
 
 
@@ -1037,7 +1064,6 @@ async def PredictData(project_id: int, select_type: str):
     input_data_dict, infos = await foxlink_predict.data_preprocessing_from_sql(project_id=project_id)
     devices = await Device.objects.filter(project=project_id).all()
     for dv in input_data_dict:
-
 
         for i in devices:
             if dv == i.name:
@@ -1047,15 +1073,16 @@ async def PredictData(project_id: int, select_type: str):
             df = input_data_dict[dv][events]
             if select_type == 'week':
                 try:
-                    df['date1'] = pd.to_datetime(df['date'].iloc[:,0])
+                    df['date1'] = pd.to_datetime(df['date'].iloc[:, 0])
                 except:
                     df['date1'] = pd.to_datetime(df['date'])
-                df.set_index('date1',inplace=True)
+                df.set_index('date1', inplace=True)
                 # df = df.resample('W').sum()
-                df.drop(['date'], axis =1,inplace=True)
-                df = df.resample('W').agg({col: foxlink_predict.choose_agg_func(col) for col in df.columns})
+                df.drop(['date'], axis=1, inplace=True)
+                df = df.resample('W').agg(
+                    {col: foxlink_predict.choose_agg_func(col) for col in df.columns})
                 df['date'] = df.index
-           
+
             event = infos[dv][events]['event'].values[0]
 
             time = pd.to_datetime(
@@ -1065,24 +1092,65 @@ async def PredictData(project_id: int, select_type: str):
                 dv, device_id, event, time, select_type)
             pred = model.predict(X)
 
-
             df = df.T.drop_duplicates().T
             df['pred'] = pred
             df['device'] = device_id
             df['event'] = event
             if select_type == 'week':
-                df['pred_date'] = df.date.apply(lambda x: x + pd.Timedelta(days=7))
-                df.reset_index(inplace = True,drop = True)
+                df['pred_date'] = df.date.apply(
+                    lambda x: x + pd.Timedelta(days=7))
+                df.reset_index(inplace=True, drop=True)
                 df['pred_type'] = 1
             else:
-                df['pred_date'] = df.date.apply(lambda x: x + pd.Timedelta(days=1))
+                df['pred_date'] = df.date.apply(
+                    lambda x: x + pd.Timedelta(days=1))
                 df['pred_type'] = 0
-
 
             df.rename(columns={'date': 'ori_date'}, inplace=True)
             df = df[['device', 'event',
-                     'ori_date', 'pred_date', 'pred','pred_type']]
+                     'ori_date', 'pred_date', 'pred', 'pred_type']]
             ntust = foxlink_predict.ntust_engine
-            df.to_sql('predict_result', con=ntust,
+            df.to_sql('predict_results', con=ntust,
                       if_exists='append', index=False)
     return
+
+async def HappenedCheck(project_id:int):
+    # data = await Project.objects.filter(id=project_id).select_related(
+    #     ["devices", "devices__predictresults"]
+    # ).filter(
+    #     devices__predictresults__pred_date__gte=get_ntz_now().date()
+    # ).all()
+    # event = await ErrorFeature.objects.filter(
+    #             device=dvs.id,
+    #             project=project_id
+    #         ).all()
+    #         event = set([row.event.id for row in event])
+    #         events = await ProjectEvent.objects.filter(id__in=event).all()
+    data = await Project.objects.filter(id=project_id).select_related(["devices","devices__events"]).all()
+    devices = data[0].devices
+    for dvs in devices:
+        events = dvs.events
+        for event in events:
+            predData = await PredictResult.objects.filter(event=event.id).order_by('-pred_date').limit(1).get_or_none()
+            # check
+            if predData is None:
+                continue
+            # week predict
+            if predData.pred_type is True:
+                continue
+            # day predict
+            else:
+                stmt = f"""
+                SELECT * FROM `{data[0].name}_event`
+                WHERE
+                    Device_Name = '{dvs.name}' AND
+                    Message = '{event.name}' AND
+                    (Start_Time > '{predData.pred_date}' AND Start_Time < '{predData.pred_date + timedelta(days=1)}')
+
+                """
+                existed = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+                if len(existed) == 1:
+                    if predData.pred is not True:
+                        print()
+                
+            
