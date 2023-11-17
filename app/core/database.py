@@ -296,7 +296,7 @@ class ProjectUser(ormar.Model):
     project: ProjectRef = ormar.ForeignKey(
         ProjectRef,
         ondelete="CASCADE",
-        related_name="project"
+        related_name="users"
     )
 
     user: User = ormar.ForeignKey(User, index=True, nullable=False)
@@ -314,7 +314,7 @@ class ProjectEvent(ormar.Model):
         DeviceRef,
         index=True,
         ondelete="CASCADE",
-        related_name="device"
+        related_name="events"
     )
     name: str = ormar.String(max_length=50, nullable=False)
     category = ormar.Integer(nullable=True)
@@ -426,7 +426,7 @@ class PredTarget(ormar.Model):
 
 class TrainPerformance(ormar.Model):
     class Meta(MainMeta):
-        tablename = "train_performance"
+        tablename = "train_performances"
 
     id: int = ormar.Integer(
         primary_key=True, autoincrement=True, nullable=False)
@@ -447,7 +447,7 @@ class TrainPerformance(ormar.Model):
 
 class PredictResult(ormar.Model):
     class Meta(MainMeta):
-        tablename = "predict_result"
+        tablename = "predict_results"
 
     id: int = ormar.Integer(
         primary_key=True, autoincrement=True, nullable=False)
@@ -459,7 +459,8 @@ class PredictResult(ormar.Model):
     ori_date: datetime = ormar.DateTime(timezone=True)
     pred_date: datetime = ormar.DateTime(timezone=True)
     pred_type: bool = ormar.Boolean(nullable=False)
-
+    last_happened:datetime = ormar.DateTime(nullable=True,timezone=True)
+    last_happened_check:bool = ormar.Boolean(nullable=False,default=False)
 # class Device(ormar.Model):
 #     class Meta(MainMeta):
 #         tablename = "devices"

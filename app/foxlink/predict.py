@@ -210,7 +210,7 @@ class FoxlinkPredict:
                 target_feature.reset_index(inplace=True)
                 #---------------
                 ## 建立 SQL command
-                get_trained_info_sql = f"SELECT * FROM train_performance WHERE device= '{dvs.id}' and event = '{row.id}'"
+                get_trained_info_sql = f"SELECT * FROM train_performances WHERE device= '{dvs.id}' and event = '{row.id}'"
                 ## 從SQL讀取訓練後的資訊
                 trained_info = pd.read_sql(get_trained_info_sql, self.ntust_engine)
                 ## 轉換時間

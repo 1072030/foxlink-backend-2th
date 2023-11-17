@@ -1,5 +1,4 @@
-import sys
-import uuid
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import logging
 import asyncio
 import multiprocessing as mp
@@ -14,6 +13,7 @@ from app.routes import (
     backup,
     project,
     statistics,
+    scheduler,
     test
 )
 from app.core.database import api_db
@@ -21,14 +21,15 @@ from app.core.database import api_db
 from app.log import LOGGER_NAME
 from fastapi.middleware.cors import CORSMiddleware
 from app.foxlink.db import foxlink_dbs
-
+from app.routes.scheduler import backgroundScheduler
 # dictConfig(LogConfig().dict())
 logger = logging.getLogger(LOGGER_NAME)
 logger.propagate = False
 
 app = FastAPI(title="Foxlink API Backend", version="0.0.1")
 
-
+# Starting scheduler
+# backgroundScheduler.start()
 # Adding CORS middleware
 origins = [
     "http://localhost:3000",
@@ -64,6 +65,7 @@ app.include_router(log.router)
 app.include_router(backup.router)
 app.include_router(statistics.router)
 app.include_router(test.router)
+app.include_router(scheduler.router)
 # if PY_ENV == 'dev':
 #     app.include_router(test.router)
 

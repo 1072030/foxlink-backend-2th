@@ -22,7 +22,8 @@ from app.services.project import(
     PreprocessingData,
     UpdatePreprocessingData,
     TrainingData,
-    PredictData
+    PredictData,
+    HappenedCheck
 )
 from app.services.auth import (
     get_current_user,
@@ -198,6 +199,10 @@ async def predict_data(project_id:int,pred_type:str,user:User = Depends(get_curr
     await PredictData(project_id,pred_type)
     return
 
+@router.get("/happened-check",tags=["project"])
+async def happened_check(project_id:int):
+    await HappenedCheck(project_id)
+    return
 
 
 @router.get("/testssh")
