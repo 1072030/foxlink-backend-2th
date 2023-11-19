@@ -186,14 +186,16 @@ async def checkAdminPermission(user:User):
             )
 
 async def checkUserSearchProjectPermission(user:User,permission:int):
-    user_in_project = await ProjectUser.objects.filter(user=user.badge).all()
+    user_in_project = await ProjectUser.objects.select_related("project").filter(user=user.badge).all()
     if len(user_in_project) == 0:
         raise HTTPException(400, detail='this person didnt join any project')
     user_access_project_id = []
+    user_access_project_name = []
     for user in user_in_project:
         if user.permission >= permission:
             user_access_project_id.append(user.project.id)
-    return user_access_project_id
+            user_access_project_name.append(user.project.name)
+    return user_access_project_id,user_access_project_name
 
 async def checkFoxlinkAuth(checkSSH:bool=False):
     if checkSSH:

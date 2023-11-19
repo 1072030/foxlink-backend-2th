@@ -43,7 +43,7 @@ async def get_all_project(user:User = Depends(get_current_user())):
     """
     取得所有專案內容(當前使用者權限內所有的專案)
     """
-    project_id_list = await checkUserSearchProjectPermission(user,5)
+    project_id_list,project_name_list = await checkUserSearchProjectPermission(user,5)
     if len(project_id_list) != 0:
         return await (Project.objects.filter(
             id__in=project_id_list
@@ -191,8 +191,8 @@ async def update_preprocessing_data(project_id:int,user:User = Depends(get_curre
     return
 
 @router.get("/training-data",tags=["project"])
-async def training_data(project_id:int,user:User = Depends(get_current_user())):
-    await TrainingData(project_id)
+async def training_data(project_id:int,select_type:str,user:User = Depends(get_current_user())):
+    await TrainingData(project_id,select_type)
     return
 @router.get("/predict-data",tags=["project"])
 async def predict_data(project_id:int,pred_type:str,user:User = Depends(get_current_user())):
