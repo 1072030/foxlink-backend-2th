@@ -34,7 +34,7 @@ from app.services.auth import (
     get_manager_active_user
 )
 from app.models.schema import NewProjectDto,NewUserDto
-
+from datetime import datetime
 router = APIRouter(prefix="/project")
 
 
@@ -200,8 +200,8 @@ async def predict_data(project_id:int,pred_type:str,user:User = Depends(get_curr
     return
 
 @router.get("/happened-check",tags=["project"])
-async def happened_check(project_id:int):
-    await HappenedCheck(project_id)
+async def happened_check(project_id:int,start_time:datetime,select_type:str):
+    await HappenedCheck(project_id,start_time,select_type)
     return
 
 

@@ -70,99 +70,120 @@ async def get_predict_compare_list(user: User = Depends(get_current_user())):
     output = []
     for project in data:
         devices = {}
+        lines = []
         for dvs in project.devices:
-            
-            if dvs.name not in devices.keys():
-                devices[dvs.name] = []
-            devices[dvs.name].append(dvs.line)
-        
+            if dvs.line not in lines:
+                lines.append(dvs.line)
 
         output.append({
             "project_name": project.name,
-            "devices": devices
+            "lines": lines
         })
     return output
 
 
 @router.get("/predict-compare-search", tags=["statistics"])
-async def get_predict_compare_search(start_time: datetime, end_time: datetime,select_type:str, project_name: Optional[str] = None,device:Optional[str] = None, line: Optional[int] = None, user: User = Depends(get_current_user())):
+async def get_predict_compare_search(start_time: datetime, end_time: datetime,select_type:str, project_name: Optional[str] = None,line: Optional[int] = None, user: User = Depends(get_current_user())):
     project_id_list, project_name_list = await checkUserSearchProjectPermission(user, 5)
     start_time = start_time.replace(hour=0,minute=0,second=0,microsecond=0)
     end_time = end_time.replace(hour=0,minute=0,second=0,microsecond=0)
     try:
         if project_name is None:
-            return await GetPredictCompareSearch(project_name_list,device,select_type,line,start_time,end_time)
+            return await GetPredictCompareSearch(project_name_list,select_type,line,start_time,end_time)
         else:
-            return await GetPredictCompareSearch([project_name],device,select_type,line,start_time,end_time)
+            return await GetPredictCompareSearch([project_name],select_type,line,start_time,end_time)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=repr(e)
         )
     
-@router.get("/predict-compare-detail",tags=["statistics"])
-async def get_predict_compare_detail(project_name:str,device_name:str,line:int,date:datetime,select_type:str):
-    
-    data = await Project.objects.select_related(["devices","devices__events"]).filter(name=project_name,devices__name=device_name,devices__line=line).all()
-    devices = data[0].devices
-    formatData = {}
-    if select_type == "day":
-        for dvs in devices:
-            for event in dvs.events:
-                checkPredEvent = await PredictResult.objects.filter(event=event.id,pred_type=0).order_by('-pred_date').limit(1).get_or_none()
+# @router.get("/predict-compare-detail",tags=["statistics"])
+# async def get_predict_compare_detail(project_name:str,device_name:str,line:int,date:datetime,select_type:str):
 
-                # check
-                if checkPredEvent is None:
-                    continue
+#     data = await Project.objects.select_related(["devices","devices__events"]).filter(name=project_name,devices__name=device_name,devices__line=line).all()
+#     devices = data[0].devices
+#     formatData = {}
+#     if select_type == "day":
+#         for dvs in devices:
+#             for event in dvs.events:
+#                 checkPredEvent = await PredictResult.objects.filter(event=event.id,pred_type=0).order_by('-pred_date').limit(1).get_or_none()
+
+#                 # check
+#                 if checkPredEvent is None:
+#                     continue
                             
-                data = await PredictResult.objects.filter(event=event.id,pred_date=date,pred_type=0).select_related("device").order_by('-pred_date').limit(1).get_or_none()
-                if data is None:
-                    continue
+#                 data = await PredictResult.objects.filter(event=event.id,pred_date=date,pred_type=0).select_related("device").order_by('-pred_date').limit(1).get_or_none()
+#                 if data is None:
+#                     continue
 
-                if project_name not in formatData.keys():
-                    formatData[project_name] = {}
-                if dvs.name not in formatData[project_name].keys():
-                    formatData[project_name][dvs.name] = []
+#                 if project_name not in formatData.keys():
+#                     formatData[project_name] = {}
+#                 if dvs.name not in formatData[project_name].keys():
+#                     formatData[project_name][dvs.name] = []
                 
-                if data.last_happened is None:
-                    acutal = 0
-                else:
-                    acutal = 1
-                formatData[project_name][dvs.name].append({
-                    "name":event.name,
-                    "true": acutal,
-                    "predict":int(data.pred)
-                })
+#                 if data.last_happened is None:
+#                     acutal = 0
+#                 else:
+#                     acutal = 1
 
-    else:
-        for dvs in devices:
-            for event in dvs.events:
-                checkPredEvent = await PredictResult.objects.filter(event=event.id,pred_type=1).order_by('-pred_date').limit(1).get_or_none()
+#                 if int(data.pred) == acutal:
+#                     accuracy = 1
+#                 else:
+#                     accuracy = 0
+#                 formatData[project_name][dvs.name].append({
+#                     "name":event.name,
+#                     "true": acutal,
+#                     "predict":int(data.pred),
+#                     "accuracy":accuracy
+#                 })
 
-                # check
-                if checkPredEvent is None:
-                    continue
+#     else:
+#         for dvs in devices:
+#             for event in dvs.events:
+#                 checkPredEvent = await PredictResult.objects.filter(event=event.id,pred_type=1).order_by('-pred_date').limit(1).get_or_none()
+
+#                 # check
+#                 if checkPredEvent is None:
+#                     continue
                             
-                data = await PredictResult.objects.filter(event=event.id,pred_date=date,pred_type=1).select_related("device").order_by('-pred_date').limit(1).get_or_none()
-                if data is None:
-                    continue
+#                 data = await PredictResult.objects.filter(event=event.id,pred_date=date,pred_type=1).select_related("device").order_by('-pred_date').limit(1).get_or_none()
+#                 if data is None:
+#                     continue
                 
-                if project_name not in formatData.keys():
-                    formatData[project_name] = {}
-                if dvs.name not in formatData[project_name].keys():
-                    formatData[project_name][dvs.name] = []
+#                 if project_name not in formatData.keys():
+#                     formatData[project_name] = {}
+#                 if dvs.name not in formatData[project_name].keys():
+#                     formatData[project_name][dvs.name] = []
                 
-                if data.last_happened is None:
-                    acutal = 0
-                else:
-                    acutal = 1
-                formatData[project_name][dvs.name].append({
-                    "name":event.name,
-                    "true": acutal,
-                    "predict":int(data.pred)
-                })
+#                 if data.last_happened is None:
+#                     acutal = 0
+#                 else:
+#                     acutal = 1
+#                 if int(data.pred) == acutal:
+#                     accuracy = 1
+#                 else:
+#                     accuracy = 0
+#                 formatData[project_name][dvs.name].append({
+#                     "name":event.name,
+#                     "true": acutal,
+#                     "predict":int(data.pred),
+#                     "accuracy":accuracy
+#                 })
 
-    return formatData
+#     return formatData
 
 @router.get("/predict-compare-analysis",tags=["statistics"])
-async def get_predict_compare_analysis(project_name:str,device_name:str,line:str,start_date:datetime,end_date:datetime):
+async def get_predict_compare_analysis(project_name:str,line:str,select_type:str,start_date:datetime,end_date:datetime):
+    # 選擇對應線號和專案
+    data = await Project.objects.filter(name=project_name).select_related(["devices","devices__events"]).filter(devices__line=line).all()
+
+    devices = data[0].devices
+    for dvs in devices:
+        events = dvs.events
+        for event in events:
+            if select_type == "day":
+                checkPredEvent = await PredictResult.objects.filter(event=event.id,pred_type=0).order_by('-pred_date').limit(1).get_or_none()
+                
+            else:
+                return
     return

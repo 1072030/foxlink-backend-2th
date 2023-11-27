@@ -5,6 +5,8 @@ from app.core.database import (
     Device,
     Project,
     PredictResult,
+    ErrorFeature,
+    TrainPerformance,
     transaction
 )
 from datetime import datetime, timedelta
@@ -77,6 +79,7 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
                 else:
                     pred_type = "日預測"
 
+            
                 formatData[dvs_project_name][dvs_name].append({
                     'id': result.id,
                     'name': result.event.name,
@@ -88,64 +91,106 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
     return formatData
 
 
-async def GetPredictCompareSearch(project_name: List, device_name: str,select_type:str, line: int, start_time: datetime, end_time: datetime):
+async def GetPredictCompareSearch(project_name: List,select_type:str, line: int, start_time: datetime, end_time: datetime):
     formatData = []
     for project in project_name:
-        if device_name is None:
+        
+        if line is None:
             project_devices = await Project.objects.select_related(["devices", "devices__events"]).filter(name=project).all()
-
         else:
-            if line is None:
-                project_devices = await Project.objects.select_related(["devices", "devices__events"]).filter(name=project, devices__name=device_name).all()
-            else:
-                project_devices = await Project.objects.select_related(["devices", "devices__events"]).filter(name=project, devices__name=device_name, devices__line=line).all()
-
+            project_devices = await Project.objects.select_related(["devices", "devices__events"]).filter(name=project, devices__line=line).all()
+        
+        if len(project_devices) == 0:
+            raise HTTPException(status_code=400,detail="cannot find any events")
+        
         devices = project_devices[0].devices
-        # dr = pd.date_range(
-        # first_data_date, datetime.datetime.now().date(), freq='2M').astype(str)
+
         dr_day = pd.date_range(start_time, end_time).astype(str)
         dr_week = pd.date_range(start_time, end_time,freq='7D').astype(str)
         if select_type == "day":
-            for date in dr_day:
+            for date in dr_day: 
                 actual_check = []
                 predict_check = []
+                total_accuracy=[]
+                devices_detail = {}
                 for dvs in devices:
                     events = dvs.events
                     for event in events:
-                        checkPredEvent = await PredictResult.objects.filter(event=event.id,pred_type=0).order_by('-pred_date').limit(1).get_or_none()
+                        # checkPredEvent = await PredictResult.objects.filter(event=event.id,pred_type=0).order_by('-pred_date').limit(1).get_or_none()
 
-                        # check
-                        if checkPredEvent is None:
-                            continue
+                        # # check
+                        # if checkPredEvent is None:
+                        #     continue
                         
                         data = await PredictResult.objects.filter(event=event.id,pred_date=date,pred_type=0).select_related("device").order_by('-pred_date').limit(1).get_or_none()
                         if data is None:
                             continue
-                        if data.last_happened_check is True:
+
+                        error_feature = await ErrorFeature.objects.filter(event=event.id,date=date).get_or_none()
+                        if error_feature is None:
+                            continue
+
+                        train_performance = await TrainPerformance.objects.filter(event=event.id).get_or_none()
+                        if train_performance is None:
+                            continue
+                        
+                        faithful = 0
+                        if train_performance.arf >= 0.6:
+                            faithful = 1
+
+                        if faithful:
                             if data.pred == '0':
                                 predict_check.append(0)
                             else:
                                 predict_check.append(1)
-                            if data.last_happened is None:
+                                
+                            if error_feature.happened <= train_performance.actual_cutpoint:
                                 actual_check.append(0)
                             else:
                                 actual_check.append(1)
-                    accuracy = (np.array(actual_check) == np.array(predict_check)).mean()
-                    if len(predict_check) != 0 and len(actual_check) != 0 :
-                        formatData.append({
-                            "id":data.id,
-                            "projectName":project,
-                            "deviceName":dvs.name,
-                            "line":dvs.line,
-                            "date":date,
-                            "accuracyDate": accuracy,
-                            "trend":"查看"
+                            
+
+                        if dvs.name not in devices_detail.keys():
+                            devices_detail[dvs.name] = {"events":[],"device_accuracy":0}
+
+                        devices_detail[dvs.name]["cname"] = dvs.cname
+                        devices_detail[dvs.name]["events"].append({
+                            "category":event.category,
+                            "name":event.name,
+                            "predict":int(data.pred),
+                            "true":error_feature.happened,
+                            "faithful":faithful
                         })
+
+                    # per day event accuracy
+                    device_accuracy = (np.array(actual_check) == np.array(predict_check)).mean()
+                    if len(predict_check) == 0 and len(actual_check) == 0 :
+                        continue
+                    devices_detail[dvs.name]["device_accuracy"] = device_accuracy
+
+                    total_accuracy.append(device_accuracy)
+
+                device_accuracy = (np.array(total_accuracy)).mean()
+                if len(predict_check) != 0 and len(actual_check) != 0 :
+                    formatData.append({
+                        "id":None,
+                        "projectName":project,
+                        "line":dvs.line,
+                        "date":date,
+                        "accuracyDate": '%.2f' % device_accuracy,
+                        "devices": devices_detail,
+                    })
 
         else:
             for date in dr_week:
+                year = int(date.split('-')[0])
+                month = int(date.split('-')[1])
+                day = int(date.split('-')[2])
+                next_day = f"{year}-{month}-{day+7}"
                 actual_check = []
                 predict_check = []
+                total_accuracy=[]
+                devices_detail = {}
                 for dvs in devices:
                     events = dvs.events
                     for event in events:
@@ -155,9 +200,9 @@ async def GetPredictCompareSearch(project_name: List, device_name: str,select_ty
                         if checkPredEvent is None:
                             continue
                         
-                        data = await PredictResult.objects.filter(event=event.id,pred_date=date,pred_type=1).select_related("device").order_by('-pred_date').limit(1).get_or_none()
+                        data = await PredictResult.objects.filter(event=event.id,ori_date__gte=date,ori_date__lte=next_day,pred_type=1).select_related("device").order_by('-pred_date').limit(1).get_or_none()
                         if data is None:
-                            raise HTTPException(status_code=400,detail=f"can not find data")
+                            continue
                         if data.last_happened_check is True:
                             if data.pred == '0':
                                 predict_check.append(0)
@@ -167,15 +212,37 @@ async def GetPredictCompareSearch(project_name: List, device_name: str,select_ty
                                 actual_check.append(0)
                             else:
                                 actual_check.append(1)
-                    accuracy = (np.array(actual_check) == np.array(predict_check)).mean()
-                    if len(predict_check) != 0 and len(actual_check) != 0 :
-                        formatData.append({
-                            "id":data.id,
-                            "projectName":project,
-                            "deviceName":dvs.name,
-                            "line":dvs.line,
-                            "date":date,
-                            "accuracyWeek": accuracy,
-                            "trend":"查看"
+                        
+                        if dvs.name not in devices_detail.keys():
+                            devices_detail[dvs.name] = {"events":[],"device_accuracy":0}
+
+                        actual_predict_date = data.ori_date
+
+                        devices_detail[dvs.name]["cname"] = dvs.cname
+                        devices_detail[dvs.name]["events"].append({
+                            "name":event.name,
+                            "predict":predict_check[-1],
+                            "true":actual_check[-1],
+                            "accuracy":int(predict_check[-1]==actual_check[-1])
                         })
+                    # per day event accuracy
+                    device_accuracy = (np.array(actual_check) == np.array(predict_check)).mean()
+                    if len(predict_check) == 0 and len(actual_check) == 0 :
+                        continue
+                    devices_detail[dvs.name]["device_accuracy"] = device_accuracy
+
+                    total_accuracy.append(device_accuracy)
+                device_accuracy = (np.array(total_accuracy)).mean()
+                if len(predict_check) != 0 and len(actual_check) != 0 :
+                    formatData.append({
+                        "id":data.id,
+                        "projectName":project,
+                        "line":dvs.line,
+                        "date":actual_predict_date.date(),
+                        "accuracyDate": '%.2f' % device_accuracy,
+                        "devices": devices_detail,
+                        "trend":"查看"
+                    })
+
+
     return formatData

@@ -281,8 +281,10 @@ class Device(ormar.Model):
         primary_key=True, autoincrement=True, nullable=False)
     line: int = ormar.Integer(nullable=False)
     name: str = ormar.String(max_length=100, nullable=False)
+    cname:str = ormar.String(max_length=100, nullable=False)
     project: int = ormar.ForeignKey(
         Project, index=True, nullable=False, ondelete="CASCADE")
+    
     created_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
 
 
@@ -459,8 +461,6 @@ class PredictResult(ormar.Model):
     ori_date: datetime = ormar.DateTime(timezone=True)
     pred_date: datetime = ormar.DateTime(timezone=True)
     pred_type: bool = ormar.Boolean(nullable=False)
-    last_happened:datetime = ormar.DateTime(nullable=True,timezone=True)
-    last_happened_check:bool = ormar.Boolean(nullable=False,default=False)
 # class Device(ormar.Model):
 #     class Meta(MainMeta):
 #         tablename = "devices"

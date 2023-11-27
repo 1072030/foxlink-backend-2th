@@ -77,11 +77,15 @@ class FoxlinkPredict:
         input_data_dict = {}
         for dvs in project[0].devices:
             print(f"{get_ntz_now()} : starting preprocessing {dvs.name}")
-            event = await ErrorFeature.objects.filter(
-                device=dvs.id,
-                project=project_id
-            ).all()
-            event = set([row.event.id for row in event])
+            device_events = await Device.objects.filter(id=dvs.id).select_related(["events"]).all()
+            all_events = device_events[0].events
+            event = []
+            for i in all_events:
+                check  = await ErrorFeature.objects.filter(event=i.id).order_by("-date").limit(1).get_or_none()
+                if check is None:
+                    continue
+                event.append(i.id)
+
             events = await ProjectEvent.objects.filter(id__in=event).all()
             sql = f"""
                 SELECT Measure_Workno FROM aoi.measure_info 
@@ -116,7 +120,7 @@ class FoxlinkPredict:
                 target_Y = pd.read_sql(sql, self.ntust_engine)
                 target_Y.rename(columns={'happened':row.name}, inplace=True)
                 target_feature = target_Y.drop('operation_day', axis=1)
-                
+                print(target_feature)
                 # 加入AOI檢測特徵
                 for measure in dvs_aoi_measure:
                     measure = measure.lower()
@@ -254,9 +258,9 @@ class FoxlinkPredict:
             """
         ca = pd.read_sql(sql, self.ntust_engine)['category'].iloc[0]
         if timetype == 'week':
-            model = joblib.load(f'{dv}_{ca}_{time}.pkl')
+            model = joblib.load(f'/app/model_week/{dv}_{ca}_{time}.pkl')
         else:
-            model = joblib.load(f'{dv}_{ca}_{time}.pkl')
+            model = joblib.load(f'/app/model/{dv}_{ca}_{time}.pkl')
         return model
     
     def choose_agg_func(self,col_name):

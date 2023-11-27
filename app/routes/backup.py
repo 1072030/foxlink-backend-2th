@@ -130,7 +130,7 @@ async def incremental_backup(file_num:str = "000004"):
     except subprocess.CalledProcessError as e:
         return JSONResponse(content={"error": f"Error: {e}"}, status_code=500)
 
-@router.post("/restore-binlog")
+@router.post("/restore-binlog",tags=["backup"])
 async def restoreBinglog():
     backup_cmd=f"mysqlbinlog --read-from-remote-server --host='mysql-test' --port=3306 --user root --pAqqhQ993VNto --result-file=/out.txt /var/lib/mysql/binlog.000002"
     # mysqlbinlog --read-from-remote-server --host=my.server.rds.amazonaws.com --port=3306  --user foo --password --result-file=/tmp/out.txt mysql-bin-changelog.164974

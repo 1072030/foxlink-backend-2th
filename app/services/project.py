@@ -1,6 +1,6 @@
 from typing import List
 from fastapi.exceptions import HTTPException
-from datetime import date, datetime,timedelta
+from datetime import date, datetime, timedelta
 import pandas as pd
 import numpy as np
 from app.models.schema import NewProjectDto
@@ -36,7 +36,7 @@ from app.foxlink.db import (
 from app.foxlink.train import foxlink_train
 from app.foxlink.predict import foxlink_predict
 import datetime
-
+import os
 from natsort import natsort_keygen
 from sqlalchemy import create_engine
 # ----
@@ -69,6 +69,7 @@ ntust_engine = create_engine(engine(
 #         f'mysql+pymysql://ntust:ntustpwd@172.20.0.1:12345/aoi')
 # ntust_engine = create_engine(
 #         f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink')
+
 
 async def DeleteProject(project_id: int):
     project = await Project.objects.filter(id=project_id).get_or_none()
@@ -192,7 +193,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
         )
         try:
             for i in await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt):
-                name = i.Device_Name + "-" + i.Line
+                name = i.Device_Name + "-" + i.Line + "-" + selected.cname
                 if name not in event_data.keys():
                     event_data[name] = event_data.get(
                         name, [{"message": i.Message, "category": i.Category}])
@@ -212,6 +213,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
         device = Device(
             name=content.split('-')[0],
             line=content.split('-')[1],
+            cname=content.split('-')[2],
             project=project.id
         )
         bulk_create_device.append(device)
@@ -225,7 +227,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
     ).all()
     for device in new_devices:
         # check selected events
-        for events in event_data[device.name + '-' + str(device.line)]:
+        for events in event_data[device.name + '-' + str(device.line) + '-' + device.cname]:
             event = ProjectEvent(
                 device=device.id,
                 name=events['message'],
@@ -258,7 +260,7 @@ async def PreprocessingData(project_id: int):
     project = await Project.objects.filter(id=project_id).select_related(
         ["devices", "devices__aoimeasures"]
     ).all()
-    if project is None:
+    if len(project) == 0:
         raise HTTPException(
             status_code=400, detail="this project doesnt existed.")
 
@@ -1048,9 +1050,9 @@ async def TrainingData(project_id: int, select_type: str):
             best_model = every_error_performance[dv][events][best_t]['model']
             # 儲存模型
             if select_type == 'week':
-                joblib.dump(best_model, f'{dv}_{ca}_{timenow}.pkl')
+                joblib.dump(best_model, f'/app/model_week/{dv}_{ca}_{timenow}.pkl')
             else:
-                joblib.dump(best_model, f'{dv}_{ca}_{timenow}.pkl')
+                joblib.dump(best_model, f'/app/model/{dv}_{ca}_{timenow}.pkl')
 
             every_error_performance[dv][events][best_t]['freq'] = select_type
             # 寫入資料庫
@@ -1096,7 +1098,6 @@ async def PredictData(project_id: int, select_type: str):
             df['pred'] = pred
             df['device'] = device_id
             df['event'] = event
-            df['last_happened_check'] = False
             if select_type == 'week':
                 df['pred_date'] = df.date.apply(
                     lambda x: x + pd.Timedelta(days=7))
@@ -1109,13 +1110,14 @@ async def PredictData(project_id: int, select_type: str):
 
             df.rename(columns={'date': 'ori_date'}, inplace=True)
             df = df[['device', 'event',
-                     'ori_date', 'pred_date', 'pred', 'pred_type','last_happened_check']]
+                     'ori_date', 'pred_date', 'pred', 'pred_type']]
             ntust = foxlink_predict.ntust_engine
             df.to_sql('predict_results', con=ntust,
                       if_exists='append', index=False)
     return
 
-async def HappenedCheck(project_id:int):
+
+async def HappenedCheck(project_id: int, start_time: datetime, select_type: str):
     # data = await Project.objects.filter(id=project_id).select_related(
     #     ["devices", "devices__predictresults"]
     # ).filter(
@@ -1127,45 +1129,74 @@ async def HappenedCheck(project_id:int):
     #         ).all()
     #         event = set([row.event.id for row in event])
     #         events = await ProjectEvent.objects.filter(id__in=event).all()
-    project = await Project.objects.filter(id=project_id).select_related(["devices","devices__events"]).all()
+    project = await Project.objects.filter(id=project_id).select_related(["devices", "devices__events"]).all()
     devices = project[0].devices
     for dvs in devices:
         events = dvs.events
         for event in events:
-            checkPredEvent = await PredictResult.objects.filter(event=event.id).order_by('-pred_date').limit(1).get_or_none()
+            if select_type == "day":
+                checkPredEvent = await PredictResult.objects.filter(event=event.id, pred_type=0).order_by('-pred_date').limit(1).get_or_none()
 
-            # check
-            if checkPredEvent is None:
-                continue
-            
-            pred_data = await PredictResult.objects.filter(event=event.id).order_by('-pred_date').limit(7).all()
-            update_pred_data_bulk = []
-            for data in pred_data:
-                # week predict
-                if data.pred_type is True:
+                # check
+                if checkPredEvent is None:
                     continue
-                # day predict
-                else:
+
+                pred_data = await PredictResult.objects.filter(event=event.id, ori_date__gte=start_time, pred_type=0).order_by('-pred_date').all()
+                update_pred_data_bulk = []
+                for data in pred_data:
+                    # week predict
+                    if data.pred_type is True:
+                        continue
+                    # day predict
+                    else:
+                        stmt = f"""
+                        SELECT * FROM `{project[0].name}_event`
+                        WHERE
+                            Device_Name = '{dvs.name}' AND
+                            Message = '{event.name}' AND
+                            (Start_Time > '{data.pred_date}' AND Start_Time < '{data.pred_date + timedelta(days=1)}')
+                            ORDER BY Start_Time DESC;
+                        """
+                        existed = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+                        if len(existed) >= 1:
+                            data.last_happened = datetime(
+                                existed[0]["Start_Time"])
+
+                        data.last_happened_check = 1
+                        update_pred_data_bulk.append(data)
+
+                await PredictResult.objects.bulk_update(
+                    objects=update_pred_data_bulk,
+                    columns=["last_happened", "last_happened_check"]
+                )
+            else:
+                checkPredEvent = await PredictResult.objects.filter(event=event.id, pred_type=1).order_by('-pred_date').limit(1).get_or_none()
+
+                # check
+                if checkPredEvent is None:
+                    continue
+
+                pred_data = await PredictResult.objects.filter(event=event.id, ori_date__gte=start_time, pred_type=1).order_by('-pred_date').all()
+                update_pred_data_bulk = []
+                for data in pred_data:
+                    # day predict
                     stmt = f"""
-                    SELECT * FROM `{project[0].name}_event`
-                    WHERE
-                        Device_Name = '{dvs.name}' AND
-                        Message = '{event.name}' AND
-                        (Start_Time > '{data.pred_date}' AND Start_Time < '{data.pred_date + timedelta(days=1)}')
-                        ORDER BY Start_Time DESC;
-                    """
+                        SELECT * FROM `{project[0].name}_event`
+                        WHERE
+                            Device_Name = '{dvs.name}' AND
+                            Message = '{event.name}' AND
+                            (Start_Time > '{data.pred_date}' AND Start_Time < '{data.pred_date + timedelta(days=7)}')
+                            ORDER BY Start_Time DESC;
+                        """
                     existed = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
                     if len(existed) >= 1:
                         data.last_happened = datetime(existed[0]["Start_Time"])
 
                     data.last_happened_check = 1
                     update_pred_data_bulk.append(data)
-            
-            await PredictResult.objects.bulk_update(
-                objects=update_pred_data_bulk,
-                columns=["last_happened","last_happened_check"]
-            )
 
-
-                
-            
+                await PredictResult.objects.bulk_update(
+                    objects=update_pred_data_bulk,
+                    columns=["last_happened", "last_happened_check"]
+                )
+    return

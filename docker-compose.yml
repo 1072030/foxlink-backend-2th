@@ -22,7 +22,6 @@ services:
     ports:
       - 19012:80
     depends_on:
-      - emqx
       - mysql
     networks:
       - backend

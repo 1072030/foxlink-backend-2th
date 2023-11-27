@@ -5,8 +5,6 @@ import aiohttp
 from fastapi.exceptions import HTTPException
 from ormar import NoMatch, or_, and_
 from app.env import (
-    EMQX_PASSWORD,
-    EMQX_USERNAME,
     MQTT_BROKER,
     TIMEZONE_OFFSET,
     WEEK_START,
