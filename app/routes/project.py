@@ -48,10 +48,6 @@ async def get_all_project(user:User = Depends(get_current_user())):
         return await (Project.objects.filter(
             id__in=project_id_list
         ).all())
-    # else:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
-    #     )
 
 @router.get("/users", tags=["project"])
 async def get_all_project(project_id:int,user:User = Depends(get_current_user())):
@@ -85,7 +81,7 @@ async def delete_project(project_id:int,user:User = Depends(get_current_user()))
     if user is not None:
         project_name = await DeleteProject(project_id)
         await AuditLogHeader.objects.create(
-            action=AuditActionEnum.ADD_PROJECT_WORKER.value,
+            action=AuditActionEnum.DELECT_PROJECT.value,
             user=user.badge,
             description=f"{project_name}"
         )
@@ -124,7 +120,7 @@ async def delete_workers(project_id:int,user_id:str,user:User = Depends(get_curr
     if user is not None:
         await RemoveProjectWorker(project_id,user_id)
         await AuditLogHeader.objects.create(
-            action=AuditActionEnum.ADD_PROJECT_WORKER.value,
+            action=AuditActionEnum.DELECT_PROJECT_WORKER.value,
             user=user.badge,
             description=f"{user_id}"
         )
@@ -187,51 +183,71 @@ async def preprocessing_data(project_id:int,user:User = Depends(get_current_user
 
 @router.get("/update-preprocessing-data",tags=["project"])
 async def update_preprocessing_data(project_id:int,user:User = Depends(get_current_user())):
-    await UpdatePreprocessingData(project_id)
+    await AuditLogHeader.objects.create(
+            action=AuditActionEnum.DAILY_PREPROCESSING_STARTED.value,
+            user=user.badge
+        )
+    try:
+        await UpdatePreprocessingData(project_id)
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
+            user=user.badge
+        )
+    except Exception as e:
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.DAILY_PREPROCESSING_FAILED.value,
+            user=user.badge
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"DAILY_PREPROCESSING_FAILED : {repr(e)}"
+        )
     return
 
 @router.get("/training-data",tags=["project"])
 async def training_data(project_id:int,select_type:str,user:User = Depends(get_current_user())):
-    await TrainingData(project_id,select_type)
-    return
-@router.get("/predict-data",tags=["project"])
-async def predict_data(project_id:int,pred_type:str,user:User = Depends(get_current_user())):
-    await PredictData(project_id,pred_type)
+    
+    try:
+        await TrainingData(project_id,select_type)
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.TRAINING_SUCCEEDED.value,
+            user=user.badge
+        )
+    except Exception as e:
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.TRAINING_FAILED.value,
+            user=user.badge
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"TRAINING_FAILED : {repr(e)}"
+        )
     return
 
-@router.get("/happened-check",tags=["project"])
-async def happened_check(project_id:int,start_time:datetime,select_type:str):
-    await HappenedCheck(project_id,start_time,select_type)
+@router.get("/predict-data",tags=["project"])
+async def predict_data(project_id:int,pred_type:str,user:User = Depends(get_current_user())):
+
+    try:
+        await PredictData(project_id,pred_type)
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.PREDICT_SUCCEEDED.value,
+            user=user.badge
+        )
+    except Exception as e:
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.PREDICT_FAILED.value,
+            user=user.badge
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"PREDICT_FAILED : {repr(e)}"
+        )
     return
+
+# @router.get("/happened-check",tags=["project"])
+# async def happened_check(project_id:int,start_time:datetime,select_type:str):
+#     await HappenedCheck(project_id,start_time,select_type)
+#     return
 
 
 @router.get("/testssh")
 async def sshconnect():
     return await checkFoxlinkAuth(True)
     
-
-# from fastapi import APIRouter, Depends, File, UploadFile
-# import pandas as pd
-# import os
-# from fastapi.responses import FileResponse
-# @router.post("/env-update-settings/execl_test")
-# async def import_devices_from_excel(file: UploadFile = File(...),cols:str=""):
-#     if file.filename.split(".")[1] != "xlsx":
-#         raise HTTPException(415)
-#     try:
-#         # 將字串切為陣列
-#         cols = cols.split(",") 
-#         # 將字串改為數字
-#         cols = [eval(i) for i in cols]
-#         # 讀excel欄位為cols的參數
-#         frame: pd.DataFrame = pd.read_excel(await file.read(), sheet_name=0,usecols=cols)
-#         # 將欄位儲存到本地端
-#         frame.to_excel(os.getcwd()+'/'+file.filename)
-#         # 將header更改為回傳type
-#         header = {
-#             "Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-#         }
-#         return FileResponse(os.getcwd()+'/'+file.filename,filename=file.filename,headers=header)
-#         # return ImportDevicesOut(device_ids=device_ids, parameter=params.to_csv())
-#     except Exception as e:
-#         raise HTTPException(status_code=400, detail=repr(e))

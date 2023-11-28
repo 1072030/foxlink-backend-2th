@@ -65,7 +65,7 @@ async def get_logs(
     params = {
         "created_date__gte": start_date,
         "created_date__lte": end_date,
-        "user__badge": badge,
+        "user": badge,
     }
 
     if action is not None:

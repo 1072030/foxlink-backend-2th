@@ -32,8 +32,10 @@ router = APIRouter(prefix="/backup")
 
 @router.post("/",  tags=["backup"])
 # 完整備份
-async def full_backup(path: str = '/backup/', name: str = 'backup', user: User = Depends(get_current_user())):
-    mysqldump_cmd = f"mysqldump -h {DATABASE_HOST} -u {DATABASE_USER} -p{DATABASE_PASSWORD} {DATABASE_NAME} --lock-all-tables > {path}{name}.sql"
+async def full_backup(path: str = "/app/backup.sql", user: User = Depends(get_current_user())):
+    path_split = path.split('/')
+    name = path_split[-1]
+    mysqldump_cmd = f"mysqldump -h {DATABASE_HOST} -u {DATABASE_USER} -p{DATABASE_PASSWORD} {DATABASE_NAME} --lock-all-tables > {path}"
     try:
         subprocess.run(mysqldump_cmd, shell=True, check=True)
         await AuditLogHeader.objects.create(
@@ -48,12 +50,12 @@ async def full_backup(path: str = '/backup/', name: str = 'backup', user: User =
 
 @router.post("/restore-backup",  tags=["backup"])
 # 完整備份
-async def restore_backup(path: str = '/backup/', name: str = 'backup', user: User = Depends(get_current_user())):
-    mysqldump_cmd = f"mysql -h {DATABASE_HOST} -u {DATABASE_USER} -p{DATABASE_PASSWORD} {DATABASE_NAME} < {path}{name}.sql"
+async def restore_backup(path: str = '/app/backup.sql', user: User = Depends(get_current_user())):
+    mysqldump_cmd = f"mysql -h {DATABASE_HOST} -u {DATABASE_USER} -p{DATABASE_PASSWORD} {DATABASE_NAME} < {path}"
     try:
         subprocess.run(mysqldump_cmd, shell=True, check=True)
         await AuditLogHeader.objects.create(
-            action=AuditActionEnum.FULL_BACKUP.value,
+            action=AuditActionEnum.BACKUP_RESTORE.value,
             user=user.badge
         )
         return JSONResponse(content={"message": "Database backup successful."})
