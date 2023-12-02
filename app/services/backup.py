@@ -9,12 +9,15 @@ from app.core.database import (
 )
 from fastapi.responses import JSONResponse
 import subprocess
+# path:str
 
-async def FullBackup(path:str):
+
+async def FullBackup(path: str):
+    # path = '/app/backup.sql'
     env = await Env.objects.filter(key="backup_path").get_or_none()
     if env is None:
         mysqldump_cmd = f"mysqldump -h {DATABASE_HOST} -u {DATABASE_USER} -p{DATABASE_PASSWORD} {DATABASE_NAME} --lock-all-tables > {path}"
-        await Env.objects.create(key="backup_path",value=path)
+        await Env.objects.create(key="backup_path", value=path)
     else:
         if env.value != path:
             mysqldump_cmd = f"mysqldump -h {DATABASE_HOST} -u {DATABASE_USER} -p{DATABASE_PASSWORD} {DATABASE_NAME} --lock-all-tables > {path}"
@@ -22,7 +25,10 @@ async def FullBackup(path:str):
         else:
             mysqldump_cmd = f"mysqldump -h {DATABASE_HOST} -u {DATABASE_USER} -p{DATABASE_PASSWORD} {DATABASE_NAME} --lock-all-tables > {path}"
     try:
-        subprocess.run(mysqldump_cmd, shell=True, check=True)
+        # subprocess.run(mysqldump_cmd, shell=True, check=True)
+        task = subprocess.check_output(mysqldump_cmd, shell=True).decode()
+        # subprocess.Popen.wait(timeout=None)
+        # output = task.communicate()[0]
         return JSONResponse(content={"message": "Database backup successful."})
     except subprocess.CalledProcessError as e:
-        print(f"Error: {e}")
+        return JSONResponse(content={"error": f"Error: {e}"}, status_code=500)

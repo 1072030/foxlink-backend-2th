@@ -1,19 +1,16 @@
 import requests
-from fastapi import FastAPI
-import logging
 import paramiko
 import json
 import requests
 from jose.constants import ALGORITHMS
 from jose.exceptions import ExpiredSignatureError
 from app.core.database import (
-    WorkerStatusEnum,
     get_ntz_now,
     User,
     Project,
     ProjectUser
 )
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional
 from pydantic import BaseModel
 from jose import jwt
@@ -76,15 +73,15 @@ def get_current_user():
             )
         except ExpiredSignatureError:
             payload = jwt.decode(
-                token, 
-                JWT_SECRET, 
-                algorithms=['HS256'], 
+                token,
+                JWT_SECRET,
+                algorithms=['HS256'],
                 options={
                     "verify_exp": False,
                     "verify_signature": False
                 }
             )
-            expired= True
+            expired = True
 
         badge: str = payload.get("sub")
         decode_UUID: str = payload.get("UUID")
@@ -109,11 +106,12 @@ def get_current_user():
 
         return user
 
-
     return driver
 
 # 確認取得人員身份
-async def get_admin_active_user(project_id:int,active_user: User = Depends(get_current_user())):
+
+
+async def get_admin_active_user(project_id: int, active_user: User = Depends(get_current_user())):
     project = await Project.objects.filter(project=project_id).get_or_none()
     if project is None:
         raise HTTPException(404, detail='project is not foound')
@@ -123,7 +121,7 @@ async def get_admin_active_user(project_id:int,active_user: User = Depends(get_c
     ).get_or_none()
     if project_user is None:
         raise HTTPException(404, detail='this user didnt in the project')
-    
+
     if not project_user.permission == UserLevel.admin.value:
         raise HTTPException(
             status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
@@ -135,6 +133,8 @@ async def get_admin_active_user(project_id:int,active_user: User = Depends(get_c
     return active_user
 
 # 確認取得人員身份
+
+
 def get_manager_active_user(
     manager_user: User = Depends(get_current_user()),
 ):
@@ -151,7 +151,8 @@ async def set_device_UUID(
 ):
     await user.update(current_UUID=UUID)
 
-async def authenticate_foxlink(dto:UserLoginFoxlink):
+
+async def authenticate_foxlink(dto: UserLoginFoxlink):
     # json_data = {"user" : MrMinty, "pass" : "password"} #json data
     # endpoint = "https://www.testsite.com/api/account_name/?access_token=1234567890" #endpoint
     # print(requests.post(endpoint, json=json_data). content)
@@ -159,7 +160,7 @@ async def authenticate_foxlink(dto:UserLoginFoxlink):
     return
 
 
-async def checkUserProjectPermission(project_id:int,user:User,permission:int):
+async def checkUserProjectPermission(project_id: int, user: User, permission: int):
     project = await Project.objects.filter(id=project_id).get_or_none()
     if project is None:
         raise HTTPException(404, detail='project is not foound')
@@ -169,23 +170,25 @@ async def checkUserProjectPermission(project_id:int,user:User,permission:int):
     ).get_or_none()
     if project_user is None:
         raise HTTPException(404, detail='this user didnt in the project')
-    
+
     if not project_user.permission == permission:
         raise HTTPException(
             status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
         )
-    
+
     return user
 
-async def checkAdminPermission(user:User):
+
+async def checkAdminPermission(user: User):
     if user.badge == "admin":
         return user
     else:
         raise HTTPException(
             status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
-            )
+        )
 
-async def checkUserSearchProjectPermission(user:User,permission:int):
+
+async def checkUserSearchProjectPermission(user: User, permission: int):
     user_in_project = await ProjectUser.objects.select_related("project").filter(user=user.badge).all()
     if len(user_in_project) == 0:
         raise HTTPException(400, detail='this person didnt join any project')
@@ -195,9 +198,10 @@ async def checkUserSearchProjectPermission(user:User,permission:int):
         if user.permission >= permission:
             user_access_project_id.append(user.project.id)
             user_access_project_name.append(user.project.name)
-    return user_access_project_id,user_access_project_name
+    return user_access_project_id, user_access_project_name
 
-async def checkFoxlinkAuth(checkSSH:bool=False):
+
+async def checkFoxlinkAuth(checkSSH: bool = False):
     if checkSSH:
         ip = "192.168.65.210"
         username = "ntust"
@@ -205,22 +209,24 @@ async def checkFoxlinkAuth(checkSSH:bool=False):
         command = f'curl -X POST -d "type=login&user_id=001&password=foxlink&system=001" http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(ip, port=22, username=username, password=password, timeout=20)
+        client.connect(ip, port=22, username=username,
+                       password=password, timeout=20)
         stdin, stdout, stderr = client.exec_command(command)
         return json.loads(stdout.read().decode("utf-8"))
     else:
         url = 'http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
         myobj = {
-            "type":type,
-            "user_id":user_id,
-            "password":password,
-            "system":system
+            "type": type,
+            "user_id": user_id,
+            "password": password,
+            "system": system
         }
-        x = requests.post(url, data = json.dumps(myobj))
+        x = requests.post(url, data=json.dumps(myobj))
         print(x)
         return
-    
-async def getFoxlinkUser(user_id:str="130316",system_id:int=1,checkSSH:bool=False):
+
+
+async def getFoxlinkUser(user_id: str = "130316", system_id: int = 1, checkSSH: bool = False):
     if checkSSH:
         ip = "192.168.65.210"
         username = "ntust"
@@ -228,14 +234,15 @@ async def getFoxlinkUser(user_id:str="130316",system_id:int=1,checkSSH:bool=Fals
         command = f'curl -X POST -d "user_id=130316&system_id=1&type=checkUserExist" "http://mms.foxlink.com.tw/scbg/addons/register/server/server.php"'
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(ip, port=22, username=username, password=password, timeout=20)
+        client.connect(ip, port=22, username=username,
+                       password=password, timeout=20)
         stdin, stdout, stderr = client.exec_command(command)
         return json.loads(stdout.read().decode("utf-8"))
     else:
         url = 'http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
         myobj = {
-            "user_id":user_id,
-            "system":system_id
+            "user_id": user_id,
+            "system": system_id
         }
-        x = requests.post(url, data = json.dumps(myobj))
+        x = requests.post(url, data=json.dumps(myobj))
         return x

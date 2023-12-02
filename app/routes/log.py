@@ -35,7 +35,7 @@ class LogOut(BaseModel):
     # record_pk: Optional[str]
     # values: List[LogValueOut]
     badge: Optional[str]
-    username:Optional[str]
+    username: Optional[str]
     description: Optional[str]
     created_date: datetime.datetime
 
@@ -69,8 +69,8 @@ async def get_logs(
         "created_date__gte": start_date,
         "created_date__lte": end_date,
         "user__badge": badge,
-        "user__username":username,
-        "description__contains":project_name
+        "user__username": username,
+        "description__contains": project_name
     }
 
     if action is not None:
@@ -78,7 +78,7 @@ async def get_logs(
 
     params = {k: v for k, v in params.items() if v is not None}
     logs = await AuditLogHeader.objects.select_all().filter(**params).paginate(page, limit).order_by("-created_date").all()  # type: ignore
-            
+
     # type: ignore
     total_count = await AuditLogHeader.objects.filter(**params).count()
     # print(logs)

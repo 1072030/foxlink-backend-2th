@@ -16,7 +16,6 @@ from app.core.database import (
     Device,
     AoiMeasure,
     AoiFeature,
-    PredTarget,
     PredictResult
 )
 from app.env import (
@@ -36,20 +35,9 @@ from app.foxlink.db import (
 from app.foxlink.train import foxlink_train
 from app.foxlink.predict import foxlink_predict
 import datetime
-import os
 from natsort import natsort_keygen
 from sqlalchemy import create_engine
 # ----
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, StackingClassifier
-from sklearn.metrics import classification_report
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
-from imblearn.over_sampling import SMOTE, RandomOverSampler
-
-from xgboost import XGBClassifier
-
 from tqdm import tqdm
 import joblib
 # ----
@@ -61,10 +49,11 @@ def engine(user: str, password: str, host: str, database: str):
     return f'mysql+pymysql://{user}:{password}@{host}/{database}'
 
 
-foxlink_engine = create_engine(
-    engine(FOXLINK_EVENT_DB_USER, FOXLINK_EVENT_DB_PWD, FOXLINK_EVENT_DB_HOSTS[0], FOXLINK_EVENT_DB_NAME[0]))
 ntust_engine = create_engine(engine(
     DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST+":"+str(DATABASE_PORT), DATABASE_NAME))
+foxlink_engine = create_engine(
+    engine(FOXLINK_EVENT_DB_USER, FOXLINK_EVENT_DB_PWD, FOXLINK_EVENT_DB_HOSTS[0], FOXLINK_EVENT_DB_NAME[0]))
+
 # foxlink_engine = create_engine(
 #         f'mysql+pymysql://ntust:ntustpwd@172.20.0.1:12345/aoi')
 # ntust_engine = create_engine(
@@ -1051,7 +1040,8 @@ async def TrainingData(project_id: int, select_type: str):
             best_model = every_error_performance[dv][events][best_t]['model']
             # 儲存模型
             if select_type == 'week':
-                joblib.dump(best_model, f'/app/model_week/{dv}_{ca}_{timenow}.pkl')
+                joblib.dump(
+                    best_model, f'/app/model_week/{dv}_{ca}_{timenow}.pkl')
             else:
                 joblib.dump(best_model, f'/app/model/{dv}_{ca}_{timenow}.pkl')
 

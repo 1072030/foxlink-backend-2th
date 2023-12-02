@@ -2,9 +2,7 @@
 
 import logging
 import asyncio
-import multiprocessing as mp
 from fastapi import FastAPI
-from app.env import MQTT_BROKER, MQTT_PORT, PY_ENV
 from app.routes import (
     health,
     user,
@@ -22,11 +20,8 @@ from app.log import LOGGER_NAME
 from fastapi.middleware.cors import CORSMiddleware
 from app.foxlink.db import foxlink_dbs
 
-from app.routes.scheduler import backgroundScheduler
-# from app.routes.scheduler import asyncIOScheduler
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
+from app.routes.scheduler import asyncIOScheduler
+
 
 logger = logging.getLogger(LOGGER_NAME)
 logger.propagate = False
@@ -70,19 +65,9 @@ app.include_router(backup.router)
 app.include_router(statistics.router)
 app.include_router(test.router)
 app.include_router(scheduler.router)
-# if PY_ENV == 'dev':
-#     app.include_router(test.router)
-# jobstores={
-#     # pickle_protocol=2,
-#     "default":SQLAlchemyJobStore(url=f"mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink",tablename="job")
-# }
-# executors = {
-#     "default": ThreadPoolExecutor(20),
-#     "processpool": ProcessPoolExecutor(5),
-# }
-# job_defaults = {"coalesce": False, "max_instances": 3}
-# backgroundScheduler = BackgroundScheduler(jobstores=jobstores,executors=executors,job_defaults=job_defaults)
-# backgroundScheduler.start()
+
+asyncIOScheduler.start()
+
 
 @app.on_event("startup")
 async def startup():
@@ -94,7 +79,6 @@ async def startup():
                 foxlink_dbs.connect(),
             ])
             # Starting scheduler
-            
         except Exception as e:
             logger.error(f"Start up error: {e}")
             logger.error(f"Waiting for 5 seconds to restart")
@@ -112,9 +96,8 @@ async def shutdown():
             await asyncio.gather(*[
                 api_db.disconnect(),
                 foxlink_dbs.disconnect(),
-                # asyncIOScheduler.shutdown()
             ])
-            backgroundScheduler.shutdown()
+            asyncIOScheduler.shutdown()
         except Exception as e:
             logger.error(f"Start up error: {e}")
             logger.error(f"Waiting for 5 seconds to restart")

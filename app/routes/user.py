@@ -1,9 +1,7 @@
 """
 與員工相關
 """
-from datetime import datetime
-from typing import List, Optional
-from fastapi import APIRouter, Depends ,Response
+from fastapi import APIRouter, Depends
 from fastapi.exceptions import HTTPException
 from datetime import timedelta
 from app.core.database import (
@@ -19,20 +17,18 @@ from app.core.database import (
 )
 from app.services.auth import (
     get_current_user,
-    get_manager_active_user,
-    verify_password,
-    get_admin_active_user,
     getFoxlinkUser
 )
 
 router = APIRouter(prefix="/users")
 
-@router.get("/foxlink",tags=["users"])
-async def get_foxlink_user(user_id:str,system_id:str):
+
+@router.get("/foxlink", tags=["users"])
+async def get_foxlink_user(user_id: str, system_id: str):
     """
     暫時無功能
     """
-    return await getFoxlinkUser(user_id,system_id,True)
+    return await getFoxlinkUser(user_id, system_id, True)
 
 
 @router.post("/get-off-work", tags=["users"])
@@ -60,7 +56,7 @@ async def logout_routine(reason, to_change_status, user):
     except Exception as e:
         print(f"error in transaction: {repr(e)}")
         raise HTTPException(
-            400,"被指派任務了"
+            400, "被指派任務了"
         )
 
     await AuditLogHeader.objects.create(
@@ -70,5 +66,5 @@ async def logout_routine(reason, to_change_status, user):
         description=reason.value,
     )
     return {
-        "leave_time":user.updated_date + timedelta(hours=8)
+        "leave_time": user.updated_date + timedelta(hours=8)
     }

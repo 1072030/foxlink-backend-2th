@@ -4,20 +4,14 @@
 
 from fastapi import APIRouter, Depends, status
 from fastapi.exceptions import HTTPException
-from typing import List, Dict, Optional, Union
+from typing import Optional
 from app.core.database import (
     User,
     Project,
-    PredictResult,
-    transaction
 )
 from app.services.auth import (
     get_current_user,
-    checkUserProjectPermission,
     checkUserSearchProjectPermission,
-    checkAdminPermission,
-    checkFoxlinkAuth,
-    get_manager_active_user
 )
 from app.services.statistics import (
     GetPredictResult,
@@ -84,28 +78,29 @@ async def get_predict_compare_list(user: User = Depends(get_current_user())):
 
 
 @router.get("/predict-compare-search", tags=["statistics"])
-async def get_predict_compare_search(start_time: datetime, end_time: datetime,select_type:str, project_name: Optional[str] = None,line: Optional[int] = None, user: User = Depends(get_current_user())):
+async def get_predict_compare_search(start_time: datetime, end_time: datetime, select_type: str, project_name: Optional[str] = None, line: Optional[int] = None, user: User = Depends(get_current_user())):
     project_id_list, project_name_list = await checkUserSearchProjectPermission(user, 5)
-    start_time = start_time.replace(hour=0,minute=0,second=0,microsecond=0)
-    end_time = end_time.replace(hour=0,minute=0,second=0,microsecond=0)
+    start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_time = end_time.replace(hour=0, minute=0, second=0, microsecond=0)
     try:
         if project_name is None:
-            return await GetPredictCompareSearch(project_name_list,select_type,line,start_time,end_time)
+            return await GetPredictCompareSearch(project_name_list, select_type, line, start_time, end_time)
         else:
-            return await GetPredictCompareSearch([project_name],select_type,line,start_time,end_time)
+            return await GetPredictCompareSearch([project_name], select_type, line, start_time, end_time)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=repr(e)
         )
 
-@router.get("/predict-compare-analysis",tags=["statistics"])
-async def get_predict_compare_analysis(project_name:str,line:str,select_type:str,start_date:datetime,end_date:datetime, user: User = Depends(get_current_user())):
+
+@router.get("/predict-compare-analysis", tags=["statistics"])
+async def get_predict_compare_analysis(project_name: str, line: str, select_type: str, start_date: datetime, end_date: datetime, user: User = Depends(get_current_user())):
     project_id_list, project_name_list = await checkUserSearchProjectPermission(user, 5)
-    start_date = start_date.replace(hour=0,minute=0,second=0,microsecond=0)
-    end_date = end_date.replace(hour=0,minute=0,second=0,microsecond=0)
+    start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
     # 選擇對應線號和專案
     try:
-        return await GetPredictCompareAnalysis(project_name,line,select_type,start_date,end_date)
+        return await GetPredictCompareAnalysis(project_name, line, select_type, start_date, end_date)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=repr(e)
