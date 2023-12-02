@@ -1,4 +1,5 @@
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+
 import logging
 import asyncio
 import multiprocessing as mp
@@ -17,19 +18,22 @@ from app.routes import (
     test
 )
 from app.core.database import api_db
-# from app.mqtt import mqtt_client
 from app.log import LOGGER_NAME
 from fastapi.middleware.cors import CORSMiddleware
 from app.foxlink.db import foxlink_dbs
+
 from app.routes.scheduler import backgroundScheduler
-# dictConfig(LogConfig().dict())
+# from app.routes.scheduler import asyncIOScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
+
 logger = logging.getLogger(LOGGER_NAME)
 logger.propagate = False
 
 app = FastAPI(title="Foxlink API Backend", version="0.0.1")
 
-# Starting scheduler
-# backgroundScheduler.start()
+
 # Adding CORS middleware
 origins = [
     "http://localhost:3000",
@@ -68,7 +72,17 @@ app.include_router(test.router)
 app.include_router(scheduler.router)
 # if PY_ENV == 'dev':
 #     app.include_router(test.router)
-
+# jobstores={
+#     # pickle_protocol=2,
+#     "default":SQLAlchemyJobStore(url=f"mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink",tablename="job")
+# }
+# executors = {
+#     "default": ThreadPoolExecutor(20),
+#     "processpool": ProcessPoolExecutor(5),
+# }
+# job_defaults = {"coalesce": False, "max_instances": 3}
+# backgroundScheduler = BackgroundScheduler(jobstores=jobstores,executors=executors,job_defaults=job_defaults)
+# backgroundScheduler.start()
 
 @app.on_event("startup")
 async def startup():
@@ -77,8 +91,10 @@ async def startup():
         try:
             await asyncio.gather(*[
                 api_db.connect(),
-                foxlink_dbs.connect()
+                foxlink_dbs.connect(),
             ])
+            # Starting scheduler
+            
         except Exception as e:
             logger.error(f"Start up error: {e}")
             logger.error(f"Waiting for 5 seconds to restart")
@@ -95,8 +111,10 @@ async def shutdown():
         try:
             await asyncio.gather(*[
                 api_db.disconnect(),
-                foxlink_dbs.disconnect()
+                foxlink_dbs.disconnect(),
+                # asyncIOScheduler.shutdown()
             ])
+            backgroundScheduler.shutdown()
         except Exception as e:
             logger.error(f"Start up error: {e}")
             logger.error(f"Waiting for 5 seconds to restart")

@@ -16,7 +16,8 @@ from app.services.auth import (
 from app.core.database import (
     User,
     AuditLogHeader,
-    AuditActionEnum
+    AuditActionEnum,
+    Env
 )
 import subprocess
 from fastapi.responses import JSONResponse
@@ -26,6 +27,7 @@ from app.env import (
     DATABASE_PASSWORD,
     DATABASE_NAME,
 )
+from app.services.backup import FullBackup
 import json
 router = APIRouter(prefix="/backup")
 
@@ -33,20 +35,15 @@ router = APIRouter(prefix="/backup")
 @router.post("/",  tags=["backup"])
 # 完整備份
 async def full_backup(path: str = "/app/backup.sql", user: User = Depends(get_current_user())):
-    path_split = path.split('/')
-    name = path_split[-1]
-    mysqldump_cmd = f"mysqldump -h {DATABASE_HOST} -u {DATABASE_USER} -p{DATABASE_PASSWORD} {DATABASE_NAME} --lock-all-tables > {path}"
     try:
-        subprocess.run(mysqldump_cmd, shell=True, check=True)
+        await FullBackup(path)
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.FULL_BACKUP.value,
             user=user.badge
         )
-        return JSONResponse(content={"message": "Database backup successful."})
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         print(f"Error: {e}")
-    return
-
+   
 
 @router.post("/restore-backup",  tags=["backup"])
 # 完整備份

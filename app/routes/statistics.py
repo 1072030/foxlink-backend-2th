@@ -99,7 +99,10 @@ async def get_predict_compare_search(start_time: datetime, end_time: datetime,se
         )
 
 @router.get("/predict-compare-analysis",tags=["statistics"])
-async def get_predict_compare_analysis(project_name:str,line:str,select_type:str,start_date:datetime,end_date:datetime):
+async def get_predict_compare_analysis(project_name:str,line:str,select_type:str,start_date:datetime,end_date:datetime, user: User = Depends(get_current_user())):
+    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, 5)
+    start_date = start_date.replace(hour=0,minute=0,second=0,microsecond=0)
+    end_date = end_date.replace(hour=0,minute=0,second=0,microsecond=0)
     # 選擇對應線號和專案
     try:
         return await GetPredictCompareAnalysis(project_name,line,select_type,start_date,end_date)
@@ -107,4 +110,3 @@ async def get_predict_compare_analysis(project_name:str,line:str,select_type:str
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=repr(e)
         )
-    return

@@ -250,7 +250,8 @@ class MainMeta(ormar.ModelMeta):
 class Env(ormar.Model):
     class Meta(MainMeta):
         tablename = "env"
-    id: str = ormar.String(max_length=100, primary_key=True, index=True)
+    id: int = ormar.Integer(
+        primary_key=True, autoincrement=True, nullable=False)
     # auto_rescue: bool = ormar.Boolean(server_default="0", nullable=True)
     key: str = ormar.String(max_length=50, nullable=False)
     value: str = ormar.String(max_length=50, nullable=False)
@@ -633,9 +634,11 @@ class AuditLogHeader(ormar.Model):
     action: str = ormar.String(
         max_length=50, nullable=False, index=True, choices=list(AuditActionEnum)
     )
-    user: str = ormar.String(max_length=30, index=True, nullable=True)
+    # ormar.ForeignKey(ProjectEvent,index=True, nullable=False,ondelete="CASCADE")
+    user: str = ormar.ForeignKey(User,index=True,ondelete="NO ACTION",nullable=True)
     created_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
     description: str = ormar.String(max_length=256, nullable=True)
+
 
 
 # class WhitelistDevice(ormar.Model):

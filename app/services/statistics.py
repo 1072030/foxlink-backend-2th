@@ -130,7 +130,7 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
                         if error_feature is None:
                             continue
 
-                        train_performance = await TrainPerformance.objects.filter(event=event.id).get_or_none()
+                        train_performance = await TrainPerformance.objects.filter(event=event.id,freq=select_type).get_or_none()
                         if train_performance is None:
                             continue
 

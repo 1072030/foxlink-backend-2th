@@ -286,7 +286,7 @@ async def PreprocessingData(project_id: int):
                 first_data_date, datetime.datetime.now().date(), freq='2M').astype(str)
 
             print(
-                f"{get_ntz_now()} : starting query {first_data_date} to {dr[0]}")
+                f"{get_ntz_now()} : starting query {dvs.name} {measure.name} {first_data_date} to {dr[0]}")
             sql = f"""
                     SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
                     WHERE 
@@ -311,13 +311,14 @@ async def PreprocessingData(project_id: int):
                         AND Code2 < 3 ;
                     """
                 print(
-                    f"{get_ntz_now()} : starting query {dr[index - 1]} to {dr[index]}")
+                    f"{get_ntz_now()} : starting query {index} {dvs.name} {measure.name} {dr[index - 1]} to {dr[index]}")
                 tmp_data = pd.read_sql(sql, foxlink_engine)
-                aoi = aoi.append(tmp_data)
-
+                if len(tmp_data) != 0:
+                    aoi = aoi.append(tmp_data)
             aoi = aoi[(aoi['Code2'] < 3)]
 
             aoi['MF_Time'] = pd.to_datetime(aoi['Code3']) + aoi['Code4']
+            print(aoi.head())
             aoi["Time_shift"] = aoi["MF_Time"] - \
                 pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
             # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)

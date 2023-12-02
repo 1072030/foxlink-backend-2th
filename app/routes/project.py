@@ -161,6 +161,7 @@ async def add_project_and_events(dto:List[NewProjectDto],user:User = Depends(get
 
 @router.get("/preprocessing-data",tags=["project"])
 async def preprocessing_data(project_id:int,user:User = Depends(get_current_user())):
+    
     await AuditLogHeader.objects.create(
             action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
             user=user.badge
@@ -215,7 +216,7 @@ async def training_data(project_id:int,select_type:str,user:User = Depends(get_c
     except Exception as e:
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.TRAINING_FAILED.value,
-            user=user.badge
+            user=user.badge,
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"TRAINING_FAILED : {repr(e)}"
