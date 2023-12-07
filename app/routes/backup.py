@@ -26,6 +26,7 @@ router = APIRouter(prefix="/backup")
 
 
 @router.get("/statistics",  tags=["backup"])
+# 備份頁面所需資料
 async def get_backup_detail(user: User = Depends(get_current_user())):
     user = await checkAdminPermission(user)
 
@@ -40,7 +41,6 @@ async def get_backup_detail(user: User = Depends(get_current_user())):
         return [{"name": data.description, "date": data.created_date} for data in logs]
     except Exception as e:
         raise HTTPException(status_code=400, detail=e.__repr__())
-
 
 @router.post("/",  tags=["backup"])
 # 完整備份

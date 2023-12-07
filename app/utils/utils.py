@@ -142,7 +142,7 @@ class BenignObj(object):
         result["_columns"] = [key for key in self.__dict__.keys()]
         return result
 
-
+# 這我也不知道幹嘛的 應該是處理多個同時執行
 class AsyncEmitter:
     def __init__(self):
         self.jobs = []
