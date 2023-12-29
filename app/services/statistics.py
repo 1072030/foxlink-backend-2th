@@ -223,9 +223,9 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
                             else:
                                 actual_check.append(1)
 
-                            if dvs.name not in devices_detail.keys():
-                                devices_detail[dvs.name] = {
-                                    "events": [], "device_accuracy": 0}
+                        if dvs.name not in devices_detail.keys():
+                            devices_detail[dvs.name] = {
+                                "events": [], "device_accuracy": 0}
 
                         actual_predict_date = data.ori_date
 

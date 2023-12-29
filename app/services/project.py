@@ -54,6 +54,30 @@ ntust_engine = create_engine(engine(
 foxlink_engine = create_engine(
     engine(FOXLINK_EVENT_DB_USER, FOXLINK_EVENT_DB_PWD, FOXLINK_EVENT_DB_HOSTS[0], FOXLINK_EVENT_DB_NAME[0]))
 
+# def to_sql_transaction(data:pd.DataFrame(),table:str):
+#     with ntust_engine.connect as conn:
+#         trans = conn.begin()
+#         try:
+#             print(f'import {table} with to_sql function')
+#         except Exception as e:
+#             raise e
+
+#     return True
+
+#  with ntust_engine.connect() as conn:
+#         tran = conn.begin()
+#         try:
+#             # with ntust_engine.begin() as conn:
+#             print('import error_feature')
+#             print(error_feature)
+#             error_feature.to_sql(name='error_feature',
+#                                 con=conn, if_exists='append', index=False)
+#             tran.commit()
+#         except Exception as e:
+#             print(f"error in to sql: {repr(e)}")
+#             tran.rollback()
+#             raise e
+
 # foxlink_engine = create_engine(
 #         f'mysql+pymysql://ntust:ntustpwd@172.20.0.1:12345/aoi')
 # ntust_engine = create_engine(
@@ -290,20 +314,20 @@ async def PreprocessingData(project_id: int):
             aoi = aoi.append(tmp_data)
 
             # 先測試三個月的 之後再進行到1年
-            for index in range(1, len(dr)):
-                sql = f"""
-                    SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
-                    WHERE 
-                        (Code3 = '{dr[index-1]}' AND Code4 >= '07:40:00') OR
-                        (Code3 > '{dr[index-1]}' AND Code3 < '{dr[index]}') OR
-                        (Code3 = '{dr[index]}' AND Code4 <= '07:40:00')
-                        AND Code2 < 3 ;
-                    """
-                print(
-                    f"{get_ntz_now()} : starting query {index} {dvs.name} {measure.name} {dr[index - 1]} to {dr[index]}")
-                tmp_data = pd.read_sql(sql, foxlink_engine)
-                if len(tmp_data) != 0:
-                    aoi = aoi.append(tmp_data)
+            # for index in range(1, len(dr)):
+            #     sql = f"""
+            #         SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
+            #         WHERE 
+            #             (Code3 = '{dr[index-1]}' AND Code4 >= '07:40:00') OR
+            #             (Code3 > '{dr[index-1]}' AND Code3 < '{dr[index]}') OR
+            #             (Code3 = '{dr[index]}' AND Code4 <= '07:40:00')
+            #             AND Code2 < 3 ;
+            #         """
+            #     print(
+            #         f"{get_ntz_now()} : starting query {index} {dvs.name} {measure.name} {dr[index - 1]} to {dr[index]}")
+            #     tmp_data = pd.read_sql(sql, foxlink_engine)
+            #     if len(tmp_data) != 0:
+            #         aoi = aoi.append(tmp_data)
             aoi = aoi[(aoi['Code2'] < 3)]
 
             aoi['MF_Time'] = pd.to_datetime(aoi['Code3']) + aoi['Code4']
@@ -344,12 +368,13 @@ async def PreprocessingData(project_id: int):
                 hourly_dvs_mf['first_prod_time']
             hourly_dvs_mf['operation_time'].fillna(
                 pd.Timedelta(0), inplace=True)
-            temp = hourly_dvs_mf['operation_time']
+            
+            # temp = hourly_dvs_mf['operation_time']
 
-            hourly_dvs_mf['operation_time'] = (datetime.datetime.combine(
-                date.today(), datetime.time(0, 0, 0)) + hourly_dvs_mf['operation_time'])
-            hourly_dvs_mf['operation_time'] = hourly_dvs_mf['operation_time'].map(
-                lambda x: x.time())
+            # hourly_dvs_mf['operation_time'] = (datetime.datetime.combine(
+            #     date.today(), datetime.time(0, 0, 0)) + hourly_dvs_mf['operation_time'])
+            # hourly_dvs_mf['operation_time'] = hourly_dvs_mf['operation_time'].map(
+            #     lambda x: x.time())
 
             hourly_dvs_mf['device'] = dvs.id
             hourly_dvs_mf['aoi_measure'] = measure.id
@@ -357,18 +382,19 @@ async def PreprocessingData(project_id: int):
             hourly_dvs_mf['pcs'] = hourly_dvs_mf['pcs'].astype(int)
             hourly_dvs_mf['ng_num'] = hourly_dvs_mf['ng_num'].astype(int)
 
-            try:
-                print("starting input hourly_mf...")
-                print(hourly_dvs_mf)
-                hourly_dvs_mf.to_sql(
-                    con=ntust_engine, name="hourly_mf", if_exists='append', index=False)
-            except Exception as e:
-                print(f"error in to sql: {repr(e)}")
+            # try:
+            #     print("starting input hourly_mf...")
+            #     print(hourly_dvs_mf)
+            #     hourly_dvs_mf.to_sql(
+            #         con=ntust_engine, name="hourly_mf", if_exists='append', index=False)
+            # except Exception as e:
+            #     print(f"error in to sql: {repr(e)}")
 
             hourly_mf = hourly_mf.append(hourly_dvs_mf)
 
             # 日夜班 生產量 運作時間
-            hourly_dvs_mf['operation_time'] = temp
+            # hourly_dvs_mf['operation_time'] = temp
+
             dn_dvs_mf = hourly_dvs_mf.groupby(
                 ['date', 'shift']).pcs.sum().reset_index()  # 生產量
             dn_dvs_mf = pd.merge(dn_dvs_mf, hourly_dvs_mf.groupby(['date', 'shift'])[
@@ -377,21 +403,22 @@ async def PreprocessingData(project_id: int):
 
             dn_dvs_mf['device'] = dvs.id
             dn_dvs_mf['aoi_measure'] = measure.id
-            temp_operation = dn_dvs_mf['operation_time']
-            dn_dvs_mf['operation_time'] = (datetime.datetime.combine(
-                date.today(), datetime.time(0, 0, 0)) + dn_dvs_mf['operation_time'])
-            dn_dvs_mf['operation_time'] = dn_dvs_mf['operation_time'].map(
-                lambda x: x.time())
+
+            # temp_operation = dn_dvs_mf['operation_time']
+            # dn_dvs_mf['operation_time'] = (datetime.datetime.combine(
+            #     date.today(), datetime.time(0, 0, 0)) + dn_dvs_mf['operation_time'])
+            # dn_dvs_mf['operation_time'] = dn_dvs_mf['operation_time'].map(
+            #     lambda x: x.time())
 
             # to sql
-            try:
-                print("starting input dn_mf...")
-                print(dn_dvs_mf)
-                dn_dvs_mf.to_sql(con=ntust_engine, name="dn_mf",
-                                 if_exists='append', index=False)
-            except Exception as e:
-                print(f"error in to sql: {repr(e)}")
-            dn_dvs_mf['operation_time'] = temp_operation
+            # try:
+            #     print("starting input dn_mf...")
+            #     print(dn_dvs_mf)
+            #     dn_dvs_mf.to_sql(con=ntust_engine, name="dn_mf",
+            #                      if_exists='append', index=False)
+            # except Exception as e:
+            #     print(f"error in to sql: {repr(e)}")
+            # dn_dvs_mf['operation_time'] = temp_operation
             dn_mf = dn_mf.append(dn_dvs_mf)
 
             # 計算operation day
@@ -447,15 +474,50 @@ async def PreprocessingData(project_id: int):
             aoi_fea['ng_num'] = aoi_fea['ng_num'].astype(int)
             aoi_fea['operation_day'] = aoi_fea['operation_day'].astype(int)
 
-            try:
+            # try:
 
-                print("starting input aoi_feature...")
-                print(aoi_fea)
-                aoi_fea.to_sql(con=ntust_engine, name="aoi_feature",
-                               if_exists='append', index=False)
-            except Exception as e:
-                print(f"error in to sql: {repr(e)}")
+            #     print("starting input aoi_feature...")
+            #     print(aoi_fea)
+            #     aoi_fea.to_sql(con=ntust_engine, name="aoi_feature",
+            #                    if_exists='append', index=False)
+            # except Exception as e:
+            #     print(f"error in to sql: {repr(e)}")
             aoi_feature = aoi_feature.append(aoi_fea)
+
+
+    with ntust_engine.connect() as conn:
+        trans = conn.begin()
+        try:
+            print("starting input hourly_mf...")
+
+            hourly_dvs_mf['operation_time'] = (datetime.datetime.combine(
+                date.today(), datetime.time(0, 0, 0)) + hourly_dvs_mf['operation_time'])
+            hourly_dvs_mf['operation_time'] = hourly_dvs_mf['operation_time'].map(
+                lambda x: x.time())
+            print(hourly_dvs_mf)
+            hourly_dvs_mf.to_sql(
+                    con=conn, name="hourly_mf", if_exists='append', index=False)
+            
+            print("starting input dn_mf...")
+            dn_mf['operation_time'] = (datetime.datetime.combine(
+                date.today(), datetime.time(0, 0, 0)) + dn_mf['operation_time'])
+            dn_mf['operation_time'] = dn_mf['operation_time'].map(
+                lambda x: x.time())
+            print(dn_mf)
+            dn_mf.to_sql(con=conn, name="dn_mf",
+                                 if_exists='append', index=False)
+            
+
+            print("starting input aoi_feature...")
+            print(aoi_feature)
+            aoi_feature.to_sql(con=conn, name="aoi_feature",
+                               if_exists='append', index=False)
+            print(abcd)
+        except Exception as e:
+            trans.rollback()
+            raise e
+
+
 
     def target_label(x):  # 用operation day中發生異常天數比例 判斷目標
         error = dvs_event[dvs_event['Message'] == x['Message']]
@@ -638,9 +700,9 @@ async def PreprocessingData(project_id: int):
 
 
 async def UpdatePreprocessingData(project_id: int):
-    # now = datetime.datetime(2022,11,1,7,39)
+    now = datetime.datetime(2023,2,1,7,39)
 
-    now = get_ntz_now()  # 更新資料時間
+    # now = get_ntz_now()  # 更新資料時間
     update_workday = (now - pd.Timedelta(hours=7, minutes=40)
                       ).date()  # 更新資料的工作日期
     update_workday_endtime = pd.to_datetime(
@@ -770,12 +832,18 @@ async def UpdatePreprocessingData(project_id: int):
                 dn_mf = dn_mf.append(dn_dvs_mf)
 
                 # 計算operation day (讀取之前的紀錄計算合格運作的條件)
+                # sql = f"""
+                #     SELECT * FROM d7x_e75_dn_mf
+                #     WHERE date < '{update_workday}' AND
+                #     Device_Name = '{dvs}' AND
+                #     pcs > 0 ;
+                #     """
                 sql = f"""
-                    SELECT * FROM d7x_e75_dn_mf
+                    SELECT * FROM dn_mf
                     WHERE date < '{update_workday}' AND
-                    Device_Name = '{dvs}' AND
-                    pcs > 0 ;
-                    """
+                    device = {dvs.id} AND
+                    pcs > 0
+                """
                 working = pd.read_sql(sql, ntust_engine)
 
                 dtime = working[working['shift'] == 'D']['operation_time']
@@ -805,7 +873,7 @@ async def UpdatePreprocessingData(project_id: int):
                 ).reset_index().rename(columns={'ID': 'pcs'}), on='date', how='outer')
                 aoi_fea = pd.merge(aoi_fea, aoi[aoi['Code2'] == 0].groupby(['date']).ID.count(
                 ).reset_index().rename(columns={'ID': 'ng_num'}), on='date', how='outer')
-                aoi_fea['ng_rate(%)'] = aoi_fea['ng_num'] / \
+                aoi_fea['ng_rate'] = aoi_fea['ng_num'] / \
                     aoi_fea['pcs'] * 100
 
                 aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.max().reset_index(
@@ -827,35 +895,42 @@ async def UpdatePreprocessingData(project_id: int):
                     str).apply(lambda x: x[7:])
 
     # insert data
-    try:
-        # with ntust_engine.begin() as conn:
-        print('import houly_mf')
-        print(hourly_mf)
-        hourly_mf.to_sql(name='hourly_mf', con=ntust_engine,
-                         if_exists='append', index=False)
-        print('import dn_mf')
-        print(dn_mf)
-        dn_mf.to_sql(name='dn_mf', con=ntust_engine,
-                     if_exists='append', index=False)
-        print('import aoi_feature')
-        print(aoi_feature)
-        aoi_feature.to_sql(name='aoi_feature', con=ntust_engine,
-                           if_exists='append', index=False)
-    except Exception as e:
-        print(f"error in to sql: {repr(e)}")
-        raise e
-
+    with ntust_engine.connect() as conn:
+        tran = conn.begin()
+        try:
+            # with ntust_engine.begin() as conn:
+            print('import houly_mf')
+            print(hourly_mf)
+            hourly_mf.to_sql(name='hourly_mf', con=conn,
+                            if_exists='append', index=False)
+            print('import dn_mf')
+            print(dn_mf)
+            dn_mf.to_sql(name='dn_mf', con=conn,
+                        if_exists='append', index=False)
+            print('import aoi_feature')
+            print(aoi_feature)
+            aoi_feature.to_sql(name='aoi_feature', con=conn,
+                            if_exists='append', index=False)
+            tran.commit()
+        except Exception as e:
+            print(f"error in to sql: {repr(e)}")
+            tran.rollback()
+            raise e
+    df = pd.DataFrame()
     dvs_name = [dvs.name for dvs in project[0].devices]
-
-    sql = f"""
+    print(dvs_name)
+    for dvs in project[0].devices:
+        sql = f"""
         SELECT * FROM aoi.`{project[0].name}_event` 
         WHERE 
             Category < 200 AND 
             (Start_Time >= '{update_workday_endtime}') AND
             (Start_Time < '{update_workday_endtime + pd.Timedelta(days=1)}') AND
-            Device_Name IN {tuple(dvs_name)};
+            Device_Name = '{dvs.name}' AND
+            Line= {dvs.line};
         """
-    df = pd.read_sql(sql, foxlink_engine)  # 讀取異常事件歷史資料
+        temp = pd.read_sql(sql, foxlink_engine)  # 讀取異常事件歷史資料
+        df = pd.concat([temp, df], ignore_index=True)
     df_auto = df[(df["START_FILE_NAME"] == "auto") | (
         df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
     # 合併有 auto 的 event
@@ -961,15 +1036,19 @@ async def UpdatePreprocessingData(project_id: int):
             err_fea['last_time_max'] = err_fea['last_time_max'].astype(int)
             err_fea['last_time_min'] = err_fea['last_time_min'].astype(int)
             error_feature = error_feature.append(err_fea)
-    try:
-        # with ntust_engine.begin() as conn:
-        print('import error_feature')
-        print(error_feature)
-        error_feature.to_sql(name='error_feature',
-                             con=ntust_engine, if_exists='append', index=False)
-    except Exception as e:
-        print(f"error in to sql: {repr(e)}")
-        raise e
+    with ntust_engine.connect() as conn:
+        tran = conn.begin()
+        try:
+            # with ntust_engine.begin() as conn:
+            print('import error_feature')
+            print(error_feature)
+            error_feature.to_sql(name='error_feature',
+                                con=conn, if_exists='append', index=False)
+            tran.commit()
+        except Exception as e:
+            print(f"error in to sql: {repr(e)}")
+            tran.rollback()
+            raise e
 
     return
 
@@ -1046,7 +1125,7 @@ async def TrainingData(project_id: int, select_type: str):
                 joblib.dump(best_model, f'/app/model/{dv}_{ca}_{timenow}.pkl')
 
             every_error_performance[dv][events][best_t]['freq'] = select_type
-            # 寫入資料庫
+            # 寫入資料庫      
             ntust = foxlink_train.ntust_engine
             pd.DataFrame(every_error_performance[dv][events][best_t], index=[0]).drop(
                 columns='model').to_sql('train_performances', con=ntust, if_exists='append', index=False)
