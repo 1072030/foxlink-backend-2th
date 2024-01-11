@@ -1,6 +1,7 @@
 # VSCode related config
 .vscode/settings.json
-
+model
+model_week
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -8,7 +9,7 @@ __pycache__/
 uploaded*
 # C extensions
 *.so
-
+*.sql
 /backup
 
 # Distribution / packaging

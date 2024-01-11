@@ -249,7 +249,6 @@ async def predict_data(project_id: int, pred_type: str, user: User = Depends(get
 #     await HappenedCheck(project_id,start_time,select_type)
 #     return
 
-
 @router.get("/testssh")
 async def sshconnect():
     return await checkFoxlinkAuth(True)

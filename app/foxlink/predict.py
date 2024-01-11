@@ -87,6 +87,8 @@ class FoxlinkPredict:
                 event.append(i.id)
 
             events = await ProjectEvent.objects.filter(id__in=event).all()
+
+            # aoi measure日期改成1天
             sql = f"""
                 SELECT Measure_Workno FROM aoi.measure_info 
                 WHERE 
@@ -99,14 +101,6 @@ class FoxlinkPredict:
             ntust_measure = await Device.objects.select_related(['aoimeasures']).filter(name=dvs.name).all()
             # ntust_measure = for i in ntust_measure[0].aoimeasures
             ntust_measure = ntust_measure[0].aoimeasures
-            # sql = f"""
-            #     SELECT Measure_Workno FROM aoi.measure_info 
-            #     WHERE 
-            #         Workno_Order=1 and 
-            #         Project='{project[0].name}'and
-            #         Device_Name='{dvs.name}';
-            # """
-            # first_aoi_measure = pd.read_sql(sql, self.foxlink_engine)['Measure_Workno'][0].lower()
             
             for row in events: # 預測目標異常 Y
                 # print(f"{get_ntz_now} : starting preprocessing {row.message}")
@@ -120,7 +114,7 @@ class FoxlinkPredict:
                 target_Y = pd.read_sql(sql, self.ntust_engine)
                 target_Y.rename(columns={'happened':row.name}, inplace=True)
                 target_feature = target_Y.drop('operation_day', axis=1)
-                print(target_feature)
+
                 # 加入AOI檢測特徵
                 for measure in dvs_aoi_measure:
                     measure = measure.lower()
