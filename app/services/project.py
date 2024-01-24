@@ -45,10 +45,8 @@ import joblib
 
 FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
 
-
 def engine(user: str, password: str, host: str, database: str):
     return f'mysql+pymysql://{user}:{password}@{host}/{database}'
-
 
 ntust_engine = create_engine(engine(
     DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST+":"+str(DATABASE_PORT), DATABASE_NAME))

@@ -12,10 +12,7 @@ from app.env import (
     PWD_SALT
 )
 from app.models.schema import (
-    # DayAndNightUserOverview,
-    DeviceExp,
     UserCreate,
-    # UserOverviewOut,
     WorkerAttendance,
     WorkerStatusDto,
     WorkerStatus,

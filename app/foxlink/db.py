@@ -4,9 +4,13 @@
 import asyncio
 import logging
 from typing import Optional, Dict, Tuple, List
-# from app.core.database import Device
 from databases import Database
 from app.env import (
+    DATABASE_USER,
+    DATABASE_PASSWORD,
+    DATABASE_HOST,
+    DATABASE_PORT,
+    DATABASE_NAME,
     FOXLINK_EVENT_DB_NAME,
     FOXLINK_EVENT_DB_HOSTS,
     FOXLINK_EVENT_DB_USER,
@@ -19,6 +23,7 @@ from app.env import (
 )
 import re
 import pandas as pd
+from sqlalchemy import create_engine
 class FoxlinkDatabasePool:
     def __init__(self):
         self.connection:List[str] = (
@@ -39,6 +44,13 @@ class FoxlinkDatabasePool:
             min_size=3,
             max_size=5
         )
+        self.ntust_db = create_engine(
+            f'mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST+":"+str(DATABASE_PORT)}/{DATABASE_NAME}'
+        )
+        self.foxlink_db = create_engine(
+            f'mysql+pymysql://{FOXLINK_EVENT_DB_USER}:{FOXLINK_EVENT_DB_PWD}@{FOXLINK_EVENT_DB_HOSTS[0]}/{FOXLINK_EVENT_DB_NAME[0]}'
+        )
+
 
     def __getitem__(self, key):
         return self.event_dbs[key]

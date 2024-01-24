@@ -18,10 +18,10 @@ from xgboost import XGBClassifier
 from tqdm import tqdm
 import joblib
 
-from sqlalchemy import create_engine
 from sqlalchemy.types import Float, Integer, Date, Time, DateTime, VARCHAR, DECIMAL, BigInteger, SmallInteger
 
 from fastapi.exceptions import HTTPException
+from app.foxlink.db import foxlink_dbs
 from app.core.database import (
     transaction,
     get_ntz_now,
@@ -36,21 +36,20 @@ from app.core.database import (
     PredTarget,
     ErrorFeature
 )
-
+from app.env import (
+    FOXLINK_EVENT_DB_HOSTS,
+    FOXLINK_EVENT_DB_USER,
+    FOXLINK_EVENT_DB_PWD,
+    FOXLINK_EVENT_DB_NAME,
+    DATABASE_HOST,
+    DATABASE_PORT,
+    DATABASE_USER,
+    DATABASE_PASSWORD,
+    DATABASE_NAME
+)
 import warnings
 warnings.filterwarnings('ignore')
 
-
-def connect_foxlink_db():
-    # 從正崴資料庫讀取
-    foxlink_charset = 'utf8'
-    foxlink_engine = create_engine(f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi?charset={foxlink_charset}')
-    return foxlink_engine
-
-def connect_ntust_db():
-    ntust_charset = 'utf8'
-    ntust_engine = create_engine(f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink?charset={ntust_charset}')
-    return ntust_engine
 
 class FoxlinkTrain:
     def __init__(self):
@@ -66,8 +65,8 @@ class FoxlinkTrain:
         'Device_12':['ccd4','ccd5','ccd6','ccd7','scan'],
         'Device_13':['package']
         }
-        self.ntust_engine = connect_ntust_db()
-        self.foxlink_engine = connect_foxlink_db()
+        self.ntust_engine = foxlink_dbs.ntust_db
+        self.foxlink_engine = foxlink_dbs.foxlink_db
         
     async def data_preprocessing_from_sql(self,project_id:int):    
         """

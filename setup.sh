@@ -1,3 +1,8 @@
+"""
+This file is for new ubuntu system
+just using : bash setup.sh 
+"""
+
 sudo apt-get update
 sudo apt-get install git
 sudo apt-get install ca-certificates curl gnupg

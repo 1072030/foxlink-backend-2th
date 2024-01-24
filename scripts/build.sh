@@ -1,3 +1,3 @@
 bash scripts/servers.sh rebuild
-sleep 15
+sleep 30
 docker compose exec foxlink-backend bash scripts/rebuild_database.sh

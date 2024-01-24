@@ -14,9 +14,9 @@ from glob import glob
 from sklearn.preprocessing import MinMaxScaler
 
 
-from sqlalchemy import create_engine
+# from sqlalchemy import create_engine
 from sqlalchemy.types import Float, Integer, Date, Time, DateTime, VARCHAR, DECIMAL, BigInteger, SmallInteger
-
+from app.foxlink.db import foxlink_dbs
 
 from fastapi.exceptions import HTTPException
 from app.core.database import (
@@ -33,26 +33,34 @@ from app.core.database import (
     PredTarget,
     ErrorFeature
 )
+from app.env import (
+    FOXLINK_EVENT_DB_HOSTS,
+    FOXLINK_EVENT_DB_USER,
+    FOXLINK_EVENT_DB_PWD,
+    FOXLINK_EVENT_DB_NAME,
+    DATABASE_HOST,
+    DATABASE_PORT,
+    DATABASE_USER,
+    DATABASE_PASSWORD,
+    DATABASE_NAME
+)
 import warnings
 warnings.filterwarnings('ignore')
+# def engine(user: str, password: str, host: str, database: str):
+#     return f'mysql+pymysql://{user}:{password}@{host}/{database}'
+
+# ntust_engine = create_engine(engine(
+#     DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST+":"+str(DATABASE_PORT), DATABASE_NAME))
+# foxlink_engine = create_engine(
+#     engine(FOXLINK_EVENT_DB_USER, FOXLINK_EVENT_DB_PWD, FOXLINK_EVENT_DB_HOSTS[0], FOXLINK_EVENT_DB_NAME[0]))
 
 
-def connect_foxlink_db():
-    # 從正崴資料庫讀取
-    foxlink_charset = 'utf8'
-    foxlink_engine = create_engine(f'mysql+pymysql://ntust:ntustpwd@172.21.0.1:12345/aoi?charset={foxlink_charset}')
-    return foxlink_engine
-
-def connect_ntust_db():
-    ntust_charset = 'utf8'
-    ntust_engine = create_engine(f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink?charset={ntust_charset}')
-    return ntust_engine
 
 
 class FoxlinkPredict:
     def __init__(self) -> None:
-        self.ntust_engine = connect_ntust_db()
-        self.foxlink_engine = connect_foxlink_db()
+        self.ntust_engine = foxlink_dbs.ntust_db
+        self.foxlink_engine = foxlink_dbs.foxlink_db
         self.dvs_aoi = {
         'Device_5':['glue'],
         'Device_6':['clip'],

@@ -24,44 +24,13 @@ if __name__ == "__main__":
     import signal
     import time
     import argparse
-    import ormar
-    import pandas as pd
-    import json
-    from os.path import join
-    from os import walk
-    from typing import Any, Dict, List, Tuple, Optional
-    from datetime import timedelta
     from app.log import logging, CustomFormatter, LOG_FORMAT_FILE
-    # from app.models.schema import MissionDto, MissionEventOut
-    from app.utils.utils import AsyncEmitter,BenignObj
-    # from app.foxlink.model import FoxlinkEvent
-    from app.utils.utils import DTO
-    # from app.foxlink.utils import assemble_device_id
     from app.foxlink.db import foxlink_dbs
-    from fastapi import HTTPException
-    # from app.services.mission import (
-    #     assign_mission,
-    #     reject_mission,
-    #     set_mission_by_rescue_position
-    # )
-    # from app.services.user import check_user_begin_shift
-    # from app.services.migration import import_devices
-    # from app.utils.utils import get_current_shift_type
-    # from app.mqtt import mqtt_client
     from app.env import (
-        DEBUG,
-        UPLOAD_FILES_PATH
+        DEBUG
     )
-    from multiprocessing import Process
-
     from app.core.database import (
-        transaction,
         get_ntz_now,
-        User,
-        AuditLogHeader,
-        AuditActionEnum,
-        WorkerStatusEnum,
-        UserLevel,
         api_db,
         Env
     )
@@ -101,108 +70,6 @@ if __name__ == "__main__":
             return result
         return wrapper
 
-    # @transaction(callback=True)
-    # @ show_duration
-    # async def send_mission_notification_routine(handler=[]):
-    #     missions = (
-    #         await Mission.objects
-    #         .filter(
-    #             repair_end_date__isnull=True,
-    #             notify_recv_date__isnull=True,
-    #             is_done=False,
-    #             worker__isnull=False
-    #         )
-    #         .select_related(
-    #             [
-    #                 "device", "worker", "device__workshop",
-    #                 "worker__at_device", "events"
-    #             ]
-    #         )
-    #         .exclude_fields(
-    #             FactoryMap.heavy_fields("device__workshop")
-    #         )
-    #         .filter(
-    #             events__event_end_date__isnull=True
-    #         )
-    #         .all()
-    #     )
-    #     # RUBY: related device workshop
-
-    #     async def driver(m: Mission):
-    #         if m.device.is_rescue == False:
-    #             handler.append(
-    #                 mqtt_client.publish(
-    #                     f"foxlink/users/{m.worker.current_UUID}/missions",
-    #                     {
-    #                         "type": "new",
-    #                         "mission_id": m.id,
-    #                         "worker_now_position": m.worker.at_device.id,
-    #                         "badge": m.worker.badge,
-    #                         # RUBY: set worker now position and badge
-    #                         "create_date": m.created_date,
-    #                         "device": {
-    #                             "device_id": m.device.id,
-    #                             "device_name": m.device.device_name,
-    #                             "device_cname": m.device.device_cname,
-    #                             "workshop": m.device.workshop.name,
-    #                             "project": m.device.project,
-    #                             "process": m.device.process,
-    #                             "line": m.device.line,
-    #                         },
-    #                         "name": m.name,
-    #                         "description": m.description,
-    #                         "notify_receive_date": None,
-    #                         "notify_send_date": m.notify_send_date,
-    #                         "events": [
-    #                             MissionEventOut.from_missionevent(e).dict()
-    #                             for e in m.events
-    #                         ],
-    #                         "timestamp": get_ntz_now()
-    #                     },
-    #                     qos=2,
-    #                     retain=True
-    #                 )
-    #             )
-    #         else:
-    #             handler.append(
-    #                 mqtt_client.publish(
-    #                     f"foxlink/users/{m.worker.current_UUID}/move-rescue-station",
-    #                     {
-    #                         "type": "rescue",
-    #                         "mission_id": m.id,
-    #                         "worker_now_position": m.worker.at_device.id,
-    #                         "badge": m.worker.badge,
-    #                         # RUBY: set worker now position and badge
-    #                         "create_date": m.created_date,
-    #                         "device": {
-    #                             "device_id": m.device.id,
-    #                             "device_name": m.device.device_name,
-    #                             "device_cname": m.device.device_cname,
-    #                             "workshop": m.device.workshop.name,
-    #                             "project": m.device.project,
-    #                             "process": m.device.process,
-    #                             "line": m.device.line,
-    #                         },
-    #                         "name": m.name,
-    #                         "description": m.description,
-    #                         "notify_receive_date": None,
-    #                         "notify_send_date": m.notify_send_date,
-    #                         "events": [],
-    #                         "timestamp": get_ntz_now()
-    #                     },
-    #                     qos=2,
-    #                     retain=True
-    #                 )
-    #             )
-
-    #     await asyncio.gather(
-    #         *[driver(m) for m in missions]
-    #     )
-    #     return True
-
-    
-    # done
-
     ######### main #########
 
     def shutdown_callback():
@@ -217,8 +84,7 @@ if __name__ == "__main__":
                 logger.info("Start to Create Connections.")
                 await asyncio.gather(
                     api_db.connect(),
-                    # foxlink_dbs.connect(),
-                    # mqtt_client.connect()
+                    foxlink_dbs.connect(),
                 )
             except Exception as e:
                 logger.error(f"{e}")
@@ -235,8 +101,7 @@ if __name__ == "__main__":
             try:
                 await asyncio.gather(
                     api_db.disconnect(),
-                    # mqtt_client.disconnect(),
-                    # foxlink_dbs.disconnect()
+                    foxlink_dbs.disconnect()
                 )
             except Exception as e:
                 logger.error(f"{e}")
@@ -256,31 +121,6 @@ if __name__ == "__main__":
                 logger.info('[main_routine] Foxlink daemon is running...')
 
                 beg_time = time.perf_counter()
-
-                # await update_complete_events_handler()
-
-                # await mission_shift_routine()
-
-                # await move_idle_workers_to_rescue_device()
-
-                # await check_mission_working_duration_overtime()
-
-                # await check_mission_assign_duration_overtime()
-
-                # await sync_events_from_foxlink_handler()
-
-                # await early_login_mission_check()
-
-                # await auto_rescue_point_generate()
-
-                # await auto_remove_whitelist()
-
-                # if not DISABLE_FOXLINK_DISPATCH:
-                #     await mission_dispatch()
-
-                # if time.perf_counter() - last_nofity_time > NOTIFICATION_INTERVAL:
-                #     await send_mission_notification_routine()
-                #     last_nofity_time = time.perf_counter()
 
                 end_time = time.perf_counter()
 

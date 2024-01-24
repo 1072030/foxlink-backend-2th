@@ -101,118 +101,6 @@ class UserNameDto(BaseModel):
     username: str
 
 
-# class MissionEventOut(BaseModel):
-#     category: int
-#     message: str
-#     event_beg_date: datetime
-#     event_end_date: Optional[datetime]
-
-#     @classmethod
-#     def from_missionevent(cls, e: MissionEvent):
-#         return cls(
-#             category=e.category,
-#             message=e.message,
-#             event_beg_date=e.event_beg_date,
-#             event_end_date=e.event_end_date,
-#         )
-
-
-# class MissionDto(BaseModel):
-#     mission_id: int
-#     device: DeviceDto
-#     name: str
-#     description: str
-#     worker: Optional[UserNameDto]
-#     events: List[MissionEventOut]
-#     is_started: bool
-#     is_closed: bool
-#     is_done: bool
-#     is_emergency: bool
-#     is_done_cure: bool
-#     created_date: datetime
-#     updated_date: datetime
-#     worker_now_position: str
-
-#     @classmethod
-#     def from_mission(cls, m: Mission):
-#         return cls(
-#             mission_id=m.id,
-#             name=m.name,
-#             device=DeviceDto(
-#                 device_id=m.device.id,
-#                 device_name=m.device.device_name,
-#                 device_cname=m.device.device_cname,
-#                 workshop=m.device.workshop.name,
-#                 project=m.device.project,
-#                 process=m.device.process,
-#                 line=m.device.line,
-#             ),
-#             description=m.description,
-#             worker_now_position="" if m.worker == None else m.worker.at_device.id,
-#             # add worker now position
-#             is_started=m.is_started,
-#             is_closed=m.is_closed,
-#             is_done=m.is_done,
-#             is_done_cure=m.is_done_cure,
-#             is_emergency=m.is_emergency,
-#             worker=UserNameDto(
-#                 badge=m.worker.badge,
-#                 username=m.worker.username
-#             ) if m.worker else None,
-#             events=[MissionEventOut.from_missionevent(e) for e in m.events],
-#             created_date=m.created_date,
-#             updated_date=m.updated_date,
-#         )
-
-
-# class MissionInfo(BaseModel):
-#     mission_id: int
-#     device: DeviceDto
-#     name: str
-#     description: str
-#     badge: str
-#     events: List[MissionEventOut]
-#     is_started: bool
-#     is_closed: bool
-#     is_done: bool
-#     is_emergency: bool
-#     created_date: datetime
-#     updated_date: datetime
-#     notify_receive_date: str
-#     notify_send_date: str
-#     worker_now_position: str
-
-#     @classmethod
-#     def from_mission(cls, m: Mission):
-#         return cls(
-#             mission_id=m.id,
-#             name=m.name,
-#             device=DeviceDto(
-#                 device_id=m.device.id,
-#                 device_name=m.device.device_name,
-#                 device_cname=m.device.device_cname,
-#                 workshop=m.device.workshop.name,
-#                 project=m.device.project,
-#                 process=m.device.process,
-#                 line=m.device.line,
-#             ),
-#             description=m.description,
-#             worker_now_position="" if m.worker.at_device.id == None else m.worker.at_device.id,
-#             is_started=m.is_started,
-#             is_closed=m.is_closed,
-#             is_done=m.is_done,
-#             is_emergency=m.is_emergency,
-#             badge=m.worker.badge if m.worker else None,
-#             events=[MissionEventOut.from_missionevent(e) for e in m.events],
-#             created_date=m.created_date,
-#             updated_date=m.updated_date,
-#             notify_receive_date="2000-01-01 00:00:00" if m.notify_recv_date == None else str(
-#                 m.notify_recv_date),
-#             notify_send_date="2000-01-01 00:00:00" if m.notify_send_date == None else str(
-#                 m.notify_send_date)
-#         )
-
-
 class WorkerStatusDto(BaseModel):
     worker_id: str
     worker_name: str
@@ -227,19 +115,6 @@ class WorkerStatusDto(BaseModel):
 
 class WorkerStatus(BaseModel):
     status: str
-
-
-class ImportDevicesOut(BaseModel):
-    device_ids: List[str]
-    parameter: Optional[str]
-
-
-class DeviceExp(BaseModel):
-    project: str
-    process: Optional[str]
-    device_name: str
-    line: int
-    exp: int
 
 class NewProjectDto(BaseModel):
     project:str
