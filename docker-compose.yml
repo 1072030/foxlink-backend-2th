@@ -20,7 +20,7 @@ services:
       - FOXLINK_DEVICE_DB_PWD=ntustpwd
     restart: unless-stopped
     ports:
-      - 19012:80
+      - 19001:80
     depends_on:
       - mysql
     networks:
@@ -39,7 +39,7 @@ services:
       MYSQL_DATABASE: foxlink
       MYSQL_ROOT_PASSWORD: AqqhQ993VNto
     ports:
-      - 27008:3306
+      - 27001:3306
     volumes:
       - mysql-db1:/var/lib/mysql
     networks:
