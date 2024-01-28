@@ -230,15 +230,7 @@ async def predict_data(project_id: int, pred_type: str, user: User = Depends(get
 
     try:
         await PredictData(project_id, pred_type)
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.PREDICT_SUCCEEDED.value,
-            user=user.badge
-        )
     except Exception as e:
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.PREDICT_FAILED.value,
-            user=user.badge
-        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"PREDICT_FAILED : {repr(e)}"
         )

@@ -24,6 +24,7 @@ if __name__ == "__main__":
     import signal
     import time
     import argparse
+    from datetime import datetime
     from app.log import logging, CustomFormatter, LOG_FORMAT_FILE
     from app.foxlink.db import foxlink_dbs
     from app.env import (
@@ -32,9 +33,17 @@ if __name__ == "__main__":
     from app.core.database import (
         get_ntz_now,
         api_db,
-        Env
+        Env,
+        Project,
+        AuditActionEnum,
+        AuditLogHeader,
+        PredictResult
     )
-
+    from fastapi import HTTPException
+    from app.services.project import(
+        PredictData,
+        UpdatePreprocessingData
+    )
     from pymysql.err import (
         Warning, Error,
         InterfaceError, DataError, DatabaseError,
@@ -57,7 +66,7 @@ if __name__ == "__main__":
 
     _terminate = None
 
-    MAIN_ROUTINE_MIN_RUNTIME = 3
+    MAIN_ROUTINE_MIN_RUNTIME = 3600
     NOTIFICATION_INTERVAL = 30
 
     def show_duration(func):
@@ -70,6 +79,61 @@ if __name__ == "__main__":
             return result
         return wrapper
 
+
+    async def daily_project_preprocess_data():
+        return
+    
+    async def daily_project_predict(handlers=[]):
+        checkEnv = await Env.objects.filter(key="daily_project_predict").get_or_none()
+        if checkEnv is None:
+            raise HTTPException(400,"can not find 'daily_project_predict' env settings")
+        
+        updateTimer = datetime.strptime(checkEnv.value,'%H:%M:%S')
+
+        if get_ntz_now() <= get_ntz_now().replace(hour=updateTimer.hour,minute=updateTimer.minute,second=updateTimer.second):
+            return
+
+        projects = await Project.objects.select_related("devices").all()
+        projects_temp = []
+        for i in projects:
+            checkLogs = await AuditLogHeader.objects.filter(
+                action=AuditActionEnum.PREDICT_SUCCEEDED.value,
+                created_date__gte=get_ntz_now().date(),
+                description=i.id
+            ).limit(1).get_or_none()
+            if checkLogs is None:
+                projects_temp.append(i)
+
+        if len(projects_temp) == 0:
+            return
+
+        # check predict result
+        predict_required = []
+        for project in projects_temp:
+            for device in project.devices:
+                checkPredictLogsDaily = await PredictResult.objects.filter(
+                    device = device.id,
+                    pred_type = 0
+                ).limit(1).get_or_none()
+                checkPredictLogsWeekly = await PredictResult.objects.filter(
+                    device = device.id,
+                    pred_type = 1
+                ).limit(1).get_or_none()
+                if checkPredictLogsDaily is not None:
+                    predict_required.append({
+                        "project_id":project.id,
+                        "select_type":"day"
+                    })
+                if checkPredictLogsWeekly is not None:
+                    predict_required.append({
+                        "project_id":project.id,
+                        "select_type":"week"
+                    })
+                break
+        await asyncio.gather(*[
+            PredictData(detail['project_id'],detail['select_type']) for detail in predict_required
+        ])
+        return
     ######### main #########
 
     def shutdown_callback():
@@ -121,6 +185,8 @@ if __name__ == "__main__":
                 logger.info('[main_routine] Foxlink daemon is running...')
 
                 beg_time = time.perf_counter()
+
+                await daily_project_predict()
 
                 end_time = time.perf_counter()
 

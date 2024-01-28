@@ -4,7 +4,7 @@
 
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime,timedelta
 
 from tqdm import tqdm
 
@@ -72,9 +72,13 @@ class FoxlinkPredict:
         'Device_13':['package']
         }
         
-    async def data_preprocessing_from_sql(self,project_id:int):
+    async def data_preprocessing_from_sql(self,project_id:int,select_type:str):
         ## Todo：要將SQL目標改成要query的時間，這邊先以原數據做示範。
         infos = {}
+        if select_type == "day":
+            predict_date = get_ntz_now().date()
+        elif select_type == "week":
+            predict_date = get_ntz_now().date() + timedelta(days=-6)
         project = await Project.objects.filter(id=project_id).select_related(
             ["devices","devices__aoimeasures"]
         ).all()
@@ -117,7 +121,8 @@ class FoxlinkPredict:
                     WHERE 
                         device = '{dvs.id}' and 
                         project = {project_id} and 
-                        event = '{row.id}'
+                        event = '{row.id}' and
+                        date >= '{predict_date}'
                 """
                 target_Y = pd.read_sql(sql, self.ntust_engine)
                 target_Y.rename(columns={'happened':row.name}, inplace=True)
@@ -135,7 +140,8 @@ class FoxlinkPredict:
                             SELECT * FROM aoi_feature 
                             WHERE 
                                 device = {dvs.id} and 
-                                aoi_measure = {measure_id} 
+                                aoi_measure = {measure_id} and
+                                date >= '{predict_date}'
                         """
                         aoi_fea = pd.read_sql(sql, self.ntust_engine)
                         aoi_fea.rename(columns={
@@ -164,14 +170,17 @@ class FoxlinkPredict:
                         op_day_total_error = target_feature[target_feature['operation_day']==1][row.name].sum()
 
                         #計算平均發生次數
-                        error_per_pcs = op_day_total_error / op_day_total_pcs # 計算比例
+                        if op_day_total_pcs != 0:
+                            error_per_pcs = op_day_total_error / op_day_total_pcs # 計算比例
+                        else:
+                            error_per_pcs = 0
 
                         #
                         invalid_date_index = target_feature[target_feature['operation_day']==0].index
                         target_feature.loc[invalid_date_index, row.name] = round(target_feature.loc[invalid_date_index, measure+'_pcs'] * error_per_pcs) # 依照生產比例補值
                         
                     else:
-                        sql = f"SELECT * FROM aoi_feature WHERE device = '{dvs.name}' and aoi_measure = '{measure_id}';"
+                        sql = f"SELECT * FROM aoi_feature WHERE device = '{dvs.name}' and aoi_measure = '{measure_id}' and date >= '{predict_date}';"
                         aoi_fea = pd.read_sql(sql, self.ntust_engine)
                         aoi_fea.rename(columns={
                             'pcs':measure+'_pcs',
@@ -197,7 +206,8 @@ class FoxlinkPredict:
                         WHERE 
                             e.device = {dvs.id} and 
                             e.event = {others.id} and 
-                            e.project={project_id};
+                            e.project={project_id} and
+                            e.date >= '{predict_date}';
                         """
                         other_error_happened = pd.read_sql(sql, self.ntust_engine) # 預測目標異常的特徵
                         category = str(other_error_happened['category'].iloc[0])
@@ -206,8 +216,9 @@ class FoxlinkPredict:
                 
                 target_feature.sort_values('date', inplace=True)
                 target_feature.reset_index(drop=True, inplace=True)
-                steady_index = target_feature[target_feature['operation_day']==1].index.min() # 穩定生產第一天
-                target_feature = target_feature[steady_index:]
+                # steady_index = target_feature[target_feature['operation_day']==1].index.min() # 穩定生產第一天
+                # print(target_feature)
+                # target_feature = target_feature[steady_index:]
                 
                 target_feature.drop(['device', 'event','operation_day'], axis=1, inplace=True)
                 target_feature.fillna(0, inplace=True)

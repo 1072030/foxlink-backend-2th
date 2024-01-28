@@ -17,7 +17,9 @@ from app.core.database import (
     Device,
     AoiMeasure,
     AoiFeature,
-    PredictResult
+    PredictResult,
+    AuditLogHeader,
+    AuditActionEnum
 )
 from app.env import (
     FOXLINK_EVENT_DB_HOSTS,
@@ -693,9 +695,8 @@ async def PreprocessingData(project_id: int):
 
 
 async def UpdatePreprocessingData(project_id: int):
-    now = datetime.datetime(2023,2,1,7,39)
 
-    # now = get_ntz_now()  # 更新資料時間
+    now = get_ntz_now()  # 更新資料時間
     update_workday = (now - pd.Timedelta(hours=7, minutes=40)
                       ).date()  # 更新資料的工作日期
     update_workday_endtime = pd.to_datetime(
@@ -973,7 +974,7 @@ async def UpdatePreprocessingData(project_id: int):
     for dvs in dvs_name:
         dvs_event = event[event['Device_Name'] == dvs]
         dvs_data = await Device.objects.filter(name=dvs, project=project_id).get()
-        test = datetime.datetime(2023, 11, 8, 0, 0, 0)
+
         operation = (await AoiFeature.objects.filter(
             device=dvs_data.id,
             date=update_workday
@@ -1132,64 +1133,74 @@ async def TrainingData(project_id: int, select_type: str):
 
 
 async def PredictData(project_id: int, select_type: str):
-    input_data_dict, infos = await foxlink_predict.data_preprocessing_from_sql(project_id=project_id)
-    devices = await Device.objects.filter(project=project_id).all()
-    for dv in input_data_dict:
+    await AuditLogHeader.objects.create(
+        action=AuditActionEnum.PREDICT_FAILED.value,
+        user='admin',
+        description=project_id
+    )
+    with ntust_engine.connect() as conn:
+        trans = conn.begin()
+        try:
+            input_data_dict, infos = await foxlink_predict.data_preprocessing_from_sql(project_id=project_id,select_type=select_type)
+            devices = await Device.objects.filter(project=project_id).all()
+            for dv in input_data_dict:
 
-        for i in devices:
-            if dv == i.name:
-                device_id = i.id
+                for i in devices:
+                    if dv == i.name:
+                        device_id = i.id
 
-        with ntust_engine.connect() as conn:
-            trans = conn.begin()
-            try:
-                for events in tqdm(input_data_dict[dv]):
+                    for events in tqdm(input_data_dict[dv]):
 
-                    df = input_data_dict[dv][events]
-                    if select_type == 'week':
-                        try:
-                            df['date1'] = pd.to_datetime(df['date'].iloc[:, 0])
-                        except:
-                            df['date1'] = pd.to_datetime(df['date'])
-                        df.set_index('date1', inplace=True)
-                        # df = df.resample('W').sum()
-                        df.drop(['date'], axis=1, inplace=True)
-                        df = df.resample('W').agg(
-                            {col: foxlink_predict.choose_agg_func(col) for col in df.columns})
-                        df['date'] = df.index
+                        df = input_data_dict[dv][events]
+                        if select_type == 'week':
+                            try:
+                                df['date1'] = pd.to_datetime(df['date'].iloc[:, 0])
+                            except:
+                                df['date1'] = pd.to_datetime(df['date'])
+                            df.set_index('date1', inplace=True)
+                            # df = df.resample('W').sum()
+                            df.drop(['date'], axis=1, inplace=True)
+                            df = df.resample('W').agg(
+                                {col: foxlink_predict.choose_agg_func(col) for col in df.columns})
+                            df['date'] = df.index
 
-                    event = infos[dv][events]['event'].values[0]
+                        event = infos[dv][events]['event'].values[0]
 
-                    time = pd.to_datetime(
-                        infos[dv][events]['created_date'].values[0]).strftime('%Y%m%d%H%M')
-                    X = foxlink_predict.fit_model_data_preprocessing(df)
-                    model = foxlink_predict.map_model(
-                        dv, device_id, event, time, select_type)
-                    pred = model.predict(X)
+                        time = pd.to_datetime(
+                            infos[dv][events]['created_date'].values[0]).strftime('%Y%m%d%H%M')
+                        X = foxlink_predict.fit_model_data_preprocessing(df)
+                        model = foxlink_predict.map_model(
+                            dv, device_id, event, time, select_type)
+                        pred = model.predict(X)
 
-                    df = df.T.drop_duplicates().T
-                    df['pred'] = pred
-                    df['device'] = device_id
-                    df['event'] = event
-                    if select_type == 'week':
-                        df['pred_date'] = df.date.apply(
-                            lambda x: x + pd.Timedelta(days=7))
-                        df.reset_index(inplace=True, drop=True)
-                        df['pred_type'] = 1
-                    else:
-                        df['pred_date'] = df.date.apply(
-                            lambda x: x + pd.Timedelta(days=1))
-                        df['pred_type'] = 0
+                        df = df.T.drop_duplicates().T
+                        df['pred'] = pred
+                        df['device'] = device_id
+                        df['event'] = event
+                        if select_type == 'week':
+                            df['pred_date'] = df.date.apply(
+                                lambda x: x + pd.Timedelta(days=7))
+                            df.reset_index(inplace=True, drop=True)
+                            df['pred_type'] = 1
+                        else:
+                            df['pred_date'] = df.date.apply(
+                                lambda x: x + pd.Timedelta(days=1))
+                            df['pred_type'] = 0
 
-                    df.rename(columns={'date': 'ori_date'}, inplace=True)
-                    df = df[['device', 'event',
-                            'ori_date', 'pred_date', 'pred', 'pred_type']]
-                    df.to_sql('predict_results', con=conn,
-                            if_exists='append', index=False)
-                trans.commit()
-            except Exception as e:
-                trans.rollback()
-                raise e
+                        df.rename(columns={'date': 'ori_date'}, inplace=True)
+                        df = df[['device', 'event',
+                                'ori_date', 'pred_date', 'pred', 'pred_type']]
+                        df.to_sql('predict_results', con=conn,
+                                if_exists='append', index=False)
+            trans.commit()
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.PREDICT_SUCCEEDED.value,
+                user='admin',
+                description=project_id
+            )
+        except Exception as e:
+            trans.rollback()
+            raise e
     return
 
 
