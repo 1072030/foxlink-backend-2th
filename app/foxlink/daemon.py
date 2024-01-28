@@ -96,12 +96,19 @@ if __name__ == "__main__":
         projects = await Project.objects.select_related("devices").all()
         projects_temp = []
         for i in projects:
-            checkLogs = await AuditLogHeader.objects.filter(
+            checkSucceedLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.PREDICT_SUCCEEDED.value,
                 created_date__gte=get_ntz_now().date(),
                 description=i.id
             ).limit(1).get_or_none()
-            if checkLogs is None:
+            checkFailLogs = await AuditLogHeader.objects.filter(
+                action=AuditActionEnum.PREDICT_FAILED.value,
+                created_date__gte=get_ntz_now().date(),
+                description=i.id
+            ).limit(3).all()
+
+            # failed over three times => dont continue
+            if checkSucceedLogs is None and len(checkFailLogs) != 3:
                 projects_temp.append(i)
 
         if len(projects_temp) == 0:
