@@ -87,9 +87,13 @@ if __name__ == "__main__":
     @transaction(callback=True)
     @show_duration
     async def daily_project_data_handler(handler=[]):
-        daily_process_timer = await Env.objects.filter(key="daily_preprocess_timer").get_or_none()
+        checkEnv = await Env.objects.filter(key="daily_preprocess_timer").get_or_none()
+        if checkEnv is None:
+            raise HTTPException(400,"can not find 'daily_preprocess_timer' env settings")
         
-        if daily_process_timer is None:
+        updateTimer = datetime.strptime(checkEnv.value,'%H:%M:%S')
+
+        if get_ntz_now() <= get_ntz_now().replace(hour=updateTimer.hour,minute=updateTimer.minute,second=updateTimer.second):
             return
 
 
@@ -97,24 +101,34 @@ if __name__ == "__main__":
         projects = await Project.objects.all()
         project_ids = [i.id for i in projects]
         for i in projects:
-            checklog = await AuditLogHeader.objects.filter(action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,description=i.id).order_by('-created_date').limit(1).get_or_none()
+            checklog = await AuditLogHeader.objects.filter(
+                action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
+                created_date__gte=get_ntz_now().date(),
+                description=i.id
+            ).order_by('-created_date').limit(1).get_or_none()
+
+            checkFailLogs = await AuditLogHeader.objects.filter(
+                action=AuditActionEnum.DAILY_PREPROCESSING_FAILED.value,
+                created_date__gte=get_ntz_now().date(),
+                description=i.id
+            ).limit(3).all()
             if checklog is None:
                 continue
-            if get_ntz_now().day == checklog.created_date.day:
+            if len(checkFailLogs) == 3:
+                project_ids.remove(i.id)
+                continue
+            if get_ntz_now().date == checklog.created_date.date:
                 project_ids.remove(i.id)
 
-
-        print(project_ids)
-        if get_ntz_now().hour == datetime.strptime(daily_process_timer.value,'%H:%M:%S').hour:
-            await asyncio.gather(
-                *[UpdatePreprocessingData(project_id) for project_id in project_ids]
-            )
+        await asyncio.gather(
+            *[UpdatePreprocessingData(project_id) for project_id in project_ids]
+        )
         return
     
     @transaction(callback=True)
     @ show_duration
-    async def daily_project_predict(handler=[]):
-        checkEnv = await Env.objects.filter(key="daily_project_predict").get_or_none()
+    async def daily_project_predict_handler(handler=[]):
+        checkEnv = await Env.objects.filter(key="daily_predict_timer").get_or_none()
         if checkEnv is None:
             raise HTTPException(400,"can not find 'daily_project_predict' env settings")
         
@@ -131,6 +145,7 @@ if __name__ == "__main__":
                 created_date__gte=get_ntz_now().date(),
                 description=i.id
             ).limit(1).get_or_none()
+
             checkFailLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.PREDICT_FAILED.value,
                 created_date__gte=get_ntz_now().date(),

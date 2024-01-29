@@ -4,6 +4,7 @@ from app.env import (
     DATABASE_USER,
     DATABASE_PASSWORD,
     DATABASE_NAME,
+    DATABASE_PORT
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
@@ -23,7 +24,7 @@ from app.foxlink.db import foxlink_dbs
 # -- init --
 jobstores = {
     # pickle_protocol=2,
-    "default": SQLAlchemyJobStore(url=f"mysql+pymysql://root:AqqhQ993VNto@mysql:3306/foxlink", tablename="job")
+    "default": SQLAlchemyJobStore(url=f"mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}", tablename="job")
 }
 executors = {
     "default": ThreadPoolExecutor(20),
