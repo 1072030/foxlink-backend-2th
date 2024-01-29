@@ -201,7 +201,7 @@ async def checkUserSearchProjectPermission(user: User, permission: int):
     return user_access_project_id, user_access_project_name
 
 
-async def checkFoxlinkAuth(checkSSH: bool = False):
+async def checkFoxlinkAuth(type:str,user_id:str,password:str,system:str,checkSSH: bool = False):
     if checkSSH:
         ip = "192.168.65.210"
         username = "ntust"
@@ -223,7 +223,7 @@ async def checkFoxlinkAuth(checkSSH: bool = False):
         }
         x = requests.post(url, data=json.dumps(myobj))
         print(x)
-        return
+        return x
 
 
 async def getFoxlinkUser(user_id: str = "130316", system_id: int = 1, checkSSH: bool = False):

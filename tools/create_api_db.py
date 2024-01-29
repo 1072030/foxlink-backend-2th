@@ -8,7 +8,7 @@ from app.env import (
     DATABASE_PASSWORD,
     DATABASE_NAME
 )
-from app.core.database import metadata, create_engine, api_db, User
+from app.core.database import metadata, create_engine, api_db, User , Env
 
 print(f"Working at Foxlink DB")
 connection = mysql.connector.connect(
@@ -62,6 +62,18 @@ async def create_default_entries():
             current_UUID=0,
             flag=1
         )
+        envs = [
+            Env(
+                key="daily_preprocess_timer",
+                value="23:00:00"
+            ),
+            Env(
+                key="daily_predict_timer",
+                value="23:20:00"
+            )
+        ]
+        await Env.objects.bulk_create(envs)
+
     await api_db.disconnect()
 print("Creating Default Entries...")
 try:

@@ -18,7 +18,7 @@ from app.core.database import (
     AuditActionEnum,
 )
 from enum import Enum
-from app.services.project import ntust_engine
+from app.foxlink.db import foxlink_dbs
 
 # -- init --
 jobstores = {
@@ -55,7 +55,7 @@ def backup(path: str, description: str):
     name = name[0]+'-'+str(get_ntz_now().date())+'.'+name[1]
     mysqldump_cmd = f"mysqldump -h {DATABASE_HOST} -u {DATABASE_USER} -p{DATABASE_PASSWORD} {DATABASE_NAME} --lock-all-tables > {name}"
     subprocess.run(mysqldump_cmd, shell=True, check=True)
-    ntust_engine.execute(
+    foxlink_dbs.ntust_db.execute(
         f"INSERT INTO audit_log_headers (action,user,created_date,description) VALUES ('{AuditActionEnum.FULL_BACKUP.value}','admin','{get_ntz_now()}','{description}')")
 
 
@@ -65,14 +65,6 @@ async def get_all_jobs():
     # return res.__repr__()
 
     return [{"id": job.id, "func": job.func_ref, "args": job.args, "next_run_time": job.next_run_time + timedelta(hours=8)} for job in res]
-
-
-# @router.post("/", tags=["scheduler"])
-# async def set_daily_job(time: datetime):
-
-#     asyncIOScheduler.add_job(func=printname, trigger='interval', seconds=3)
-#     return "Health OK"
-
 
 @router.delete("/", tags=["scheduler"])
 async def delete_job(job_id: str):

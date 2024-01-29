@@ -4,9 +4,6 @@
 
 import pandas as pd
 import numpy as np
-from datetime import datetime
-
-from tqdm import tqdm
 
 import joblib
 
@@ -15,22 +12,15 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 # from sqlalchemy import create_engine
-from sqlalchemy.types import Float, Integer, Date, Time, DateTime, VARCHAR, DECIMAL, BigInteger, SmallInteger
 from app.foxlink.db import foxlink_dbs
 
 from fastapi.exceptions import HTTPException
 from app.core.database import (
     transaction,
     get_ntz_now,
-    User,
     Project,
-    ProjectUser,
     ProjectEvent,
-    UserLevel,
     Device,
-    AoiMeasure,
-    AoiFeature,
-    PredTarget,
     ErrorFeature
 )
 from app.env import (
@@ -72,7 +62,13 @@ class FoxlinkPredict:
         'Device_13':['package']
         }
         
-    async def data_preprocessing_from_sql(self,project_id:int):
+    async def data_preprocessing_from_sql(self,project_id:int,select_type:str):
+        if select_type == "day":
+            predict_date = get_ntz_now()
+        elif select_type == "week":
+            predict_date = get_ntz_now()
+        else:
+            predict_date = get_ntz_now()
         ## Todo：要將SQL目標改成要query的時間，這邊先以原數據做示範。
         infos = {}
         project = await Project.objects.filter(id=project_id).select_related(

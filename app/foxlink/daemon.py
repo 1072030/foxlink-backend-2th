@@ -30,8 +30,12 @@ if __name__ == "__main__":
         DEBUG
     )
     from app.core.database import (
+        transaction,
         get_ntz_now,
         api_db,
+        Project,
+        AuditLogHeader,
+        AuditActionEnum,
         Env
     )
 
@@ -42,7 +46,11 @@ if __name__ == "__main__":
         IntegrityError, InternalError, NotSupportedError,
         ProgrammingError
     )
-
+    from datetime import datetime
+    from app.services.project import(
+        UpdatePreprocessingData,
+        PredictData
+    )
     import traceback
 
     logger = logging.getLogger(f"foxlink(daemon)")
@@ -57,7 +65,8 @@ if __name__ == "__main__":
 
     _terminate = None
 
-    MAIN_ROUTINE_MIN_RUNTIME = 3
+    #main loop seconds
+    MAIN_ROUTINE_MIN_RUNTIME = 3600
     NOTIFICATION_INTERVAL = 30
 
     def show_duration(func):
@@ -69,6 +78,58 @@ if __name__ == "__main__":
             logger.info(f'[{func.__name__}] took {end - start:.2f} seconds.')
             return result
         return wrapper
+
+    @transaction(callback=True)
+    @show_duration
+    async def daily_project_data_handler(handler=[]):
+        daily_process_timer = await Env.objects.filter(key="daily_preprocess_timer").get_or_none()
+        
+        if daily_process_timer is None:
+            return
+
+
+        # need add check logs detail
+        projects = await Project.objects.all()
+        project_ids = [i.id for i in projects]
+        for i in projects:
+            checklog = await AuditLogHeader.objects.filter(action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,description=i.id).order_by('-created_date').limit(1).get_or_none()
+            if checklog is None:
+                continue
+            if get_ntz_now().day == checklog.created_date.day:
+                project_ids.remove(i.id)
+
+
+        print(project_ids)
+        if get_ntz_now().hour == datetime.strptime(daily_process_timer.value,'%H:%M:%S').hour:
+            await asyncio.gather(
+                *[UpdatePreprocessingData(project_id) for project_id in project_ids]
+            )
+        return
+
+    @transaction(callback=True)
+    @show_duration
+    async def daily_project_predict_handler(handler=[]):
+        daily_predict_timer = await Env.objects.filter(key="daily_predict_timer").get_or_none()
+
+        if daily_predict_timer is None:
+            return
+
+        # need add check logs detail
+
+        # projects = await Project.objects.all()
+        # project_ids = [i.id for i in projects]
+        # for i in projects:
+        #     checklog = await AuditLogHeader.objects.filter(action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,description=i.id).order_by('-created_date').limit(1).get_or_none()
+        #     if checklog is None:
+        #         continue
+        #     if get_ntz_now().day == checklog.created_date.day:
+        #         project_ids.remove(i.id)
+
+        # await asyncio.gather(
+        #     *[PredictData(project) for project in projects]
+        # )
+
+        return
 
     ######### main #########
 
@@ -121,6 +182,10 @@ if __name__ == "__main__":
                 logger.info('[main_routine] Foxlink daemon is running...')
 
                 beg_time = time.perf_counter()
+
+                await daily_project_data_handler()
+
+                await daily_project_predict_handler()
 
                 end_time = time.perf_counter()
 
