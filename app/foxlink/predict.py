@@ -15,22 +15,15 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 # from sqlalchemy import create_engine
-from sqlalchemy.types import Float, Integer, Date, Time, DateTime, VARCHAR, DECIMAL, BigInteger, SmallInteger
 from app.foxlink.db import foxlink_dbs
 
 from fastapi.exceptions import HTTPException
 from app.core.database import (
     transaction,
     get_ntz_now,
-    User,
     Project,
-    ProjectUser,
     ProjectEvent,
-    UserLevel,
     Device,
-    AoiMeasure,
-    AoiFeature,
-    PredTarget,
     ErrorFeature
 )
 from app.env import (

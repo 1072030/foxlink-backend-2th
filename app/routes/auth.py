@@ -38,15 +38,27 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 # transaction的用意是在交付一致性
 # 全有全無律
 @transaction(callback=True)
-async def login_routine(form_data, handler=[], checkFoxlink:bool = False):
+async def login_routine(form_data, handler=[], checkFoxlink:bool = True):
     user = await authenticate_user(form_data.username, form_data.password)
 
-    if checkFoxlink and user is not None:
-        foxlink = await checkFoxlinkAuth(type="login",user_id=user.badge,password=form_data.password,system="001",checkSSH=True)
-    elif(user is None):
-        raise HTTPException(
-            status_code=400, detail="user badge doesnt exist."
-        )
+    # if checkFoxlink and user is None:
+    #     foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,password=form_data.password,system="001",checkSSH=True)
+    # elif(user is None):
+    #     raise HTTPException(
+    #         status_code=400, detail="user badge doesnt exist."
+    #     )
+
+    # if foxlink.data.code == 1:
+    #     await User.objects.create(
+    #         badge=foxlink.data.user_id,
+    #         username=foxlink.data.user_name,
+    #         current_UUID=0,
+    #         flag=1
+    #     )
+    # else:
+    #     raise HTTPException(
+    #         status_code=400, detail="user doesnt exist in foxlink dbs."
+    #     )
 
     access_token = create_access_token(
         data={

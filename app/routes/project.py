@@ -184,10 +184,6 @@ async def preprocessing_data(project_id: int, user: User = Depends(get_current_u
 
 @router.get("/update-preprocessing-data", tags=["project"])
 async def update_preprocessing_data(project_id: int, user: User = Depends(get_current_user())):
-    await AuditLogHeader.objects.create(
-        action=AuditActionEnum.DAILY_PREPROCESSING_STARTED.value,
-        user=user.badge
-    )
     try:
         await UpdatePreprocessingData(project_id)
         await AuditLogHeader.objects.create(

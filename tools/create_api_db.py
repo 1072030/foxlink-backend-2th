@@ -62,14 +62,18 @@ async def create_default_entries():
             current_UUID=0,
             flag=1
         )
-    await Env.objects.create(
-            key="daily_project_preprocess",
-            value="06:00:00"
-        )
-    await Env.objects.create(
-            key="daily_project_predict",
-            value="06:20:00"
-        )
+        envs = [
+            Env(
+                key="daily_preprocess_timer",
+                value="23:00:00"
+            ),
+            Env(
+                key="daily_predict_timer",
+                value="23:20:00"
+            )
+        ]
+        await Env.objects.bulk_create(envs)
+
     await api_db.disconnect()
 print("Creating Default Entries...")
 try:

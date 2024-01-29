@@ -52,7 +52,11 @@ if __name__ == "__main__":
         IntegrityError, InternalError, NotSupportedError,
         ProgrammingError
     )
-
+    from datetime import datetime
+    from app.services.project import(
+        UpdatePreprocessingData,
+        PredictData
+    )
     import traceback
 
     logger = logging.getLogger(f"foxlink(daemon)")
@@ -81,22 +85,30 @@ if __name__ == "__main__":
         return wrapper
 
     @transaction(callback=True)
-    @ show_duration
-    async def daily_project_preprocess_data():
-        checkEnv = await Env.objects.filter(key="daily_project_preprocess").get_or_none()
-        if checkEnv is None:
-            raise HTTPException(400,"can not find 'daily_project_preprocess' env settings")
-
-        updateTimer = datetime.strptime(checkEnv.value,'%H:%M:%S')
-        if get_ntz_now() <= get_ntz_now().replace(hour=updateTimer.hour,minute=updateTimer.minute,second=updateTimer.second):
+    @show_duration
+    async def daily_project_data_handler(handler=[]):
+        daily_process_timer = await Env.objects.filter(key="daily_preprocess_timer").get_or_none()
+        
+        if daily_process_timer is None:
             return
 
+
+        # need add check logs detail
         projects = await Project.objects.all()
+        project_ids = [i.id for i in projects]
+        for i in projects:
+            checklog = await AuditLogHeader.objects.filter(action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,description=i.id).order_by('-created_date').limit(1).get_or_none()
+            if checklog is None:
+                continue
+            if get_ntz_now().day == checklog.created_date.day:
+                project_ids.remove(i.id)
 
-        await asyncio.gather(*[
-            PredictData(detail['project_id'],detail['select_type']) for detail in predict_required
-        ])
 
+        print(project_ids)
+        if get_ntz_now().hour == datetime.strptime(daily_process_timer.value,'%H:%M:%S').hour:
+            await asyncio.gather(
+                *[UpdatePreprocessingData(project_id) for project_id in project_ids]
+            )
         return
     
     @transaction(callback=True)
@@ -211,7 +223,9 @@ if __name__ == "__main__":
 
                 beg_time = time.perf_counter()
 
-                await daily_project_predict()
+                await daily_project_data_handler()
+
+                await daily_project_predict_handler()
 
                 end_time = time.perf_counter()
 

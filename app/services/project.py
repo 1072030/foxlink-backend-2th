@@ -32,9 +32,7 @@ from app.env import (
     DATABASE_PASSWORD,
     DATABASE_NAME
 )
-from app.foxlink.db import (
-    foxlink_dbs
-)
+from app.foxlink.db import foxlink_dbs
 from app.foxlink.train import foxlink_train
 from app.foxlink.predict import foxlink_predict
 import datetime
@@ -46,67 +44,8 @@ import joblib
 # ----
 
 FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
-
-def engine(user: str, password: str, host: str, database: str):
-    return f'mysql+pymysql://{user}:{password}@{host}/{database}'
-
-ntust_engine = create_engine(engine(
-    DATABASE_USER, DATABASE_PASSWORD, DATABASE_HOST+":"+str(DATABASE_PORT), DATABASE_NAME))
-foxlink_engine = create_engine(
-    engine(FOXLINK_EVENT_DB_USER, FOXLINK_EVENT_DB_PWD, FOXLINK_EVENT_DB_HOSTS[0], FOXLINK_EVENT_DB_NAME[0]))
-
-
-# async def rollbackfunction():
-#     try:
-#         with ntust_engine.connect() as conn:
-#             trans = conn.begin()
-#             df = pd.DataFrame({
-#                 'id':2,
-#                 'key':"testrollback",
-#                 'value':"testrollback"
-#             },index=[0])
-#             df2 = pd.DataFrame({
-#                 'id':2,
-#                 'key':"testrollback",
-#                 'value':"testrollback"
-#             },index=[0]) 
-#             df.to_sql(con=conn,name='env',if_exists='append',index=False)
-#             df.to_sql(con=conn,name='env',if_exists='append',index=False)
-#             trans.commit()
-#             conn.close()
-#     except (SQLAlchemyError,Exception):
-#         trans.rollback()
-#         raise Exception
-#     return
-# def to_sql_transaction(data:pd.DataFrame(),table:str):
-#     with ntust_engine.connect as conn:
-#         trans = conn.begin()
-#         try:
-#             print(f'import {table} with to_sql function')
-#         except Exception as e:
-#             raise e
-
-#     return True
-
-#  with ntust_engine.connect() as conn:
-#         tran = conn.begin()
-#         try:
-#             # with ntust_engine.begin() as conn:
-#             print('import error_feature')
-#             print(error_feature)
-#             error_feature.to_sql(name='error_feature',
-#                                 con=conn, if_exists='append', index=False)
-#             tran.commit()
-#         except Exception as e:
-#             print(f"error in to sql: {repr(e)}")
-#             tran.rollback()
-#             raise e
-
-# foxlink_engine = create_engine(
-#         f'mysql+pymysql://ntust:ntustpwd@172.20.0.1:12345/aoi')
-# ntust_engine = create_engine(
-#         f'mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink')
-
+ntust_engine = foxlink_dbs.ntust_db
+foxlink_engine = foxlink_dbs.foxlink_db
 
 async def DeleteProject(project_id: int):
     project = await Project.objects.filter(id=project_id).get_or_none()
@@ -696,6 +635,13 @@ async def PreprocessingData(project_id: int):
 
 async def UpdatePreprocessingData(project_id: int):
 
+    await AuditLogHeader.objects.create(
+        action=AuditActionEnum.DAILY_PREPROCESSING_STARTED.value,
+        user='admin',
+        description=project_id
+    )
+    # now = datetime.datetime(2023,2,1,7,39)
+
     now = get_ntz_now()  # 更新資料時間
     update_workday = (now - pd.Timedelta(hours=7, minutes=40)
                       ).date()  # 更新資料的工作日期
@@ -905,7 +851,6 @@ async def UpdatePreprocessingData(project_id: int):
             print(aoi_feature)
             aoi_feature.to_sql(name='aoi_feature', con=conn,
                             if_exists='append', index=False)
-            trans.commit()
         except Exception as e:
             print(f"error in to sql: {repr(e)}")
             trans.rollback()
@@ -925,8 +870,7 @@ async def UpdatePreprocessingData(project_id: int):
         """
         temp = pd.read_sql(sql, foxlink_engine)  # 讀取異常事件歷史資料
         df = pd.concat([temp, df], ignore_index=True)
-    df_auto = df[(df["START_FILE_NAME"] == "auto") | (
-        df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
+    df_auto = df[(df["START_FILE_NAME"] == "auto") | (df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
     # 合併有 auto 的 event
     df_auto_merge = pd.DataFrame()  # 儲存處理後的event
     while len(df_auto) != 0:
@@ -1039,6 +983,11 @@ async def UpdatePreprocessingData(project_id: int):
             error_feature.to_sql(name='error_feature',
                                 con=conn, if_exists='append', index=False)
             tran.commit()
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
+                user='admin',
+                description=project_id
+            )
         except Exception as e:
             print(f"error in to sql: {repr(e)}")
             tran.rollback()
