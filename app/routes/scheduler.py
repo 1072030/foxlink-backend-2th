@@ -23,7 +23,7 @@ from app.services.project import ntust_engine
 # -- init --
 jobstores = {
     # pickle_protocol=2,
-    "default": SQLAlchemyJobStore(url=f"mysql+pymysql://root:AqqhQ993VNto@mysql-test:3306/foxlink", tablename="job")
+    "default": SQLAlchemyJobStore(url=f"mysql+pymysql://root:AqqhQ993VNto@mysql:3306/foxlink", tablename="job")
 }
 executors = {
     "default": ThreadPoolExecutor(20),
@@ -44,11 +44,6 @@ class Select_type(Enum):
     Daily = "Daily"
     Weekly = "Weekly"
     Monthly = "Monthly"
-
-
-def printname():
-    print("Mike")
-
 
 def backup(path: str, description: str):
     name = path.split('.')

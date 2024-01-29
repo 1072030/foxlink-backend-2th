@@ -8,7 +8,7 @@ from app.env import (
     DATABASE_PASSWORD,
     DATABASE_NAME
 )
-from app.core.database import metadata, create_engine, api_db, User
+from app.core.database import metadata, create_engine, api_db, User , Env
 
 print(f"Working at Foxlink DB")
 connection = mysql.connector.connect(
@@ -61,6 +61,14 @@ async def create_default_entries():
             username='admin',
             current_UUID=0,
             flag=1
+        )
+    await Env.objects.create(
+            key="daily_project_preprocess",
+            value="06:00:00"
+        )
+    await Env.objects.create(
+            key="daily_project_predict",
+            value="06:20:00"
         )
     await api_db.disconnect()
 print("Creating Default Entries...")

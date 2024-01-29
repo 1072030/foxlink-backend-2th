@@ -31,6 +31,7 @@ if __name__ == "__main__":
         DEBUG
     )
     from app.core.database import (
+        transaction,
         get_ntz_now,
         api_db,
         Env,
@@ -79,11 +80,28 @@ if __name__ == "__main__":
             return result
         return wrapper
 
-
+    @transaction(callback=True)
+    @ show_duration
     async def daily_project_preprocess_data():
+        checkEnv = await Env.objects.filter(key="daily_project_preprocess").get_or_none()
+        if checkEnv is None:
+            raise HTTPException(400,"can not find 'daily_project_preprocess' env settings")
+
+        updateTimer = datetime.strptime(checkEnv.value,'%H:%M:%S')
+        if get_ntz_now() <= get_ntz_now().replace(hour=updateTimer.hour,minute=updateTimer.minute,second=updateTimer.second):
+            return
+
+        projects = await Project.objects.all()
+
+        await asyncio.gather(*[
+            PredictData(detail['project_id'],detail['select_type']) for detail in predict_required
+        ])
+
         return
     
-    async def daily_project_predict(handlers=[]):
+    @transaction(callback=True)
+    @ show_duration
+    async def daily_project_predict(handler=[]):
         checkEnv = await Env.objects.filter(key="daily_project_predict").get_or_none()
         if checkEnv is None:
             raise HTTPException(400,"can not find 'daily_project_predict' env settings")
