@@ -34,14 +34,13 @@ origins = [
     "http://localhost:3000",
     "http://localhost:8080",
     "http://localhost:8888",
+    "http://localhost:8088",
     "http://127.0.0.1:8888",
     "http://127.0.0.1:8086",
-    "http://140.118.157.9:43114",
-    "http://192.168.65.210:8083",
-    "http://140.118.157.9:8086",
-    "http://192.168.65.210:8086",
     "http://ntust.foxlink.com.tw:*",
+    "http://ntust2.foxlink.com.tw:*",
     "http://192.168.0.115:8080",
+    "http://192.168.65.212:*",
     "*"
 ]
 

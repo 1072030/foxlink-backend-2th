@@ -12,6 +12,7 @@ from app.core.database import (
     User,
     AuditActionEnum,
     AuditLogHeader,
+    UserLevel
 )
 from app.services.project import (
     AddNewProjectWorker,
@@ -40,7 +41,7 @@ async def get_all_project(user: User = Depends(get_current_user())):
     """
     取得所有專案內容(當前使用者權限內所有的專案)
     """
-    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, 4)
+    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_manager.value)
     if len(project_id_list) != 0:
         return await (Project.objects.filter(
             id__in=project_id_list
@@ -52,7 +53,7 @@ async def get_all_project(project_id: int, user: User = Depends(get_current_user
     """
     取得對應專案內的所有人員(當前使用者權限內的專案)
     """
-    user = await checkUserProjectPermission(project_id, user, 5)
+    user = await checkUserProjectPermission(project_id, user, UserLevel.project_manager.value)
 
     try:
         user = await ProjectUser.objects.select_related(['user']).filter(project=project_id).all()
@@ -75,7 +76,7 @@ async def delete_project(project_id: int, user: User = Depends(get_current_user(
     """
     刪除專案(僅專案內最高階級人員)
     """
-    user = await checkUserProjectPermission(project_id, user, 5)
+    user = await checkUserProjectPermission(project_id, user, UserLevel.project_manager.value)
     if user is not None:
         project_name = await DeleteProject(project_id)
         await AuditLogHeader.objects.create(
@@ -95,7 +96,7 @@ async def add_new_workers(dto: NewUserDto, user: User = Depends(get_current_user
     """
     新增專案內人員(會確認新增者權限)
     """
-    user = await checkUserProjectPermission(dto.project_id, user, 5)
+    user = await checkUserProjectPermission(dto.project_id, user, UserLevel.project_leader.value)
     if user is not None:
         await AddNewProjectWorker(dto.project_id, dto.user_id, dto.permission)
         await AuditLogHeader.objects.create(
@@ -115,7 +116,7 @@ async def delete_workers(project_id: int, user_id: str, user: User = Depends(get
     """
     新增專案內人員(會確認新增者權限)
     """
-    user = await checkUserProjectPermission(project_id, user, 5)
+    user = await checkUserProjectPermission(project_id, user, UserLevel.project_leader.value)
     if user is not None:
         await RemoveProjectWorker(project_id, user_id)
         await AuditLogHeader.objects.create(
@@ -144,6 +145,7 @@ async def add_project_and_events(dto: List[NewProjectDto], user: User = Depends(
     """
     # add new project
     user = await checkAdminPermission(user)
+
     if user is not None:
         project = await AddNewProjectEvents(dto)
         await AuditLogHeader.objects.create(
@@ -321,12 +323,3 @@ async def predict_data(project_id: int, pred_type: str, user: User = Depends(get
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"PREDICT_FAILED : {repr(e)}"
         )
     return
-
-# @router.get("/happened-check",tags=["project"])
-# async def happened_check(project_id:int,start_time:datetime,select_type:str):
-#     await HappenedCheck(project_id,start_time,select_type)
-#     return
-
-@router.get("/testssh")
-async def sshconnect():
-    return await checkFoxlinkAuth(True)

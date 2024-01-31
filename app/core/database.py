@@ -144,9 +144,9 @@ def transaction_with_logger(logger):
 #     admin = 5  # 管理員
 
 class UserLevel(Enum):
-    base = 1
-    manager = 2
-    project_owner = 3
+    project_worker = 1
+    project_leader = 2
+    project_manager = 3
     admin = 4
 
 # class ShiftType(Enum):

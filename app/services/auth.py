@@ -171,7 +171,7 @@ async def checkUserProjectPermission(project_id: int, user: User, permission: in
     if project_user is None:
         raise HTTPException(404, detail='this user didnt in the project')
 
-    if not project_user.permission == permission:
+    if not project_user.permission >= permission:
         raise HTTPException(
             status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
         )
@@ -227,7 +227,7 @@ async def checkFoxlinkAuth(type:str,user_id:str,password:str,system:str,checkSSH
         return response.json()
 
 
-async def getFoxlinkUser(user_id: str = "130316", system_id: int = 1, checkSSH: bool = False):
+async def getFoxlinkUser(user_id: str , system_id: int = 16, checkSSH: bool = False):
     if checkSSH:
         ip = "192.168.65.210"
         username = "ntust"
@@ -245,5 +245,5 @@ async def getFoxlinkUser(user_id: str = "130316", system_id: int = 1, checkSSH: 
             "user_id": user_id,
             "system": system_id
         }
-        x = requests.post(url, data=json.dumps(myobj))
-        return x
+        response = requests.post(url, data=myobj)
+        return response.json()
