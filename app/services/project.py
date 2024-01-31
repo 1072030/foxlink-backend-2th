@@ -113,7 +113,6 @@ async def SearchProjectDevices(project_name: str):
     return await foxlink_dbs.get_device_names(project_name=project_name)
 
 
-@transaction()
 async def AddNewProjectEvents(dto: List[NewProjectDto]):
     project_name = dto[0].project
     # check selected devices
@@ -154,7 +153,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
 
     # add admin into project
     admin = await User.objects.filter(badge='admin').get_or_none()
-    await ProjectUser.objects.create(project=project.id, user=admin.badge, permission=5)
+    await ProjectUser.objects.create(project=project.id, user=admin.badge, permission=4)
 
     event_data = {}
     for selected in dto:
@@ -168,7 +167,8 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
             """
         )
         try:
-            for i in await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt):
+            foxlink = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+            for i in foxlink:
                 name = i.Device_Name + "-" + i.Line + "-" + selected.cname
                 if name not in event_data.keys():
                     event_data[name] = event_data.get(
@@ -223,7 +223,8 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
             bulk_create_aoi_measure.append(aoi_measure)
 
     await AoiMeasure.objects.bulk_create(bulk_create_aoi_measure)
-    return
+
+    return project
 
 
 async def PreprocessingData(project_id: int):
@@ -634,12 +635,6 @@ async def PreprocessingData(project_id: int):
 
 
 async def UpdatePreprocessingData(project_id: int):
-
-    await AuditLogHeader.objects.create(
-        action=AuditActionEnum.DAILY_PREPROCESSING_STARTED.value,
-        user='admin',
-        description=project_id
-    )
     # now = datetime.datetime(2023,2,1,7,39)
 
     now = get_ntz_now()  # 更新資料時間
@@ -1082,11 +1077,6 @@ async def TrainingData(project_id: int, select_type: str):
 
 
 async def PredictData(project_id: int, select_type: str):
-    await AuditLogHeader.objects.create(
-        action=AuditActionEnum.PREDICT_FAILED.value,
-        user='admin',
-        description=project_id
-    )
     with ntust_engine.connect() as conn:
         trans = conn.begin()
         try:
@@ -1142,11 +1132,6 @@ async def PredictData(project_id: int, select_type: str):
                         df.to_sql('predict_results', con=conn,
                                 if_exists='append', index=False)
             trans.commit()
-            await AuditLogHeader.objects.create(
-                action=AuditActionEnum.PREDICT_SUCCEEDED.value,
-                user='admin',
-                description=project_id
-            )
         except Exception as e:
             trans.rollback()
             raise e

@@ -54,6 +54,7 @@ if __name__ == "__main__":
     )
     from datetime import datetime
     from app.services.project import(
+        PreprocessingData,
         UpdatePreprocessingData,
         PredictData
     )
@@ -84,6 +85,52 @@ if __name__ == "__main__":
             return result
         return wrapper
 
+    # @transaction(callback=True)
+    # @show_duration
+    # async def new_project_data_handler(handler=[]):
+    #     checkEnv = await Env.objects.filter(key="new_preprocess_timer").get_or_none()
+    #     if checkEnv is None:
+    #         raise HTTPException(400,"can not find 'new_preprocess_timer' env settings")
+        
+    #     updateTimer = datetime.strptime(checkEnv.value,'%H:%M:%S')
+
+    #     if get_ntz_now() <= get_ntz_now().replace(hour=updateTimer.hour,minute=updateTimer.minute,second=updateTimer.second):
+    #         return
+        
+    #     projects = await Project.objects.all()
+    #     project_ids = [i.id for i in projects]
+    #     for i in projects:
+    #         checklog = await AuditLogHeader.objects.filter(
+    #             action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
+    #             description=i.id
+    #         ).limit(1).get_or_none()
+    #         if checklog is not None:
+    #             project_ids.remove(i.id)
+
+    #     bulk_create_started = [
+    #         AuditLogHeader(
+    #             action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
+    #             user='admin',
+    #             description=i
+    #         )for i in project_ids
+    #     ]
+    #     await AuditLogHeader.objects.bulk_create(bulk_create_started)
+    #     # started 
+    #     await asyncio.gather(
+    #         *[PreprocessingData(project_id) for project_id in project_ids]
+    #     )
+
+    #     bulk_create_succeeded = [
+    #         AuditLogHeader(
+    #             action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
+    #             user='admin',
+    #             description=i
+    #         )for i in project_ids
+    #     ]
+    #     await AuditLogHeader.objects.bulk_create(bulk_create_succeeded)
+    #     return
+
+
     @transaction(callback=True)
     @show_duration
     async def daily_project_data_handler(handler=[]):
@@ -96,22 +143,24 @@ if __name__ == "__main__":
         if get_ntz_now() <= get_ntz_now().replace(hour=updateTimer.hour,minute=updateTimer.minute,second=updateTimer.second):
             return
 
-
         # need add check logs detail
         projects = await Project.objects.all()
         project_ids = [i.id for i in projects]
         for i in projects:
+            # check succeed logs
             checklog = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
                 created_date__gte=get_ntz_now().date(),
                 description=i.id
             ).order_by('-created_date').limit(1).get_or_none()
 
+            # check failed logs
             checkFailLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.DAILY_PREPROCESSING_FAILED.value,
                 created_date__gte=get_ntz_now().date(),
                 description=i.id
             ).limit(3).all()
+
             if checklog is None:
                 continue
             if len(checkFailLogs) == 3:
@@ -120,9 +169,27 @@ if __name__ == "__main__":
             if get_ntz_now().date == checklog.created_date.date:
                 project_ids.remove(i.id)
 
+        bulk_create_started = [
+            AuditLogHeader(
+                action=AuditActionEnum.DAILY_PREPROCESSING_STARTED.value,
+                user='admin',
+                description=project_id
+            ) for project_id in project_ids
+        ]
+        await AuditLogHeader.objects.bulk_create(bulk_create_started)
+
         await asyncio.gather(
             *[UpdatePreprocessingData(project_id) for project_id in project_ids]
         )
+
+        bulk_create_succeeded = [
+            AuditLogHeader(
+                action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
+                user='admin',
+                description=project_id
+            ) for project_id in project_ids
+        ]
+        await AuditLogHeader.objects.bulk_create(bulk_create_succeeded)
         return
     
     @transaction(callback=True)
@@ -136,7 +203,7 @@ if __name__ == "__main__":
 
         if get_ntz_now() <= get_ntz_now().replace(hour=updateTimer.hour,minute=updateTimer.minute,second=updateTimer.second):
             return
-
+        
         projects = await Project.objects.select_related("devices").all()
         projects_temp = []
         for i in projects:
@@ -182,9 +249,34 @@ if __name__ == "__main__":
                         "select_type":"week"
                     })
                 break
+
+        bulk_create_started = []
+        for deatil in predict_required:
+            bulk_create_started.append(
+                AuditLogHeader(
+                    action=AuditActionEnum.PREDICT_STARTED.value,
+                    user='admin',
+                    description=deatil["project_id"]
+                )
+            )
+
+        await AuditLogHeader.objects.bulk_create(bulk_create_started)
+
         await asyncio.gather(*[
             PredictData(detail['project_id'],detail['select_type']) for detail in predict_required
         ])
+        bulk_create_started = []
+        for deatil in predict_required:
+            bulk_create_started.append(
+                AuditLogHeader(
+                    action=AuditActionEnum.PREDICT_SUCCEEDED.value,
+                    user='admin',
+                    description=deatil["project_id"]
+                )
+            )
+
+        await AuditLogHeader.objects.bulk_create(bulk_create_started)
+
         return
     ######### main #########
 

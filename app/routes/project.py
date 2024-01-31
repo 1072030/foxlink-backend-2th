@@ -6,6 +6,7 @@ from fastapi.exceptions import HTTPException
 from typing import List
 # from fastapi import Query
 from app.core.database import (
+    transaction,
     Project,
     ProjectUser,
     User,
@@ -39,7 +40,7 @@ async def get_all_project(user: User = Depends(get_current_user())):
     """
     取得所有專案內容(當前使用者權限內所有的專案)
     """
-    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, 5)
+    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, 4)
     if len(project_id_list) != 0:
         return await (Project.objects.filter(
             id__in=project_id_list
@@ -136,26 +137,93 @@ async def search_project_devices(project_name: str):
     """
     return await SearchProjectDevices(project_name)
 
-
 @router.post("/add-project-events", status_code=200, tags=["project"])
 async def add_project_and_events(dto: List[NewProjectDto], user: User = Depends(get_current_user())):
     """
     搜尋專案內的所有事件(會確認新增者權限 = admin)
     """
+    # add new project
     user = await checkAdminPermission(user)
     if user is not None:
-        await AddNewProjectEvents(dto)
+        project = await AddNewProjectEvents(dto)
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.ADD_NEW_PROJECT.value,
             user=user.badge,
-            description=f"{dto[0].project}"
+            description=project.id
         )
-        return
-    else:
+
+    await AuditLogHeader.objects.create(
+        action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
+        user=user.badge,
+        description=project.id
+    )
+    # preprocess
+    try:
+        await PreprocessingData(project.id)
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
+            user=user.badge,
+            description=project.id
+        )
+    except Exception as e:
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
+            user=user.badge,
+            description=project.id
+        )
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Permission Denied"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"DATA_PREPROCESSING_FAILED : {repr(e)}"
+        )    
+    # training type : day
+    await AuditLogHeader.objects.create(
+        action=AuditActionEnum.TRAINING_STARTED_DAILY.value,
+        user=user.badge,
+        description=project.id
+    )
+    try:
+        await TrainingData(project.id, "day")
+
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.TRAINING_SUCCEEDED_DAILY.value,
+            user=user.badge,
+            description=project.id
         )
-    # user:User = await checkUserProjectPermission(project_id,user,5)
+    except Exception as e:
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.TRAINING_FAILED_DAILY.value,
+            user=user.badge,
+            description=project.id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"TRAINING_FAILED_DAILY : {repr(e)}"
+        )
+
+    # training type : week
+    await AuditLogHeader.objects.create(
+        action=AuditActionEnum.TRAINING_STARTED_WEEKLY.value,
+        user=user.badge,
+        description=project.id
+    )
+    try:
+        await TrainingData(project.id, "week")
+        
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.TRAINING_SUCCEEDED_WEEKLY.value,
+            user=user.badge,
+            description=project.id
+        )
+    except Exception as e:
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.TRAINING_FAILED_WEEKLY.value,
+            user=user.badge,
+            description=project.id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"TRAINING_FAILED_WEEKLY : {repr(e)}"
+        )
+
+    return
+
 
 
 @router.get("/preprocessing-data", tags=["project"])
@@ -163,19 +231,22 @@ async def preprocessing_data(project_id: int, user: User = Depends(get_current_u
 
     await AuditLogHeader.objects.create(
         action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
-        user=user.badge
+        user=user.badge,
+        description=project_id
     )
     try:
         await PreprocessingData(project_id)
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
-            user=user.badge
+            user=user.badge,
+            description=project_id
         )
         return
     except Exception as e:
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
-            user=user.badge
+            user=user.badge,
+            description=project_id
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"DATA_PREPROCESSING_FAILED : {repr(e)}"
@@ -184,16 +255,23 @@ async def preprocessing_data(project_id: int, user: User = Depends(get_current_u
 
 @router.get("/update-preprocessing-data", tags=["project"])
 async def update_preprocessing_data(project_id: int, user: User = Depends(get_current_user())):
+    await AuditLogHeader.objects.create(
+            action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
+            user=user.badge,
+            description=project_id
+    )
     try:
         await UpdatePreprocessingData(project_id)
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
-            user=user.badge
+            user=user.badge,
+            description=project_id
         )
     except Exception as e:
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DAILY_PREPROCESSING_FAILED.value,
-            user=user.badge
+            user=user.badge,
+            description=project_id
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"DAILY_PREPROCESSING_FAILED : {repr(e)}"
@@ -204,16 +282,19 @@ async def update_preprocessing_data(project_id: int, user: User = Depends(get_cu
 @router.get("/training-data", tags=["project"])
 async def training_data(project_id: int, select_type: str, user: User = Depends(get_current_user())):
 
+
     try:
         await TrainingData(project_id, select_type)
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.TRAINING_SUCCEEDED.value,
-            user=user.badge
+            user=user.badge,
+            description=project_id
         )
     except Exception as e:
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.TRAINING_FAILED.value,
             user=user.badge,
+            description=project_id
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"TRAINING_FAILED : {repr(e)}"
@@ -223,9 +304,18 @@ async def training_data(project_id: int, select_type: str, user: User = Depends(
 
 @router.get("/predict-data", tags=["project"])
 async def predict_data(project_id: int, pred_type: str, user: User = Depends(get_current_user())):
-
+    await AuditLogHeader.objects.create(
+        action=AuditActionEnum.PREDICT_STARTED.value,
+        user=user.badge,
+        description=project_id
+    )
     try:
         await PredictData(project_id, pred_type)
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.PREDICT_SUCCEEDED.value,
+            user=user.badge,
+            description=project_id
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"PREDICT_FAILED : {repr(e)}"

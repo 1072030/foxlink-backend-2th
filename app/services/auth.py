@@ -221,9 +221,10 @@ async def checkFoxlinkAuth(type:str,user_id:str,password:str,system:str,checkSSH
             "password": password,
             "system": system
         }
-        x = requests.post(url, data=json.dumps(myobj))
-        print(x)
-        return x
+        response = requests.post(url, data=myobj)
+        response.raise_for_status()  # 如果请求不成功，则抛出异常
+        # 返回 JSON 响应
+        return response.json()
 
 
 async def getFoxlinkUser(user_id: str = "130316", system_id: int = 1, checkSSH: bool = False):
