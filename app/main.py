@@ -41,7 +41,6 @@ origins = [
     "http://ntust2.foxlink.com.tw:*",
     "http://192.168.0.115:8080",
     "http://192.168.65.212:*",
-    "*"
 ]
 
 app.add_middleware(

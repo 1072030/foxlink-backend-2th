@@ -257,24 +257,10 @@ async def preprocessing_data(project_id: int, user: User = Depends(get_current_u
 
 @router.get("/update-preprocessing-data", tags=["project"])
 async def update_preprocessing_data(project_id: int, user: User = Depends(get_current_user())):
-    await AuditLogHeader.objects.create(
-            action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
-            user=user.badge,
-            description=project_id
-    )
+    user = await checkUserProjectPermission(project_id, user, UserLevel.project_manager.value)
     try:
-        await UpdatePreprocessingData(project_id)
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
-            user=user.badge,
-            description=project_id
-        )
+        await UpdatePreprocessingData(project_id,user.badge)
     except Exception as e:
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.DAILY_PREPROCESSING_FAILED.value,
-            user=user.badge,
-            description=project_id
-        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"DAILY_PREPROCESSING_FAILED : {repr(e)}"
         )
@@ -312,12 +298,7 @@ async def predict_data(project_id: int, pred_type: str, user: User = Depends(get
         description=project_id
     )
     try:
-        await PredictData(project_id, pred_type)
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.PREDICT_SUCCEEDED.value,
-            user=user.badge,
-            description=project_id
-        )
+        await PredictData(project_id, pred_type,user.badge)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"PREDICT_FAILED : {repr(e)}"
