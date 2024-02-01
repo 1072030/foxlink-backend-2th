@@ -1076,7 +1076,7 @@ async def TrainingData(project_id: int, select_type: str):
             
     return
 
-
+@transaction()
 async def PredictData(project_id: int, select_type: str,user:str):
     with ntust_engine.connect() as conn:
         trans = conn.begin()
@@ -1139,12 +1139,12 @@ async def PredictData(project_id: int, select_type: str,user:str):
             )
             trans.commit()
         except Exception as e:
+            trans.rollback()
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.PREDICT_FAILED.value,
                 user=user,
                 description=project_id
             )
-            trans.rollback()
             raise e
     return
 

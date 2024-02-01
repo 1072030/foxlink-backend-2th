@@ -40,7 +40,7 @@ async def get_backup_detail(user: User = Depends(get_current_user())):
 
         return [{"name": data.description, "date": data.created_date} for data in logs]
     except Exception as e:
-        raise HTTPException(status_code=400, detail=e.__repr__())
+        raise HTTPException(status_code=200, detail=e.__repr__())
 
 @router.post("/",  tags=["backup"])
 # 完整備份

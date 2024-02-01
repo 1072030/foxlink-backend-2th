@@ -133,6 +133,10 @@ async def delete_workers(project_id: int, user_id: str, user: User = Depends(get
 
 @router.get("/search-project-devices", tags=["project"])
 async def search_project_devices(project_name: str):
+    if project_name == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"please input project"
+        )            
     """
     搜尋專案擁有的devices
     """
@@ -145,7 +149,10 @@ async def add_project_and_events(dto: List[NewProjectDto], user: User = Depends(
     """
     # add new project
     user = await checkAdminPermission(user)
-
+    if len(dto) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"please select device"
+        )    
     if user is not None:
         project = await AddNewProjectEvents(dto)
         await AuditLogHeader.objects.create(

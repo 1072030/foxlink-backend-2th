@@ -182,7 +182,7 @@ if __name__ == "__main__":
                 continue
 
         await asyncio.gather(
-            *[UpdatePreprocessingData(project_id) for project_id in project_ids]
+            *[UpdatePreprocessingData(project_id,"admin") for project_id in project_ids]
         )
 
         return
@@ -203,18 +203,18 @@ if __name__ == "__main__":
         projects_temp = []
         for i in projects:
             checkAoi_featureData = await AoiFeature.objects.filter(
-                date__gte=get_ntz_now().date + timedelta(days=-7)
+                date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0) + timedelta(days=-7)
             ).all()
 
             checkSucceedLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.PREDICT_SUCCEEDED.value,
-                created_date__gte=get_ntz_now().date(),
+                created_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0),
                 description=i.id
             ).limit(1).get_or_none()
 
             checkFailLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.PREDICT_FAILED.value,
-                created_date__gte=get_ntz_now().date(),
+                created_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0),
                 description=i.id
             ).limit(3).all()
 
@@ -229,20 +229,16 @@ if __name__ == "__main__":
         predict_required = []
         for project in projects_temp:
             for device in project.devices:
-                checkPredictLogsDaily = await PredictResult.objects.filter(
-                    device = device.id,
-                    pred_type = 0
-                ).limit(1).get_or_none()
-                checkPredictLogsWeekly = await PredictResult.objects.filter(
-                    device = device.id,
-                    pred_type = 1
-                ).limit(1).get_or_none()
-                if checkPredictLogsDaily is not None:
-                    predict_required.append({
-                        "project_id":project.id,
-                        "select_type":"day"
-                    })
-                if checkPredictLogsWeekly is not None:
+                predict_required.append({
+                    "project_id":project.id,
+                    "select_type":"day"
+                })
+                checkWeeklyLogs = await PredictResult.objects.filter(
+                    pred_type=1,
+                    device=device.id,
+                    ori_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0) + timedelta(days=-7)
+                ).order_by('-ori_date').limit(1).get_or_none()
+                if checkWeeklyLogs is None:
                     predict_required.append({
                         "project_id":project.id,
                         "select_type":"week"
@@ -258,11 +254,11 @@ if __name__ == "__main__":
                     description=deatil["project_id"]
                 )
             )
-        await AuditLogHeader.objects.bulk_create(bulk_create_started)
+        if len(bulk_create_started) != 0:
+            await AuditLogHeader.objects.bulk_create(bulk_create_started)
 
-        await asyncio.gather(*[
-            PredictData(detail['project_id'],detail['select_type'],"admin") for detail in predict_required
-        ])
+        for detail in predict_required:
+            await PredictData(detail['project_id'],detail['select_type'],"admin")
 
         return
     ######### main #########
