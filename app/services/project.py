@@ -445,192 +445,188 @@ async def PreprocessingData(project_id: int):
                                        if_exists='append', index=False)
                     aoi_feature = aoi_feature.append(aoi_fea)
 
-        except Exception as e:
-            trans.rollback()
-            raise e
 
 
 
-        def target_label(x):  # 用operation day中發生異常天數比例 判斷目標
-            error = dvs_event[dvs_event['Message'] == x['Message']]
-            error_happen = error.groupby('date').ID.count().reset_index()
-            op_day_err_happen = error_happen[error_happen['date'].isin(
-                operation_day[dvs])]
+            def target_label(x):  # 用operation day中發生異常天數比例 判斷目標
+                error = dvs_event[dvs_event['Message'] == x['Message']]
+                error_happen = error.groupby('date').ID.count().reset_index()
+                op_day_err_happen = error_happen[error_happen['date'].isin(
+                    operation_day[dvs])]
 
-            # 若發生異常天數少於正常運作天數10%，則非預知維修目標(0)
-            if len(op_day_err_happen) / len(operation_day[dvs]) <= 0.1:
-                return 0
-            # 正崴指定排除之異常事件(2)
-            elif x['Message'] in ['轴2-IM送料马达故障', 'IM插入站故障', '轴4马达故障', '轴7马达故障', '1#插针站故障', '2#插针站故障', '轴7-Shell 送料马达故障', 'Bracket组装站故障']:
-                return 2
-            else:  # 預知維修目標(1)
-                return 1
+                # 若發生異常天數少於正常運作天數10%，則非預知維修目標(0)
+                if len(op_day_err_happen) / len(operation_day[dvs]) <= 0.1:
+                    return 0
+                # 正崴指定排除之異常事件(2)
+                elif x['Message'] in ['轴2-IM送料马达故障', 'IM插入站故障', '轴4马达故障', '轴7马达故障', '1#插针站故障', '2#插针站故障', '轴7-Shell 送料马达故障', 'Bracket组装站故障']:
+                    return 2
+                else:  # 預知維修目標(1)
+                    return 1
 
-        # testTime = datetime.datetime(2023,9,30,7,40)
+            # testTime = datetime.datetime(2023,9,30,7,40)
 
-        df = pd.DataFrame()
-        dvs_name = [dvs.name for dvs in project[0].devices]
-        for dvs in project[0].devices:
-            sql = f"""
-                SELECT * FROM aoi.`{project[0].name}_event` 
-                WHERE 
-                    Category < 200 AND 
-                    (Start_Time < '{yesterday_workday_endtime}') AND 
-                    Device_Name = '{dvs.name}' AND
-                    Line= {dvs.line};
-                """
-            temp = pd.read_sql(sql, foxlink_engine)  # 讀取異常事件歷史資料
-            df = pd.concat([temp, df], ignore_index=True)
-        df_auto = df[(df["START_FILE_NAME"] == "auto") | (
-            df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
-        # 合併有 auto 的 event
-        df_auto_merge = pd.DataFrame()  # 儲存處理後的event
+            df = pd.DataFrame()
+            dvs_name = [dvs.name for dvs in project[0].devices]
+            for dvs in project[0].devices:
+                sql = f"""
+                    SELECT * FROM aoi.`{project[0].name}_event` 
+                    WHERE 
+                        Category < 200 AND 
+                        (Start_Time < '{yesterday_workday_endtime}') AND 
+                        Device_Name = '{dvs.name}' AND
+                        Line= {dvs.line};
+                    """
+                temp = pd.read_sql(sql, foxlink_engine)  # 讀取異常事件歷史資料
+                df = pd.concat([temp, df], ignore_index=True)
+            df_auto = df[(df["START_FILE_NAME"] == "auto") | (
+                df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
+            # 合併有 auto 的 event
+            df_auto_merge = pd.DataFrame()  # 儲存處理後的event
 
-        while len(df_auto) != 0:
-            st = df_auto.iloc[0]  # 取第一個row
-            if st["END_FILE_NAME"] != "auto":  # 排除開班 auto 並完成的事件
+            while len(df_auto) != 0:
+                st = df_auto.iloc[0]  # 取第一個row
+                if st["END_FILE_NAME"] != "auto":  # 排除開班 auto 並完成的事件
+                    df_auto_merge = pd.concat(
+                        [df_auto_merge, st.to_frame().T], ignore_index=1)  # 最後判斷完，另存起來
+                    df_auto = df_auto.drop(0).reset_index(drop=True)  # 移除掉~, 重新排序index
+                    continue  # 重新while 開始檢查
+                for j in range(1, len(df_auto)):
+                    ed = df_auto.loc[j]  # 關鍵
+                    if (st[["Line", "Device_Name", "Category", "Message"]] == ed[["Line", "Device_Name", "Category", "Message"]]).all():  # 找到相同的項目
+                        # 注意是否有雙 auto ，代表 event 又跨一個班別
+                        if (ed[["START_FILE_NAME", "END_FILE_NAME"]] == "auto").all():
+                            st.at["End_Time"] = ed["End_Time"]  # 更新 st 的 End_Time
+                            df_auto = df_auto.drop(j)  # 移除該row；但不需重新排序index
+                            continue  # 繼續往後檢查有沒有
+                        st["End_Time"] = ed["End_Time"]
+                        st["END_FILE_NAME"] = ed["END_FILE_NAME"]
+                        df_auto = df_auto.drop(j).reset_index(
+                            drop=True)  # 移除該 row, 重新排序index
+                        break  # 結束
+                df_auto = df_auto.drop(0).reset_index(drop=True)  # 最後判斷完，移除掉第一row
                 df_auto_merge = pd.concat(
                     [df_auto_merge, st.to_frame().T], ignore_index=1)  # 最後判斷完，另存起來
-                df_auto = df_auto.drop(0).reset_index(drop=True)  # 移除掉~, 重新排序index
-                continue  # 重新while 開始檢查
-            for j in range(1, len(df_auto)):
-                ed = df_auto.loc[j]  # 關鍵
-                if (st[["Line", "Device_Name", "Category", "Message"]] == ed[["Line", "Device_Name", "Category", "Message"]]).all():  # 找到相同的項目
-                    # 注意是否有雙 auto ，代表 event 又跨一個班別
-                    if (ed[["START_FILE_NAME", "END_FILE_NAME"]] == "auto").all():
-                        st.at["End_Time"] = ed["End_Time"]  # 更新 st 的 End_Time
-                        df_auto = df_auto.drop(j)  # 移除該row；但不需重新排序index
-                        continue  # 繼續往後檢查有沒有
-                    st["End_Time"] = ed["End_Time"]
-                    st["END_FILE_NAME"] = ed["END_FILE_NAME"]
-                    df_auto = df_auto.drop(j).reset_index(
-                        drop=True)  # 移除該 row, 重新排序index
-                    break  # 結束
-            df_auto = df_auto.drop(0).reset_index(drop=True)  # 最後判斷完，移除掉第一row
-            df_auto_merge = pd.concat(
-                [df_auto_merge, st.to_frame().T], ignore_index=1)  # 最後判斷完，另存起來
-        # 排除"原"有 auto 的項目
-        df = df[~((df["START_FILE_NAME"] == "auto")
-                | (df["END_FILE_NAME"] == "auto"))]
-        # 處理好的 auto 合併回去，重新排序
-        df_new_logs = pd.concat([df, df_auto_merge]).sort_values(
-            by=["Start_Time"]).reset_index(drop=True)
-        event = df_new_logs
-        event['Start_Time'] = pd.to_datetime(event['Start_Time'])
-        event['End_Time'] = pd.to_datetime(event['End_Time'])
-        event['duration'] = event['End_Time'] - event['Start_Time']
-        event["Time_shift"] = event["Start_Time"] - \
-            pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
-        # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
-        event['date'] = event['Time_shift'].dt.date
-        event['hour'] = event['Time_shift'].dt.hour + \
-            1  # 工作日期的第幾個小時 1~12為早班 13~24為晚班
-        event['shift'] = pd.cut(event['hour'], bins=[0, 12, 24], labels=[
-                                'D', 'N'])  # 班別 1~12為早班(D) 13~24為晚班(N)
-        event.sort_values('Start_Time', inplace=True)
-        pred_target = pd.DataFrame()
-        error_feature = pd.DataFrame()
-        for dvs in dvs_name:
+            # 排除"原"有 auto 的項目
+            df = df[~((df["START_FILE_NAME"] == "auto")
+                    | (df["END_FILE_NAME"] == "auto"))]
+            # 處理好的 auto 合併回去，重新排序
+            df_new_logs = pd.concat([df, df_auto_merge]).sort_values(
+                by=["Start_Time"]).reset_index(drop=True)
+            event = df_new_logs
+            event['Start_Time'] = pd.to_datetime(event['Start_Time'])
+            event['End_Time'] = pd.to_datetime(event['End_Time'])
+            event['duration'] = event['End_Time'] - event['Start_Time']
+            event["Time_shift"] = event["Start_Time"] - \
+                pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
+            # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
+            event['date'] = event['Time_shift'].dt.date
+            event['hour'] = event['Time_shift'].dt.hour + \
+                1  # 工作日期的第幾個小時 1~12為早班 13~24為晚班
+            event['shift'] = pd.cut(event['hour'], bins=[0, 12, 24], labels=[
+                                    'D', 'N'])  # 班別 1~12為早班(D) 13~24為晚班(N)
+            event.sort_values('Start_Time', inplace=True)
+            pred_target = pd.DataFrame()
+            error_feature = pd.DataFrame()
+            for dvs in dvs_name:
 
-            # 判斷預知維修目標
-            op_day = pd.DataFrame()
-            op_day['date'] = sorted(list(operation_day[dvs]))
-            op_day['operation_day'] = 1
+                # 判斷預知維修目標
+                op_day = pd.DataFrame()
+                op_day['date'] = sorted(list(operation_day[dvs]))
+                op_day['operation_day'] = 1
 
-            dvs_event = event[event['Device_Name'] == dvs]
+                dvs_event = event[event['Device_Name'] == dvs]
 
-            dcm = dvs_event.drop_duplicates(['Device_Name', 'Category', 'Message'])[['Device_Name', 'Category', 'Message']].sort_values([
-                'Device_Name', 'Category'], key=natsort_keygen()).reset_index(drop=True)
-            dcm['target'] = dcm.apply(lambda x: target_label(x), axis=1)
+                dcm = dvs_event.drop_duplicates(['Device_Name', 'Category', 'Message'])[['Device_Name', 'Category', 'Message']].sort_values([
+                    'Device_Name', 'Category'], key=natsort_keygen()).reset_index(drop=True)
+                dcm['target'] = dcm.apply(lambda x: target_label(x), axis=1)
 
-            dcm_id = await Device.objects.filter(name=dvs, project=project_id).get_or_none()
-            if dcm_id is None:
-                raise HTTPException(
-                    status_code=400, detail="cant find dcm device")
-            # format data columns
-            dcm = dcm.rename(
-                columns={'Device_Name': 'device', 'Category': 'category', 'Message': 'message'})
-            dcm['device'] = dcm_id.id
-
-            pred_target_evnets = await ProjectEvent.objects.filter(device=dcm_id).all()
-            events_id = []
-            for index, row in dcm.iterrows():
-                for i in pred_target_evnets:
-                    if row['message'] == i.name and row['category'] == i.category:
-                        events_id.append(i.id)
-
-            # 異常每天發生次數(預知維修目標)
-            target = dcm[dcm['target'] == 1]
-            dcm = dcm.drop(['category', 'message'], axis=1)
-            dcm['event'] = events_id
-
-            pred_target = pred_target.append(dcm)
-            for row in target.itertuples():
-                message = row.message
-                category = row.category
-
-                error = dvs_event[dvs_event['Message'] == message]
-                error['duration'] = error['duration'].dt.total_seconds()
-                error['happened_last_time'] = (
-                    error['Start_Time'] - error['End_Time'].shift(1)).dt.total_seconds()
-                error['happened_last_time'].fillna(
-                    error['happened_last_time'].median(), inplace=True)
-
-                err_fea = pd.DataFrame()
-                dvs_id = await Device.objects.filter(name=dvs).get_or_none()
-                if dvs_id is None:
+                dcm_id = await Device.objects.filter(name=dvs, project=project_id).get_or_none()
+                if dcm_id is None:
                     raise HTTPException(
-                        status_code=400, detail="cant find this device")
-                err_fea['date'] = pd.date_range(
-                    aoi_feature[aoi_feature['device'] == dvs_id.id].date.min(), now_workday, closed='left')
-                err_fea['date'] = err_fea['date'].dt.date
-                err_fea['device'] = dvs_id.id
-                err_fea['project'] = project_id
-                # err_fea['message'] = message
-                # err_fea['category'] = category
-                err_fea = pd.merge(err_fea, op_day, on='date', how='outer')
-                err_fea = pd.merge(err_fea, error.groupby('date').ID.count().reset_index(
-                ).rename(columns={'ID': 'happened'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, error.groupby('date').duration.max().reset_index(
-                ).rename(columns={'duration': 'dur_max'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, round(error.groupby('date').duration.mean(), 1).reset_index(
-                ).rename(columns={'duration': 'dur_mean'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, error.groupby('date').duration.min().reset_index(
-                ).rename(columns={'duration': 'dur_min'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.max().reset_index(
-                ).rename(columns={'happened_last_time': 'last_time_max'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, round(error.groupby('date').happened_last_time.mean(), 1).reset_index(
-                ).rename(columns={'happened_last_time': 'last_time_mean'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.min().reset_index(
-                ).rename(columns={'happened_last_time': 'last_time_min'}), on='date', how='outer')
+                        status_code=400, detail="cant find dcm device")
+                # format data columns
+                dcm = dcm.rename(
+                    columns={'Device_Name': 'device', 'Category': 'category', 'Message': 'message'})
+                dcm['device'] = dcm_id.id
 
-                err_fea.fillna(0, inplace=True)
+                pred_target_evnets = await ProjectEvent.objects.filter(device=dcm_id).all()
+                events_id = []
+                for index, row in dcm.iterrows():
+                    for i in pred_target_evnets:
+                        if row['message'] == i.name and row['category'] == i.category:
+                            events_id.append(i.id)
 
-                err_fea['operation_day'] = err_fea['operation_day'].astype(int)
-                err_fea['happened'] = err_fea['happened'].astype(int)
-                err_fea['dur_max'] = err_fea['dur_max'].astype(int)
-                err_fea['dur_min'] = err_fea['dur_min'].astype(int)
-                err_fea['last_time_max'] = err_fea['last_time_max'].astype(int)
-                err_fea['last_time_min'] = err_fea['last_time_min'].astype(int)
+                # 異常每天發生次數(預知維修目標)
+                target = dcm[dcm['target'] == 1]
+                dcm = dcm.drop(['category', 'message'], axis=1)
+                dcm['event'] = events_id
 
-                err_fea = err_fea[err_fea['project'] != 0]
-                target_event = await ProjectEvent.objects.filter(device=dvs_id, name=message, category=category).get()
-                err_fea['event'] = target_event.id
+                pred_target = pred_target.append(dcm)
+                for row in target.itertuples():
+                    message = row.message
+                    category = row.category
 
-                err_fea.to_sql(con=conn, name="error_feature",
-                            if_exists='append', index=False)
+                    error = dvs_event[dvs_event['Message'] == message]
+                    error['duration'] = error['duration'].dt.total_seconds()
+                    error['happened_last_time'] = (
+                        error['Start_Time'] - error['End_Time'].shift(1)).dt.total_seconds()
+                    error['happened_last_time'].fillna(
+                        error['happened_last_time'].median(), inplace=True)
 
-        try:
+                    err_fea = pd.DataFrame()
+                    dvs_id = await Device.objects.filter(name=dvs).get_or_none()
+                    if dvs_id is None:
+                        raise HTTPException(
+                            status_code=400, detail="cant find this device")
+                    err_fea['date'] = pd.date_range(
+                        aoi_feature[aoi_feature['device'] == dvs_id.id].date.min(), now_workday, closed='left')
+                    err_fea['date'] = err_fea['date'].dt.date
+                    err_fea['device'] = dvs_id.id
+                    err_fea['project'] = project_id
+                    # err_fea['message'] = message
+                    # err_fea['category'] = category
+                    err_fea = pd.merge(err_fea, op_day, on='date', how='outer')
+                    err_fea = pd.merge(err_fea, error.groupby('date').ID.count().reset_index(
+                    ).rename(columns={'ID': 'happened'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, error.groupby('date').duration.max().reset_index(
+                    ).rename(columns={'duration': 'dur_max'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, round(error.groupby('date').duration.mean(), 1).reset_index(
+                    ).rename(columns={'duration': 'dur_mean'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, error.groupby('date').duration.min().reset_index(
+                    ).rename(columns={'duration': 'dur_min'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.max().reset_index(
+                    ).rename(columns={'happened_last_time': 'last_time_max'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, round(error.groupby('date').happened_last_time.mean(), 1).reset_index(
+                    ).rename(columns={'happened_last_time': 'last_time_mean'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.min().reset_index(
+                    ).rename(columns={'happened_last_time': 'last_time_min'}), on='date', how='outer')
+
+                    err_fea.fillna(0, inplace=True)
+
+                    err_fea['operation_day'] = err_fea['operation_day'].astype(int)
+                    err_fea['happened'] = err_fea['happened'].astype(int)
+                    err_fea['dur_max'] = err_fea['dur_max'].astype(int)
+                    err_fea['dur_min'] = err_fea['dur_min'].astype(int)
+                    err_fea['last_time_max'] = err_fea['last_time_max'].astype(int)
+                    err_fea['last_time_min'] = err_fea['last_time_min'].astype(int)
+
+                    err_fea = err_fea[err_fea['project'] != 0]
+                    target_event = await ProjectEvent.objects.filter(device=dvs_id, name=message, category=category).get()
+                    err_fea['event'] = target_event.id
+
+                    err_fea.to_sql(con=conn, name="error_feature",
+                                if_exists='append', index=False)
+
             print("starting input pred_target...")
             print(pred_target)
             pred_target.to_sql(con=conn, name="pred_targets",
                             if_exists='append', index=False)
             trans.commit()
             conn.close()
-        except:
+        except Exception as e:
             trans.rollback()
             raise HTTPException(
-                status_code=400, detail="cant write into database")
+                status_code=400, detail=e)
     return
 
 
@@ -643,7 +639,9 @@ async def UpdatePreprocessingData(project_id: int,user:str):
     )
     now = get_ntz_now()  # 更新資料時間
     update_workday = (now - pd.Timedelta(hours=7, minutes=40)
-                      ).date()  # 更新資料的工作日期
+                      ).date()  
+    print(update_workday)
+    # 更新資料的工作日期
     update_workday_endtime = pd.to_datetime(
         update_workday) + pd.Timedelta(hours=7, minutes=40)
 
@@ -849,136 +847,138 @@ async def UpdatePreprocessingData(project_id: int,user:str):
             aoi_feature.to_sql(name='aoi_feature', con=conn,
                             if_exists='append', index=False)
 
-        df = pd.DataFrame()
-        dvs_name = [dvs.name for dvs in project[0].devices]
-        print(dvs_name)
-        for dvs in project[0].devices:
-            sql = f"""
-            SELECT * FROM aoi.`{project[0].name}_event` 
-            WHERE 
-                Category < 200 AND 
-                (Start_Time >= '{update_workday_endtime}') AND
-                (Start_Time < '{update_workday_endtime + pd.Timedelta(days=1)}') AND
-                Device_Name = '{dvs.name}' AND
-                Line= {dvs.line};
-            """
-            temp = pd.read_sql(sql, foxlink_engine)  # 讀取異常事件歷史資料
-            df = pd.concat([temp, df], ignore_index=True)
-        df_auto = df[(df["START_FILE_NAME"] == "auto") | (df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
-        # 合併有 auto 的 event
-        df_auto_merge = pd.DataFrame()  # 儲存處理後的event
-        while len(df_auto) != 0:
-            st = df_auto.iloc[0]  # 取第一個row
-            if st["END_FILE_NAME"] != "auto":  # 排除開班 auto 並完成的事件
+
+            df = pd.DataFrame()
+            dvs_name = [dvs.name for dvs in project[0].devices]
+            print(dvs_name)
+            for dvs in project[0].devices:
+                sql = f"""
+                SELECT * FROM aoi.`{project[0].name}_event` 
+                WHERE 
+                    Category < 200 AND 
+                    (Start_Time >= '{update_workday_endtime}') AND
+                    (Start_Time < '{update_workday_endtime + pd.Timedelta(days=1)}') AND
+                    Device_Name = '{dvs.name}' AND
+                    Line= {dvs.line};
+                """
+                temp = pd.read_sql(sql, foxlink_engine)  # 讀取異常事件歷史資料
+                df = pd.concat([temp, df], ignore_index=True)
+            df_auto = df[(df["START_FILE_NAME"] == "auto") | (df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
+            # 合併有 auto 的 event
+            df_auto_merge = pd.DataFrame()  # 儲存處理後的event
+            while len(df_auto) != 0:
+                st = df_auto.iloc[0]  # 取第一個row
+                if st["END_FILE_NAME"] != "auto":  # 排除開班 auto 並完成的事件
+                    df_auto_merge = pd.concat(
+                        [df_auto_merge, st.to_frame().T], ignore_index=1)  # 最後判斷完，另存起來
+                    df_auto = df_auto.drop(0).reset_index(drop=True)  # 移除掉~, 重新排序index
+                    continue  # 重新while 開始檢查
+                for j in range(1, len(df_auto)):
+                    ed = df_auto.loc[j]  # 關鍵
+                    if (st[["Line", "Device_Name", "Category", "Message"]] == ed[["Line", "Device_Name", "Category", "Message"]]).all():  # 找到相同的項目
+                        # 注意是否有雙 auto ，代表 event 又跨一個班別
+                        if (ed[["START_FILE_NAME", "END_FILE_NAME"]] == "auto").all():
+                            st.at["End_Time"] = ed["End_Time"]  # 更新 st 的 End_Time
+                            df_auto = df_auto.drop(j)  # 移除該row；但不需重新排序index
+                            continue  # 繼續往後檢查有沒有
+                        st["End_Time"] = ed["End_Time"]
+                        st["END_FILE_NAME"] = ed["END_FILE_NAME"]
+                        df_auto = df_auto.drop(j).reset_index(
+                            drop=True)  # 移除該 row, 重新排序index
+                        break  # 結束
+                df_auto = df_auto.drop(0).reset_index(drop=True)  # 最後判斷完，移除掉第一row
                 df_auto_merge = pd.concat(
                     [df_auto_merge, st.to_frame().T], ignore_index=1)  # 最後判斷完，另存起來
-                df_auto = df_auto.drop(0).reset_index(drop=True)  # 移除掉~, 重新排序index
-                continue  # 重新while 開始檢查
-            for j in range(1, len(df_auto)):
-                ed = df_auto.loc[j]  # 關鍵
-                if (st[["Line", "Device_Name", "Category", "Message"]] == ed[["Line", "Device_Name", "Category", "Message"]]).all():  # 找到相同的項目
-                    # 注意是否有雙 auto ，代表 event 又跨一個班別
-                    if (ed[["START_FILE_NAME", "END_FILE_NAME"]] == "auto").all():
-                        st.at["End_Time"] = ed["End_Time"]  # 更新 st 的 End_Time
-                        df_auto = df_auto.drop(j)  # 移除該row；但不需重新排序index
-                        continue  # 繼續往後檢查有沒有
-                    st["End_Time"] = ed["End_Time"]
-                    st["END_FILE_NAME"] = ed["END_FILE_NAME"]
-                    df_auto = df_auto.drop(j).reset_index(
-                        drop=True)  # 移除該 row, 重新排序index
-                    break  # 結束
-            df_auto = df_auto.drop(0).reset_index(drop=True)  # 最後判斷完，移除掉第一row
-            df_auto_merge = pd.concat(
-                [df_auto_merge, st.to_frame().T], ignore_index=1)  # 最後判斷完，另存起來
-        df = df[~((df["START_FILE_NAME"] == "auto")
-                | (df["END_FILE_NAME"] == "auto"))]
-        # 處理好的 auto 合併回去，重新排序
-        df_new_logs = pd.concat([df, df_auto_merge]).sort_values(
-            by=["Start_Time"]).reset_index(drop=True)
-        event = df_new_logs
-        event['Start_Time'] = pd.to_datetime(event['Start_Time'])
-        event['End_Time'] = pd.to_datetime(event['End_Time'])
-        event['duration'] = event['End_Time'] - event['Start_Time']
-        event["Time_shift"] = event["Start_Time"] - \
-            pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
-        # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
-        event['date'] = event['Time_shift'].dt.date
-        event['hour'] = event['Time_shift'].dt.hour + \
-            1  # 工作日期的第幾個小時 1~12為早班 13~24為晚班
-        event['shift'] = pd.cut(event['hour'], bins=[0, 12, 24], labels=[
-                                'D', 'N'])  # 班別 1~12為早班(D) 13~24為晚班(N)
-        event.sort_values('Start_Time', inplace=True)
-        error_feature = pd.DataFrame()
-        for dvs in dvs_name:
-            dvs_event = event[event['Device_Name'] == dvs]
-            dvs_data = await Device.objects.filter(name=dvs, project=project_id).get()
+            df = df[~((df["START_FILE_NAME"] == "auto")
+                    | (df["END_FILE_NAME"] == "auto"))]
+            # 處理好的 auto 合併回去，重新排序
+            df_new_logs = pd.concat([df, df_auto_merge]).sort_values(
+                by=["Start_Time"]).reset_index(drop=True)
+            event = df_new_logs
+            event['Start_Time'] = pd.to_datetime(event['Start_Time'])
+            event['End_Time'] = pd.to_datetime(event['End_Time'])
+            event['duration'] = event['End_Time'] - event['Start_Time']
+            event["Time_shift"] = event["Start_Time"] - \
+                pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
+            # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
+            event['date'] = event['Time_shift'].dt.date
+            event['hour'] = event['Time_shift'].dt.hour + \
+                1  # 工作日期的第幾個小時 1~12為早班 13~24為晚班
+            event['shift'] = pd.cut(event['hour'], bins=[0, 12, 24], labels=[
+                                    'D', 'N'])  # 班別 1~12為早班(D) 13~24為晚班(N)
+            event.sort_values('Start_Time', inplace=True)
+            error_feature = pd.DataFrame()
+            for dvs in dvs_name:
+                dvs_event = event[event['Device_Name'] == dvs]
+                dvs_data = await Device.objects.filter(name=dvs, project=project_id).get()
 
-            operation = (await AoiFeature.objects.filter(
-                device=dvs_data.id,
-                date=update_workday
-            ).all())
+                operation = (await AoiFeature.objects.filter(
+                    device=dvs_data.id,
+                    date__gte=update_workday
+                ).all())
 
-            sql = f"""
-            SELECT pt.device,pt.target,pt.event,pe.name,pe.category FROM pred_targets as pt
-            JOIN project_events as pe
-            ON pe.id = pt.event
-            WHERE 
-                pt.device = {dvs_data.id} AND
-                pt.target = 1 ;
-            """
-            target = pd.read_sql(sql, ntust_engine)  # 預知維修目標
+                sql = f"""
+                SELECT pt.device,pt.target,pt.event,pe.name,pe.category FROM pred_targets as pt
+                JOIN project_events as pe
+                ON pe.id = pt.event
+                WHERE 
+                    pt.device = {dvs_data.id} AND
+                    pt.target = 1 ;
+                """
+                target = pd.read_sql(sql, ntust_engine)  # 預知維修目標
 
-            for row in target.itertuples():
-                print(row)
-                message = row.name
+                for row in target.itertuples():
+                    print(row)
+                    message = row.name
 
-                error = dvs_event[dvs_event['Message'] == message]
-                error['duration'] = error['duration'].dt.total_seconds()
-                error['happened_last_time'] = (
-                    error['Start_Time'] - error['End_Time'].shift(1)).dt.total_seconds()
-                error['happened_last_time'].fillna(
-                    error['happened_last_time'].median(), inplace=True)
+                    error = dvs_event[dvs_event['Message'] == message]
+                    error['duration'] = error['duration'].dt.total_seconds()
+                    error['happened_last_time'] = (
+                        error['Start_Time'] - error['End_Time'].shift(1)).dt.total_seconds()
+                    error['happened_last_time'].fillna(
+                        error['happened_last_time'].median(), inplace=True)
 
-                err_fea = pd.DataFrame()
-                err_fea['date'] = [update_workday]
-                err_fea['project'] = project_id
-                err_fea['device'] = row.device
-                err_fea['event'] = row.event
-                err_fea['operation_day'] = operation[0].operation_day
-                err_fea = pd.merge(err_fea, error.groupby('date').ID.count().reset_index(
-                ).rename(columns={'ID': 'happened'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, error.groupby('date').duration.max().reset_index(
-                ).rename(columns={'duration': 'dur_max'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, round(error.groupby('date').duration.mean(), 1).reset_index(
-                ).rename(columns={'duration': 'dur_mean'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, error.groupby('date').duration.min().reset_index(
-                ).rename(columns={'duration': 'dur_min'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.max().reset_index(
-                ).rename(columns={'happened_last_time': 'last_time_max'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, round(error.groupby('date').happened_last_time.mean(), 1).reset_index(
-                ).rename(columns={'happened_last_time': 'last_time_mean'}), on='date', how='outer')
-                err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.min().reset_index(
-                ).rename(columns={'happened_last_time': 'last_time_min'}), on='date', how='outer')
-                err_fea.fillna(0, inplace=True)
+                    err_fea = pd.DataFrame()
+                    err_fea['date'] = [update_workday]
+                    err_fea['project'] = project_id
+                    err_fea['device'] = row.device
+                    err_fea['event'] = row.event
+                    err_fea['operation_day'] = operation[0].operation_day
+                    err_fea = pd.merge(err_fea, error.groupby('date').ID.count().reset_index(
+                    ).rename(columns={'ID': 'happened'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, error.groupby('date').duration.max().reset_index(
+                    ).rename(columns={'duration': 'dur_max'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, round(error.groupby('date').duration.mean(), 1).reset_index(
+                    ).rename(columns={'duration': 'dur_mean'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, error.groupby('date').duration.min().reset_index(
+                    ).rename(columns={'duration': 'dur_min'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.max().reset_index(
+                    ).rename(columns={'happened_last_time': 'last_time_max'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, round(error.groupby('date').happened_last_time.mean(), 1).reset_index(
+                    ).rename(columns={'happened_last_time': 'last_time_mean'}), on='date', how='outer')
+                    err_fea = pd.merge(err_fea, error.groupby('date').happened_last_time.min().reset_index(
+                    ).rename(columns={'happened_last_time': 'last_time_min'}), on='date', how='outer')
+                    err_fea.fillna(0, inplace=True)
 
-                err_fea['operation_day'] = err_fea['operation_day'].astype(int)
-                err_fea['happened'] = err_fea['happened'].astype(int)
-                err_fea['dur_max'] = err_fea['dur_max'].astype(int)
-                err_fea['dur_min'] = err_fea['dur_min'].astype(int)
-                err_fea['last_time_max'] = err_fea['last_time_max'].astype(int)
-                err_fea['last_time_min'] = err_fea['last_time_min'].astype(int)
-                error_feature = error_feature.append(err_fea)
-            # with ntust_engine.begin() as conn:
-        print('import error_feature')
-        print(error_feature)
-        error_feature.to_sql(name='error_feature',
-                                con=conn, if_exists='append', index=False)
-        trans.commit()
-        await AuditLogHeader.objects.create(
-                action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
-                user=user,
-                description=project_id
-        )
+                    err_fea['operation_day'] = err_fea['operation_day'].astype(int)
+                    err_fea['happened'] = err_fea['happened'].astype(int)
+                    err_fea['dur_max'] = err_fea['dur_max'].astype(int)
+                    err_fea['dur_min'] = err_fea['dur_min'].astype(int)
+                    err_fea['last_time_max'] = err_fea['last_time_max'].astype(int)
+                    err_fea['last_time_min'] = err_fea['last_time_min'].astype(int)
+                    error_feature = error_feature.append(err_fea)
+                # with ntust_engine.begin() as conn:
+            print('import error_feature')
+            print(error_feature)
+            error_feature.to_sql(name='error_feature',
+                                    con=conn, if_exists='append', index=False)
+            trans.commit()
+            conn.close()
+            await AuditLogHeader.objects.create(
+                    action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
+                    user=user,
+                    description=project_id
+            )
     except Exception as e:
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DAILY_PREPROCESSING_FAILED.value,
