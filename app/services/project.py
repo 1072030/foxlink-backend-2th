@@ -912,11 +912,11 @@ async def UpdatePreprocessingData(project_id: int,user:str):
                 dvs_event = event[event['Device_Name'] == dvs]
                 dvs_data = await Device.objects.filter(name=dvs, project=project_id).get()
 
-                operation = (await AoiFeature.objects.filter(
-                    device=dvs_data.id,
-                    date__gte=update_workday
-                ).all())
-
+                # operation = (await AoiFeature.objects.filter(
+                #     device=dvs_data.id,
+                #     date__gte=update_workday
+                # ).all())
+                aoi_operation = aoi_feature[aoi_feature["device"] == dvs_data.id]["operation_day"][0]
                 sql = f"""
                 SELECT pt.device,pt.target,pt.event,pe.name,pe.category FROM pred_targets as pt
                 JOIN project_events as pe
@@ -943,7 +943,7 @@ async def UpdatePreprocessingData(project_id: int,user:str):
                     err_fea['project'] = project_id
                     err_fea['device'] = row.device
                     err_fea['event'] = row.event
-                    err_fea['operation_day'] = operation[0].operation_day
+                    err_fea['operation_day'] = aoi_operation
                     err_fea = pd.merge(err_fea, error.groupby('date').ID.count().reset_index(
                     ).rename(columns={'ID': 'happened'}), on='date', how='outer')
                     err_fea = pd.merge(err_fea, error.groupby('date').duration.max().reset_index(
