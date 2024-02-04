@@ -54,11 +54,6 @@ async def authenticate_user(badge: str, password: str):
     if user is None:
         return user
 
-    # if not verify_password(password, user.password_hash):
-    #     raise HTTPException(
-    #         status_code=HTTPStatus.HTTP_401_UNAUTHORIZED, detail="密码不正确"
-    #     )
-
     return user
 
 
@@ -134,7 +129,7 @@ async def get_admin_active_user(project_id: int, active_user: User = Depends(get
 
 # 確認取得人員身份
 
-
+# useless function
 def get_manager_active_user(
     manager_user: User = Depends(get_current_user()),
 ):
@@ -144,20 +139,6 @@ def get_manager_active_user(
     #         detail="Permission Denied",
     #     )
     return manager_user
-
-
-async def set_device_UUID(
-    user: User, UUID: str
-):
-    await user.update(current_UUID=UUID)
-
-
-async def authenticate_foxlink(dto: UserLoginFoxlink):
-    # json_data = {"user" : MrMinty, "pass" : "password"} #json data
-    # endpoint = "https://www.testsite.com/api/account_name/?access_token=1234567890" #endpoint
-    # print(requests.post(endpoint, json=json_data). content)
-    response = await requests.post()
-    return
 
 
 async def checkUserProjectPermission(project_id: int, user: User, permission: int):

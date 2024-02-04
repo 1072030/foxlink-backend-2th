@@ -5,7 +5,6 @@ import aiohttp
 from fastapi.exceptions import HTTPException
 from ormar import NoMatch, or_, and_
 from app.env import (
-    MQTT_BROKER,
     TIMEZONE_OFFSET,
     WEEK_START,
     PWD_SCHEMA,
@@ -58,9 +57,9 @@ async def get_worker_by_badge(
     return worker
 
 
-async def delete_user_by_badge(badge: str):
-    affected_row = await User.objects.delete(badge=badge)
+# async def delete_user_by_badge(badge: str):
+#     affected_row = await User.objects.delete(badge=badge)
 
-    if affected_row != 1:
-        raise HTTPException(
-            status_code=404, detail="user by this id is not found")
+#     if affected_row != 1:
+#         raise HTTPException(
+#             status_code=404, detail="user by this id is not found")

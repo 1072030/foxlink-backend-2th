@@ -14,18 +14,18 @@ from app.services.auth import get_manager_active_user
 router = APIRouter(prefix="/logs")
 
 
-class LogValueOut(BaseModel):
-    field: str
-    previous_value: str
-    new_value: str
+# class LogValueOut(BaseModel):
+#     field: str
+#     previous_value: str
+#     new_value: str
 
-    @classmethod
-    def from_logvalue(cls, logvalue):
-        return cls(
-            field=logvalue.field_name,
-            previous_value=logvalue.previous_value,
-            new_value=logvalue.new_value,
-        )
+#     @classmethod
+#     def from_logvalue(cls, logvalue):
+#         return cls(
+#             field=logvalue.field_name,
+#             previous_value=logvalue.previous_value,
+#             new_value=logvalue.new_value,
+#         )
 
 
 class LogOut(BaseModel):
