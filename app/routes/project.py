@@ -237,7 +237,9 @@ async def add_project_and_events(dto: List[NewProjectDto], user: User = Depends(
 
 @router.get("/preprocessing-data", tags=["project"])
 async def preprocessing_data(project_id: int, user: User = Depends(get_current_user())):
-
+    """
+    訓練前的前處理 : 產生資料表 aoi_feature dn_mf hourly_mf
+    """
     await AuditLogHeader.objects.create(
         action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
         user=user.badge,
@@ -264,6 +266,9 @@ async def preprocessing_data(project_id: int, user: User = Depends(get_current_u
 
 @router.get("/update-preprocessing-data", tags=["project"])
 async def update_preprocessing_data(project_id: int, user: User = Depends(get_current_user())):
+    """
+    每日前處理 產生資料表內容 : aoi_feature dn_mf hourly_mf
+    """
     user = await checkUserProjectPermission(project_id, user, UserLevel.project_manager.value)
     try:
         await UpdatePreprocessingData(project_id,user.badge)
@@ -276,8 +281,9 @@ async def update_preprocessing_data(project_id: int, user: User = Depends(get_cu
 
 @router.get("/training-data", tags=["project"])
 async def training_data(project_id: int, select_type: str, user: User = Depends(get_current_user())):
-
-
+    """
+    對前處理資料進行訓練 : 產生 model->.pkl檔 train_performance資料表內容
+    """
     try:
         await TrainingData(project_id, select_type)
         await AuditLogHeader.objects.create(
@@ -299,6 +305,9 @@ async def training_data(project_id: int, select_type: str, user: User = Depends(
 
 @router.get("/predict-data", tags=["project"])
 async def predict_data(project_id: int, pred_type: str, user: User = Depends(get_current_user())):
+    """
+    從已訓練模型(.pkl)進行每日預測
+    """
     await AuditLogHeader.objects.create(
         action=AuditActionEnum.PREDICT_STARTED.value,
         user=user.badge,

@@ -210,12 +210,14 @@ if __name__ == "__main__":
             checkAoi_featureData = await AoiFeature.objects.filter(
                 date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0) + timedelta(days=-7)
             ).all()
-            # 確認每日預測是否成功執行過
-            checkSucceedLogs = await AuditLogHeader.objects.filter(
-                action=AuditActionEnum.PREDICT_SUCCEEDED.value,
-                created_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0),
-                description=i.id
-            ).limit(1).get_or_none()
+
+
+            # # 確認每日預測是否成功執行過
+            # checkSucceedLogs = await AuditLogHeader.objects.filter(
+            #     action=AuditActionEnum.PREDICT_SUCCEEDED.value,
+            #     created_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0),
+            #     description=i.id
+            # ).limit(1).get_or_none()
             # 確認每日預測錯誤次數
             checkFailLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.PREDICT_FAILED.value,
