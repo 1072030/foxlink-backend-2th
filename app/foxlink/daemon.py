@@ -136,6 +136,7 @@ if __name__ == "__main__":
     @transaction(callback=True)
     @show_duration
     async def daily_project_data_handler(handler=[]):
+        # 每日前處理時間 通常為 今日的早上 7:00
         checkEnv = await Env.objects.filter(key="daily_preprocess_timer").get_or_none()
         if checkEnv is None:
             raise HTTPException(400,"can not find 'daily_preprocess_timer' env settings")
@@ -149,6 +150,7 @@ if __name__ == "__main__":
         projects = await Project.objects.all()
         project_ids = [i.id for i in projects]
         for i in projects:
+            # 確定專案前處理有成功執行
             checkPreProcessLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
                 description=i.id
@@ -159,7 +161,7 @@ if __name__ == "__main__":
                 continue   
 
 
-            # check succeed logs
+            # 確認今日是否有執行每日前處理
             checkSucceedLog = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
                 created_date__gte=get_ntz_now().date(),
@@ -169,18 +171,19 @@ if __name__ == "__main__":
             if checkSucceedLog is None:
                 continue
 
-            # check failed logs
+            # 確認今日前處理錯誤次數
             checkFailLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.DAILY_PREPROCESSING_FAILED.value,
                 created_date__gte=get_ntz_now().date(),
                 description=i.id
             ).limit(3).all()
     
-            # check daily preprocess failed three times
+            # 超過三次則不再執行
             if len(checkFailLogs) == 3:
                 project_ids.remove(i.id)
                 continue
-
+        
+        # 執行每日前處理
         await asyncio.gather(
             *[UpdatePreprocessingData(project_id,"admin") for project_id in project_ids]
         )
@@ -190,6 +193,7 @@ if __name__ == "__main__":
     @transaction(callback=True)
     @ show_duration
     async def daily_project_predict_handler(handler=[]):
+        # 每日預測時間 通常為 今日的早上 7:20
         checkEnv = await Env.objects.filter(key="daily_predict_timer").get_or_none()
         if checkEnv is None:
             raise HTTPException(400,"can not find 'daily_project_predict' env settings")
@@ -202,23 +206,24 @@ if __name__ == "__main__":
         projects = await Project.objects.select_related(["devices", "devices__aoimeasures"]).all()
         projects_temp = []
         for i in projects:
+            # 確認aoi_feature資料存在
             checkAoi_featureData = await AoiFeature.objects.filter(
                 date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0) + timedelta(days=-7)
             ).all()
-
+            # 確認每日預測是否成功執行過
             checkSucceedLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.PREDICT_SUCCEEDED.value,
                 created_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0),
                 description=i.id
             ).limit(1).get_or_none()
-
+            # 確認每日預測錯誤次數
             checkFailLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.PREDICT_FAILED.value,
                 created_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0),
                 description=i.id
             ).limit(3).all()
 
-            # failed over three times => dont continue
+            # 超過三次失敗 則不執行
             if checkSucceedLogs is None and len(checkFailLogs) != 3:
                 projects_temp.append(i)
 
@@ -233,6 +238,7 @@ if __name__ == "__main__":
                     "project_id":project.id,
                     "select_type":"day"
                 })
+                # 確認每週預測時間點
                 checkWeeklyLogs = await PredictResult.objects.filter(
                     pred_type=1,
                     device=device.id,
@@ -245,6 +251,7 @@ if __name__ == "__main__":
                     })
                 break
 
+        # 產生log
         bulk_create_started = []
         for deatil in predict_required:
             bulk_create_started.append(
