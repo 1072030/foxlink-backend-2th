@@ -69,9 +69,9 @@ class FoxlinkPredict:
         ## Todo：要將SQL目標改成要query的時間，這邊先以原數據做示範。
         infos = {}
         if select_type == "day":
-            predict_date = get_ntz_now().date()
+            predict_date = get_ntz_now().date() + timedelta(days=-1)
         elif select_type == "week":
-            predict_date = get_ntz_now().date() + timedelta(days=-6)
+            predict_date = get_ntz_now().date() + timedelta(days=-7)
         project = await Project.objects.filter(id=project_id).select_related(
             ["devices","devices__aoimeasures"]
         ).all()

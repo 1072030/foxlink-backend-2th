@@ -12,12 +12,12 @@ services:
       - DATABASE_HOST=mysql
       - DATABASE_NAME=foxlink
       - FOXLINK_EVENT_DB_HOSTS=['172.168.1.231:3306']
-      - FOXLINK_EVENT_DB_USER=ntust
-      - FOXLINK_EVENT_DB_PWD=ntustpwd
+      - FOXLINK_EVENT_DB_USER=ntust2
+      - FOXLINK_EVENT_DB_PWD=ntust2pwd
       - FOXLINK_EVENT_DB_NAME=['aoi']
       - FOXLINK_DEVICE_DB_HOST=172.168.1.231:3306
-      - FOXLINK_DEVICE_DB_USER=ntust
-      - FOXLINK_DEVICE_DB_PWD=ntustpwd
+      - FOXLINK_DEVICE_DB_USER=ntust2
+      - FOXLINK_DEVICE_DB_PWD=ntust2pwd
     restart: unless-stopped
     ports:
       - 19001:80
