@@ -148,7 +148,7 @@ if __name__ == "__main__":
 
         # need add check logs detail
         projects = await Project.objects.all()
-        project_ids = [i.id for i in projects]
+        project_ids = []
         for i in projects:
             # 確定專案前處理有成功執行
             checkPreProcessLogs = await AuditLogHeader.objects.filter(
@@ -157,19 +157,7 @@ if __name__ == "__main__":
             ).order_by('-created_date').limit(1).get_or_none()
             # check preprocess implement
             if checkPreProcessLogs is None:
-                project_ids.remove(i.id)
                 continue   
-
-
-            # 確認今日是否有執行每日前處理
-            checkSucceedLog = await AuditLogHeader.objects.filter(
-                action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
-                created_date__gte=get_ntz_now().date(),
-                description=i.id
-            ).order_by('-created_date').limit(1).get_or_none()
-            # check daily preprocess succeed implement
-            if checkSucceedLog is None:
-                continue
 
             # 確認今日前處理錯誤次數
             checkFailLogs = await AuditLogHeader.objects.filter(
@@ -180,8 +168,19 @@ if __name__ == "__main__":
     
             # 超過三次則不再執行
             if len(checkFailLogs) == 3:
-                project_ids.remove(i.id)
                 continue
+
+            # 確認今日是否有執行每日前處理
+            checkSucceedLog = await AuditLogHeader.objects.filter(
+                action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
+                created_date__gte=get_ntz_now().date(),
+                description=i.id
+            ).order_by('-created_date').limit(1).get_or_none()
+            # check daily preprocess succeed implement
+            if checkSucceedLog is None:
+                project_ids.append(i.id)
+
+
         
         # 執行每日前處理
         await asyncio.gather(
@@ -213,11 +212,11 @@ if __name__ == "__main__":
 
 
             # # 確認每日預測是否成功執行過
-            # checkSucceedLogs = await AuditLogHeader.objects.filter(
-            #     action=AuditActionEnum.PREDICT_SUCCEEDED.value,
-            #     created_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0),
-            #     description=i.id
-            # ).limit(1).get_or_none()
+            checkSucceedLogs = await AuditLogHeader.objects.filter(
+                action=AuditActionEnum.PREDICT_SUCCEEDED.value,
+                created_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0),
+                description=i.id
+            ).limit(1).get_or_none()
             # 確認每日預測錯誤次數
             checkFailLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.PREDICT_FAILED.value,
@@ -244,7 +243,7 @@ if __name__ == "__main__":
                 checkWeeklyLogs = await PredictResult.objects.filter(
                     pred_type=1,
                     device=device.id,
-                    ori_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0) + timedelta(days=-7)
+                    pred_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0)
                 ).order_by('-ori_date').limit(1).get_or_none()
                 if checkWeeklyLogs is None:
                     predict_required.append({
