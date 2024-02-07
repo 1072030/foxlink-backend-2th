@@ -73,4 +73,4 @@ uvicorn==0.18.2
 validators==0.20.0
 xlrd==2.0.1
 yarl==1.7.2
-zipp==3.11.0
+zipp==3.17.0
