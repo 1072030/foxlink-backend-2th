@@ -54,16 +54,6 @@ class FoxlinkPredict:
     def __init__(self) -> None:
         self.ntust_engine = foxlink_dbs.ntust_db
         self.foxlink_engine = foxlink_dbs.foxlink_db
-        self.dvs_aoi = {
-        'Device_5':['glue'],
-        'Device_6':['clip'],
-        'Device_8':['shell'],
-        'Device_9':['barcode'],
-        'Device_10':['force','llcr','os'],
-        'Device_11':['leak','ccd1','ccd2','ccd3'],
-        'Device_12':['ccd4','ccd5','ccd6','ccd7','scan'],
-        'Device_13':['package']
-        }
         
     async def data_preprocessing_from_sql(self,project_id:int,select_type:str):
         ## Todo：要將SQL目標改成要query的時間，這邊先以原數據做示範。
@@ -184,7 +174,7 @@ class FoxlinkPredict:
                             'ct_min':measure+'_ct_min'
                             }, inplace=True
                         )
-                        aoi_fea.drop(['Device_Name','AOI_measure','operation_day'],axis=1, inplace=True)
+                        aoi_fea.drop(['device','aoi_measure','operation_day'],axis=1, inplace=True)
                         target_feature = pd.merge(target_feature, aoi_fea, on=['date'], how='outer')
                 # 加入同機台其他異常事件發生次數
                 for others in events:
@@ -203,6 +193,8 @@ class FoxlinkPredict:
                             e.date >= '{predict_date}';
                         """
                         other_error_happened = pd.read_sql(sql, self.ntust_engine) # 預測目標異常的特徵
+                        if other_error_happened.empty:
+                            raise HTTPException(400,"this error feature is empty")
                         category = str(other_error_happened['category'].iloc[0])
                         other_error_happened.rename(columns={'happened':category}, inplace=True)
                         target_feature = pd.merge(target_feature, other_error_happened[['date', category]], on='date', how='outer')

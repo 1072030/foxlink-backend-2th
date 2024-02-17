@@ -352,6 +352,7 @@ async def PreprocessingData(project_id: int):
 
                     print("starting input hourly_mf...")
                     print(hourly_dvs_mf)
+                    print(hourly_dvs_mf.info())
                     hourly_dvs_mf.to_sql(
                             con=conn, name="hourly_mf", if_exists='append', index=False)
 
@@ -380,6 +381,7 @@ async def PreprocessingData(project_id: int):
                     
                     print("starting input dn_mf...")
                     print(dn_dvs_mf)
+                    print(dn_dvs_mf.info())
                     dn_dvs_mf.to_sql(con=conn, name="dn_mf",
                                          if_exists='append', index=False)
                    
@@ -441,6 +443,7 @@ async def PreprocessingData(project_id: int):
 
                     print("starting input aoi_feature...")
                     print(aoi_fea)
+                    print(aoi_fea.info())
                     aoi_fea.to_sql(con=conn, name="aoi_feature",
                                        if_exists='append', index=False)
                     aoi_feature = aoi_feature.append(aoi_fea)
@@ -614,11 +617,14 @@ async def PreprocessingData(project_id: int):
                     target_event = await ProjectEvent.objects.filter(device=dvs_id, name=message, category=category).get()
                     err_fea['event'] = target_event.id
 
+                    print(err_fea)
+                    print(err_fea.info())
                     err_fea.to_sql(con=conn, name="error_feature",
                                 if_exists='append', index=False)
 
             print("starting input pred_target...")
             print(pred_target)
+            print(pred_target.info())
             pred_target.to_sql(con=conn, name="pred_targets",
                             if_exists='append', index=False)
             trans.commit()
@@ -1082,14 +1088,16 @@ async def PredictData(project_id: int, select_type: str,user:str):
         trans = conn.begin()
         try:
             input_data_dict, infos = await foxlink_predict.data_preprocessing_from_sql(project_id=project_id,select_type=select_type)
-            devices = await Device.objects.filter(project=project_id).all()
             for dv in input_data_dict:
-
-                for i in devices:
-                    if dv == i.name:
-                        device_id = i.id
-
-                    for events in tqdm(input_data_dict[dv]):
+                device = await Device.objects.filter(
+                    project = project_id,
+                    name=dv
+                ).get_or_none()
+                if device is None:
+                    raise HTTPException(
+                        status_code=400, detail="this device_id doesnt existed.")
+                device_id = device.id
+                for events in tqdm(input_data_dict[dv]):
 
                         df = input_data_dict[dv][events]
                         if select_type == 'week':

@@ -286,17 +286,31 @@ async def training_data(project_id: int, select_type: str, user: User = Depends(
     """
     try:
         await TrainingData(project_id, select_type)
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.TRAINING_SUCCEEDED.value,
-            user=user.badge,
-            description=project_id
-        )
+        if select_type == "day":
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.TRAINING_SUCCEEDED_DAILY.value,
+                user=user.badge,
+                description=project_id
+            )
+        else:
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.TRAINING_SUCCEEDED_WEEKLY.value,
+                user=user.badge,
+                description=project_id
+            )
     except Exception as e:
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.TRAINING_FAILED.value,
-            user=user.badge,
-            description=project_id
-        )
+        if select_type == "day":
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.TRAINING_FAILED_DAILY.value,
+                user=user.badge,
+                description=project_id
+            )
+        else:
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.TRAINING_FAILED_WEEKLY.value,
+                user=user.badge,
+                description=project_id
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"TRAINING_FAILED : {repr(e)}"
         )
