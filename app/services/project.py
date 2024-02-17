@@ -922,7 +922,7 @@ async def UpdatePreprocessingData(project_id: int,user:str):
                 #     device=dvs_data.id,
                 #     date__gte=update_workday
                 # ).all())
-                aoi_operation = aoi_feature[aoi_feature["device"] == dvs_data.id]["operation_day"][0]
+                aoi_operation = aoi_feature[aoi_feature["device"] == dvs_data.id]["operation_day"].iloc[:1]
                 sql = f"""
                 SELECT pt.device,pt.target,pt.event,pe.name,pe.category FROM pred_targets as pt
                 JOIN project_events as pe
