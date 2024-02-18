@@ -124,7 +124,7 @@ class FoxlinkTrain:
                 """
                 target_Y = pd.read_sql(sql, self.ntust_engine)
                 target_Y.rename(columns={'happened':row.name}, inplace=True)
-                target_feature = target_Y.drop('operation_day', axis=1)
+                target_feature = target_Y.drop(['id','project','operation_day'], axis=1)
                 
                 # 加入AOI檢測特徵
                 for measure in dvs_aoi_measure:
@@ -152,7 +152,7 @@ class FoxlinkTrain:
                     )
 
                         #移除不需要的欄位
-                        aoi_fea.drop(['device','aoi_measure'],axis=1, inplace=True)
+                        aoi_fea.drop(['id','device','aoi_measure'],axis=1, inplace=True)
                         
                         #合併兩個dataframe
                         target_feature = pd.merge(target_feature, aoi_fea, on=['date'], how='outer')
@@ -185,7 +185,7 @@ class FoxlinkTrain:
                             'ct_min':measure+'_ct_min'
                             }, inplace=True
                         )
-                        aoi_fea.drop(['device','aoi_measure','operation_day'],axis=1, inplace=True)
+                        aoi_fea.drop(['id','device','aoi_measure','operation_day'],axis=1, inplace=True)
                         target_feature = pd.merge(target_feature, aoi_fea, on=['date'], how='outer')
                 # 加入同機台其他異常事件發生次數
                 for others in events:
