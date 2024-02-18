@@ -110,7 +110,18 @@ async def RemoveProjectWorker(project_id: int, user_id: str):
 
 async def SearchProjectDevices(project_name: str):
 
-    return await foxlink_dbs.get_device_names(project_name=project_name)
+    # return await foxlink_dbs.get_device_names(project_name=project_name)
+    project_all_device = await foxlink_dbs.get_device_names(project_name=project_name)
+    check_duplicate = await Project.objects.get_or_none(name=project_name)
+    if check_duplicate is None:
+        return project_all_device
+    else:
+        in_project_device = await Project.objects.select_related(["devices"]).filter(name=project_name).all()
+        optional_device = []
+        for device in project_all_device:
+            if device["device"] not in in_project_device[device]:
+                optional_device.append(device)
+        return optional_device
 
 
 async def AddNewProjectEvents(dto: List[NewProjectDto]):
