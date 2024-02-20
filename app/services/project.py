@@ -164,11 +164,19 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
                 Device_Name = '{selected.device}' and
                 Line = {selected.line} and
                 (Category >= 1 AND Category <= 199)
+            ORDER BY ID DESC
             """
         )
         try:
             foxlink = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+            
+            check_category_duplicate = []
             for i in foxlink:
+                # remove dumplicate name with same category
+                if i.Category not in check_category_duplicate:
+                    check_category_duplicate.append(i.Category)
+                else:
+                    continue
                 name = i.Device_Name + "-" + i.Line + "-" + selected.cname
                 if name not in event_data.keys():
                     event_data[name] = event_data.get(
@@ -485,7 +493,7 @@ async def PreprocessingData(project_id: int):
                 df["END_FILE_NAME"] == "auto")].reset_index(drop=True)
             # 合併有 auto 的 event
             df_auto_merge = pd.DataFrame()  # 儲存處理後的event
-
+            print("Starting sorting df...")
             while len(df_auto) != 0:
                 st = df_auto.iloc[0]  # 取第一個row
                 if st["END_FILE_NAME"] != "auto":  # 排除開班 auto 並完成的事件
@@ -577,7 +585,7 @@ async def PreprocessingData(project_id: int):
                         error['happened_last_time'].median(), inplace=True)
 
                     err_fea = pd.DataFrame()
-                    dvs_id = await Device.objects.filter(name=dvs).get_or_none()
+                    dvs_id = await Device.objects.filter(name=dvs,project=project_id).get_or_none()
                     if dvs_id is None:
                         raise HTTPException(
                             status_code=400, detail="cant find this device")

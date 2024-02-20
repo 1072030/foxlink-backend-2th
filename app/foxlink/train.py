@@ -101,7 +101,7 @@ class FoxlinkTrain:
             """
             dvs_aoi_measure = pd.read_sql(sql, self.foxlink_engine)['Measure_Workno']
             first_aoi_measure = dvs_aoi_measure[0].lower()
-            ntust_measure = await Device.objects.select_related(['aoimeasures']).filter(name=dvs.name).all()
+            ntust_measure = await Device.objects.select_related(['aoimeasures']).filter(name=dvs.name,project=project_id).all()
             # ntust_measure = for i in ntust_measure[0].aoimeasures
             ntust_measure = ntust_measure[0].aoimeasures
             # sql = f"""
