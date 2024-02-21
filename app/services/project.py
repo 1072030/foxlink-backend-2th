@@ -111,10 +111,19 @@ async def RemoveProjectWorker(project_id: int, user_id: str):
 async def SearchProjectDevices(project_name: str):
 
     return await foxlink_dbs.get_device_names(project_name=project_name)
+    # project = await Project.objects.filter(name = project_name).select_related(["devices"]).get_or_none()
+    # if project is None:
+    #     return data
+    # else:
+    #     devices = [i.name for i in project.devices]
+    #     for i in data:
+    #         if i["device"] in devices:
+    #             i["selected"] = True
+    #     return data
 
 
 async def AddNewProjectEvents(dto: List[NewProjectDto]):
-    project_name = dto[0].project
+    project_name = dto[0].project.upper()
     # check selected devices
     if len(dto) == 0:
         raise HTTPException(
@@ -144,6 +153,9 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
     if len(device) != 0:
         if check_duplicate is None:
             project = await Project.objects.create(name=project_name)
+            # add admin into project
+            admin = await User.objects.filter(badge='admin').get_or_none() 
+            await ProjectUser.objects.create(project=project.id, user=admin.badge, permission=4)
         else:
             raise HTTPException(
                 status_code=400, detail="The project name duplicated.")
@@ -151,9 +163,6 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
         raise HTTPException(
             status_code=400, detail="The project name is not existed.")
 
-    # add admin into project
-    admin = await User.objects.filter(badge='admin').get_or_none()
-    await ProjectUser.objects.create(project=project.id, user=admin.badge, permission=4)
 
     event_data = {}
     for selected in dto:
