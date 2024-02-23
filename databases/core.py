@@ -1,19 +1,19 @@
+"https://github.com/encode/databases/tree/master"
 import asyncio
 import contextlib
 import functools
 import logging
 import typing
+import weakref
 from contextvars import ContextVar
 from types import TracebackType
 from urllib.parse import SplitResult, parse_qsl, unquote, urlsplit
-
-from pymysql.err import OperationalError
 
 from sqlalchemy import text
 from sqlalchemy.sql import ClauseElement
 
 from databases.importer import import_from_string
-from databases.interfaces import DatabaseBackend, Record
+from databases.interfaces import DatabaseBackend, Record, TransactionBackend
 
 try:  # pragma: no cover
     import click
@@ -37,6 +37,11 @@ except ImportError:  # pragma: no cover
 logger = logging.getLogger("databases")
 
 
+_ACTIVE_TRANSACTIONS: ContextVar[
+    typing.Optional["weakref.WeakKeyDictionary['Transaction', 'TransactionBackend']"]
+] = ContextVar("databases:active_transactions", default=None)
+
+
 class Database:
     SUPPORTED_BACKENDS = {
         "postgresql": "databases.backends.postgres:PostgresBackend",
@@ -46,6 +51,8 @@ class Database:
         "mysql+asyncmy": "databases.backends.asyncmy:AsyncMyBackend",
         "sqlite": "databases.backends.sqlite:SQLiteBackend",
     }
+
+    _connection_map: "weakref.WeakKeyDictionary[asyncio.Task, 'Connection']"
 
     def __init__(
         self,
@@ -57,6 +64,7 @@ class Database:
         self.url = DatabaseURL(url)
         self.options = options
         self.is_connected = False
+        self._connection_map = weakref.WeakKeyDictionary()
 
         self._force_rollback = force_rollback
 
@@ -65,13 +73,34 @@ class Database:
         assert issubclass(backend_cls, DatabaseBackend)
         self._backend = backend_cls(self.url, **self.options)
 
-        # Connections are stored as task-local state.
-        self._connection_context = ContextVar("connection_context")  # type: ContextVar
-
         # When `force_rollback=True` is used, we use a single global
         # connection, within a transaction that always rolls back.
-        self._global_connection = None  # type: typing.Optional[Connection]
-        self._global_transaction = None  # type: typing.Optional[Transaction]
+        self._global_connection: typing.Optional[Connection] = None
+        self._global_transaction: typing.Optional[Transaction] = None
+
+    @property
+    def _current_task(self) -> asyncio.Task:
+        task = asyncio.current_task()
+        if not task:
+            raise RuntimeError("No currently active asyncio.Task found")
+        return task
+
+    @property
+    def _connection(self) -> typing.Optional["Connection"]:
+        return self._connection_map.get(self._current_task)
+
+    @_connection.setter
+    def _connection(
+        self, connection: typing.Optional["Connection"]
+    ) -> typing.Optional["Connection"]:
+        task = self._current_task
+
+        if connection is None:
+            self._connection_map.pop(task, None)
+        else:
+            self._connection_map[task] = connection
+
+        return self._connection
 
     async def connect(self) -> None:
         """
@@ -91,7 +120,7 @@ class Database:
             assert self._global_connection is None
             assert self._global_transaction is None
 
-            self._global_connection = Connection(self._backend)
+            self._global_connection = Connection(self, self._backend)
             self._global_transaction = self._global_connection.transaction(
                 force_rollback=True
             )
@@ -115,7 +144,7 @@ class Database:
             self._global_transaction = None
             self._global_connection = None
         else:
-            self._connection_context = ContextVar("connection_context")
+            self._connection = None
 
         await self._backend.disconnect()
         logger.info(
@@ -131,20 +160,24 @@ class Database:
 
     async def __aexit__(
         self,
-        exc_type: typing.Type[BaseException] = None,
-        exc_value: BaseException = None,
-        traceback: TracebackType = None,
+        exc_type: typing.Optional[typing.Type[BaseException]] = None,
+        exc_value: typing.Optional[BaseException] = None,
+        traceback: typing.Optional[TracebackType] = None,
     ) -> None:
         await self.disconnect()
 
     async def fetch_all(
-        self, query: typing.Union[ClauseElement, str], values: dict = None
+        self,
+        query: typing.Union[ClauseElement, str],
+        values: typing.Optional[dict] = None,
     ) -> typing.List[Record]:
         async with self.connection() as connection:
             return await connection.fetch_all(query, values)
 
     async def fetch_one(
-        self, query: typing.Union[ClauseElement, str], values: dict = None
+        self,
+        query: typing.Union[ClauseElement, str],
+        values: typing.Optional[dict] = None,
     ) -> typing.Optional[Record]:
         async with self.connection() as connection:
             return await connection.fetch_one(query, values)
@@ -152,14 +185,16 @@ class Database:
     async def fetch_val(
         self,
         query: typing.Union[ClauseElement, str],
-        values: dict = None,
+        values: typing.Optional[dict] = None,
         column: typing.Any = 0,
     ) -> typing.Any:
         async with self.connection() as connection:
             return await connection.fetch_val(query, values, column=column)
 
     async def execute(
-        self, query: typing.Union[ClauseElement, str], values: dict = None
+        self,
+        query: typing.Union[ClauseElement, str],
+        values: typing.Optional[dict] = None,
     ) -> typing.Any:
         async with self.connection() as connection:
             return await connection.execute(query, values)
@@ -171,7 +206,9 @@ class Database:
             return await connection.execute_many(query, values)
 
     async def iterate(
-        self, query: typing.Union[ClauseElement, str], values: dict = None
+        self,
+        query: typing.Union[ClauseElement, str],
+        values: typing.Optional[dict] = None,
     ) -> typing.AsyncGenerator[typing.Mapping, None]:
         async with self.connection() as connection:
             async for record in connection.iterate(query, values):
@@ -181,12 +218,10 @@ class Database:
         if self._global_connection is not None:
             return self._global_connection
 
-        try:
-            return self._connection_context.get()
-        except LookupError:
-            connection = Connection(self._backend)
-            self._connection_context.set(connection)
-            return connection
+        if not self._connection:
+            self._connection = Connection(self, self._backend)
+
+        return self._connection
 
     def transaction(
         self, *, force_rollback: bool = False, **kwargs: typing.Any
@@ -209,7 +244,8 @@ class Database:
 
 
 class Connection:
-    def __init__(self, backend: DatabaseBackend) -> None:
+    def __init__(self, database: Database, backend: DatabaseBackend) -> None:
+        self._database = database
         self._backend = backend
 
         self._connection_lock = asyncio.Lock()
@@ -217,7 +253,7 @@ class Connection:
         self._connection_counter = 0
 
         self._transaction_lock = asyncio.Lock()
-        self._transaction_stack = []  # type: typing.List[Transaction]
+        self._transaction_stack: typing.List[Transaction] = []
 
         self._query_lock = asyncio.Lock()
 
@@ -234,25 +270,30 @@ class Connection:
 
     async def __aexit__(
         self,
-        exc_type: typing.Type[BaseException] = None,
-        exc_value: BaseException = None,
-        traceback: TracebackType = None,
+        exc_type: typing.Optional[typing.Type[BaseException]] = None,
+        exc_value: typing.Optional[BaseException] = None,
+        traceback: typing.Optional[TracebackType] = None,
     ) -> None:
         async with self._connection_lock:
             assert self._connection is not None
             self._connection_counter -= 1
             if self._connection_counter == 0:
                 await self._connection.release()
+                self._database._connection = None
 
     async def fetch_all(
-        self, query: typing.Union[ClauseElement, str], values: dict = None
+        self,
+        query: typing.Union[ClauseElement, str],
+        values: typing.Optional[dict] = None,
     ) -> typing.List[Record]:
         built_query = self._build_query(query, values)
         async with self._query_lock:
             return await self._connection.fetch_all(built_query)
 
     async def fetch_one(
-        self, query: typing.Union[ClauseElement, str], values: dict = None
+        self,
+        query: typing.Union[ClauseElement, str],
+        values: typing.Optional[dict] = None,
     ) -> typing.Optional[Record]:
         built_query = self._build_query(query, values)
         async with self._query_lock:
@@ -261,7 +302,7 @@ class Connection:
     async def fetch_val(
         self,
         query: typing.Union[ClauseElement, str],
-        values: dict = None,
+        values: typing.Optional[dict] = None,
         column: typing.Any = 0,
     ) -> typing.Any:
         built_query = self._build_query(query, values)
@@ -269,7 +310,9 @@ class Connection:
             return await self._connection.fetch_val(built_query, column)
 
     async def execute(
-        self, query: typing.Union[ClauseElement, str], values: dict = None
+        self,
+        query: typing.Union[ClauseElement, str],
+        values: typing.Optional[dict] = None,
     ) -> typing.Any:
         built_query = self._build_query(query, values)
         async with self._query_lock:
@@ -283,7 +326,9 @@ class Connection:
             await self._connection.execute_many(queries)
 
     async def iterate(
-        self, query: typing.Union[ClauseElement, str], values: dict = None
+        self,
+        query: typing.Union[ClauseElement, str],
+        values: typing.Optional[dict] = None,
     ) -> typing.AsyncGenerator[typing.Any, None]:
         built_query = self._build_query(query, values)
         async with self.transaction():
@@ -305,14 +350,14 @@ class Connection:
 
     @staticmethod
     def _build_query(
-        query: typing.Union[ClauseElement, str], values: dict = None
+        query: typing.Union[ClauseElement, str], values: typing.Optional[dict] = None
     ) -> ClauseElement:
         if isinstance(query, str):
             query = text(query)
 
             return query.bindparams(**values) if values is not None else query
         elif values:
-            return query.values(**values)
+            return query.values(**values)  # type: ignore
 
         return query
 
@@ -331,6 +376,37 @@ class Transaction:
         self._force_rollback = force_rollback
         self._extra_options = kwargs
 
+    @property
+    def _connection(self) -> "Connection":
+        # Returns the same connection if called multiple times
+        return self._connection_callable()
+
+    @property
+    def _transaction(self) -> typing.Optional["TransactionBackend"]:
+        transactions = _ACTIVE_TRANSACTIONS.get()
+        if transactions is None:
+            return None
+
+        return transactions.get(self, None)
+
+    @_transaction.setter
+    def _transaction(
+        self, transaction: typing.Optional["TransactionBackend"]
+    ) -> typing.Optional["TransactionBackend"]:
+        transactions = _ACTIVE_TRANSACTIONS.get()
+        if transactions is None:
+            transactions = weakref.WeakKeyDictionary()
+        else:
+            transactions = transactions.copy()
+
+        if transaction is None:
+            transactions.pop(self, None)
+        else:
+            transactions[self] = transaction
+
+        _ACTIVE_TRANSACTIONS.set(transactions)
+        return transactions.get(self, None)
+
     async def __aenter__(self) -> "Transaction":
         """
         Called when entering `async with database.transaction()`
@@ -340,19 +416,15 @@ class Transaction:
 
     async def __aexit__(
         self,
-        exc_type: typing.Type[BaseException] = None,
-        exc_value: BaseException = None,
-        traceback: TracebackType = None,
+        exc_type: typing.Optional[typing.Type[BaseException]] = None,
+        exc_value: typing.Optional[BaseException] = None,
+        traceback: typing.Optional[TracebackType] = None,
     ) -> None:
         """
         Called when exiting `async with database.transaction()`
         """
         if exc_type is not None or self._force_rollback:
-            if exc_type == OperationalError and exc_value:
-                await self.rollback(skip=True)
-                raise exc_value
-            else:
-                await self.rollback()
+            await self.rollback()
         else:
             await self.commit()
 
@@ -375,45 +447,34 @@ class Transaction:
         return wrapper  # type: ignore
 
     async def start(self) -> "Transaction":
-        self._connection = self._connection_callable()
         self._transaction = self._connection._connection.transaction()
 
         async with self._connection._transaction_lock:
             is_root = not self._connection._transaction_stack
             await self._connection.__aenter__()
-            try:
-                await self._transaction.start(
-                    is_root=is_root, extra_options=self._extra_options
-                )
-            except OperationalError as e:
-                await self._connection.__aexit__()
-                raise e
-            else:
-                self._connection._transaction_stack.append(self)
+            await self._transaction.start(
+                is_root=is_root, extra_options=self._extra_options
+            )
+            self._connection._transaction_stack.append(self)
         return self
 
     async def commit(self) -> None:
         async with self._connection._transaction_lock:
             assert self._connection._transaction_stack[-1] is self
             self._connection._transaction_stack.pop()
-            try:
-                await self._transaction.commit()
-            except OperationalError as e:
-                await self._connection.__aexit__()
-                raise e
+            assert self._transaction is not None
+            await self._transaction.commit()
             await self._connection.__aexit__()
+            self._transaction = None
 
-    async def rollback(self,skip=False) -> None:
+    async def rollback(self) -> None:
         async with self._connection._transaction_lock:
             assert self._connection._transaction_stack[-1] is self
             self._connection._transaction_stack.pop()
-            if not skip:
-                try:
-                    await self._transaction.rollback()
-                except OperationalError as e:
-                    await self._connection.__aexit__()
-                    raise e
+            assert self._transaction is not None
+            await self._transaction.rollback()
             await self._connection.__aexit__()
+            self._transaction = None
 
 
 class _EmptyNetloc(str):

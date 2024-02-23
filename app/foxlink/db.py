@@ -45,10 +45,10 @@ class FoxlinkDatabasePool:
             max_size=5
         )
         self.ntust_db = create_engine(
-            f'mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST+":"+str(DATABASE_PORT)}/{DATABASE_NAME}'
+            f'mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST+":"+str(DATABASE_PORT)}/{DATABASE_NAME}', pool_pre_ping=True
         )
         self.foxlink_db = create_engine(
-            f'mysql+pymysql://{FOXLINK_EVENT_DB_USER}:{FOXLINK_EVENT_DB_PWD}@{FOXLINK_EVENT_DB_HOSTS[0]}/{FOXLINK_EVENT_DB_NAME[0]}'
+            f'mysql+pymysql://{FOXLINK_EVENT_DB_USER}:{FOXLINK_EVENT_DB_PWD}@{FOXLINK_EVENT_DB_HOSTS[0]}/{FOXLINK_EVENT_DB_NAME[0]}',pool_pre_ping=True
         )
 
 
