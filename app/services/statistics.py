@@ -90,7 +90,7 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
                 try:
                     happened = next((i for i in happened_data if i["event_id"] == result.event.id),None)
                 except:
-                    happened["recently"] = None
+                    happened["recently"] = "can not find recently data"
                     happened["happened"] = 0
 
 
@@ -209,10 +209,8 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
 
         else:
             for date in dr_week:
-                year = int(date.split('-')[0])
-                month = int(date.split('-')[1])
-                day = int(date.split('-')[2])
-                next_day = f"{year}-{month}-{day+7}"
+                date_check = datetime.strptime(date,"%Y-%m-%d")
+                next_day = (date_check + timedelta(days=7)).strftime("%Y-%m-%d")
                 actual_check = []
                 predict_check = []
                 total_accuracy = []
@@ -281,7 +279,7 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
                         "accuracyDate": '%.2f' % device_accuracy,
                         "devices": devices_detail,
                     })
-
+                    
     return formatData
 
 
@@ -353,14 +351,16 @@ async def GetPredictCompareAnalysis(project_name, line, select_type, start_date,
             device_accuracy = (np.array(total_accuracy)).mean()
             formatData.append({
                 "date": date,
-                "value": device_accuracy
+                "value": str(device_accuracy)
             })
     else:
         for date in dr_week:
-            year = int(date.split('-')[0])
-            month = int(date.split('-')[1])
-            day = int(date.split('-')[2])
-            next_day = f"{year}-{month}-{day+7}"
+            # year = int(date.split('-')[0])
+            # month = int(date.split('-')[1])
+            # day = int(date.split('-')[2])
+            # print(date)
+            date_check = datetime.strptime(date,"%Y-%m-%d")
+            next_day = (date_check + timedelta(days=7)).strftime("%Y-%m-%d")
             actual_check = []
             predict_check = []
             total_accuracy = []
@@ -415,7 +415,7 @@ async def GetPredictCompareAnalysis(project_name, line, select_type, start_date,
             device_accuracy = (np.array(total_accuracy)).mean()
             formatData.append({
                 "date": date,
-                "value": device_accuracy
+                "value": str(device_accuracy)
             })
             
     return formatData
