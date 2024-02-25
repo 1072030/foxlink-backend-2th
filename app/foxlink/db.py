@@ -113,7 +113,12 @@ class FoxlinkDatabasePool:
         tables = await dbs[0].fetch_all(
             query=stmt
         )
-        return tables
+        output = []
+        for table in tables:
+            format = re.sub(r"[\'\(\),]",'',str(table))
+            output.append(format)
+
+        return output
 
     async def connect(self):
         db_connect_routines = [db.connect() for db in self.event_dbs.values()]

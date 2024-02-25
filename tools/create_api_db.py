@@ -70,6 +70,14 @@ async def create_default_entries():
             Env(
                 key="daily_predict_timer",
                 value="23:20:00"
+            ),
+            Env(
+                key="backup_path",
+                value="/app/backup.sql"
+            ),
+            Env(
+                key="diffbackup_path",
+                value="/app/diffbackup_path/"
             )
         ]
         await Env.objects.bulk_create(envs)
