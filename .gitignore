@@ -11,7 +11,7 @@ uploaded*
 *.so
 *.sql
 /backup
-
+happened.json
 # Distribution / packaging
 .Python
 build/

@@ -1174,86 +1174,90 @@ async def PredictData(project_id: int, select_type: str,user:str):
     return
 
 
-async def HappenedCheck(project_id: int, start_time: datetime, select_type: str):
-    # data = await Project.objects.filter(id=project_id).select_related(
-    #     ["devices", "devices__predictresults"]
-    # ).filter(
-    #     devices__predictresults__pred_date__gte=get_ntz_now().date()
-    # ).all()
-    # event = await ErrorFeature.objects.filter(
-    #             device=dvs.id,
-    #             project=project_id
-    #         ).all()
-    #         event = set([row.event.id for row in event])
-    #         events = await ProjectEvent.objects.filter(id__in=event).all()
-    project = await Project.objects.filter(id=project_id).select_related(["devices", "devices__events"]).all()
-    devices = project[0].devices
-    for dvs in devices:
-        events = dvs.events
-        for event in events:
-            if select_type == "day":
-                checkPredEvent = await PredictResult.objects.filter(event=event.id, pred_type=0).order_by('-pred_date').limit(1).get_or_none()
+async def GetFoxlinkTables():
+    tables = await foxlink_dbs.get_all_project_tabels()
+    return tables
 
-                # check
-                if checkPredEvent is None:
-                    continue
+# async def HappenedCheck(project_id: int, start_time: datetime, select_type: str):
+#     # data = await Project.objects.filter(id=project_id).select_related(
+#     #     ["devices", "devices__predictresults"]
+#     # ).filter(
+#     #     devices__predictresults__pred_date__gte=get_ntz_now().date()
+#     # ).all()
+#     # event = await ErrorFeature.objects.filter(
+#     #             device=dvs.id,
+#     #             project=project_id
+#     #         ).all()
+#     #         event = set([row.event.id for row in event])
+#     #         events = await ProjectEvent.objects.filter(id__in=event).all()
+#     project = await Project.objects.filter(id=project_id).select_related(["devices", "devices__events"]).all()
+#     devices = project[0].devices
+#     for dvs in devices:
+#         events = dvs.events
+#         for event in events:
+#             if select_type == "day":
+#                 checkPredEvent = await PredictResult.objects.filter(event=event.id, pred_type=0).order_by('-pred_date').limit(1).get_or_none()
 
-                pred_data = await PredictResult.objects.filter(event=event.id, ori_date__gte=start_time, pred_type=0).order_by('-pred_date').all()
-                update_pred_data_bulk = []
-                for data in pred_data:
-                    # week predict
-                    if data.pred_type is True:
-                        continue
-                    # day predict
-                    else:
-                        stmt = f"""
-                        SELECT * FROM `{project[0].name}_event`
-                        WHERE
-                            Device_Name = '{dvs.name}' AND
-                            Message = '{event.name}' AND
-                            (Start_Time > '{data.pred_date}' AND Start_Time < '{data.pred_date + timedelta(days=1)}')
-                            ORDER BY Start_Time DESC;
-                        """
-                        existed = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
-                        if len(existed) >= 1:
-                            data.last_happened = datetime(
-                                existed[0]["Start_Time"])
+#                 # check
+#                 if checkPredEvent is None:
+#                     continue
 
-                        data.last_happened_check = 1
-                        update_pred_data_bulk.append(data)
+#                 pred_data = await PredictResult.objects.filter(event=event.id, ori_date__gte=start_time, pred_type=0).order_by('-pred_date').all()
+#                 update_pred_data_bulk = []
+#                 for data in pred_data:
+#                     # week predict
+#                     if data.pred_type is True:
+#                         continue
+#                     # day predict
+#                     else:
+#                         stmt = f"""
+#                         SELECT * FROM `{project[0].name}_event`
+#                         WHERE
+#                             Device_Name = '{dvs.name}' AND
+#                             Message = '{event.name}' AND
+#                             (Start_Time > '{data.pred_date}' AND Start_Time < '{data.pred_date + timedelta(days=1)}')
+#                             ORDER BY Start_Time DESC;
+#                         """
+#                         existed = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+#                         if len(existed) >= 1:
+#                             data.last_happened = datetime(
+#                                 existed[0]["Start_Time"])
 
-                await PredictResult.objects.bulk_update(
-                    objects=update_pred_data_bulk,
-                    columns=["last_happened", "last_happened_check"]
-                )
-            else:
-                checkPredEvent = await PredictResult.objects.filter(event=event.id, pred_type=1).order_by('-pred_date').limit(1).get_or_none()
+#                         data.last_happened_check = 1
+#                         update_pred_data_bulk.append(data)
 
-                # check
-                if checkPredEvent is None:
-                    continue
+#                 await PredictResult.objects.bulk_update(
+#                     objects=update_pred_data_bulk,
+#                     columns=["last_happened", "last_happened_check"]
+#                 )
+#             else:
+#                 checkPredEvent = await PredictResult.objects.filter(event=event.id, pred_type=1).order_by('-pred_date').limit(1).get_or_none()
 
-                pred_data = await PredictResult.objects.filter(event=event.id, ori_date__gte=start_time, pred_type=1).order_by('-pred_date').all()
-                update_pred_data_bulk = []
-                for data in pred_data:
-                    # day predict
-                    stmt = f"""
-                        SELECT * FROM `{project[0].name}_event`
-                        WHERE
-                            Device_Name = '{dvs.name}' AND
-                            Message = '{event.name}' AND
-                            (Start_Time > '{data.pred_date}' AND Start_Time < '{data.pred_date + timedelta(days=7)}')
-                            ORDER BY Start_Time DESC;
-                        """
-                    existed = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
-                    if len(existed) >= 1:
-                        data.last_happened = datetime(existed[0]["Start_Time"])
+#                 # check
+#                 if checkPredEvent is None:
+#                     continue
 
-                    data.last_happened_check = 1
-                    update_pred_data_bulk.append(data)
+#                 pred_data = await PredictResult.objects.filter(event=event.id, ori_date__gte=start_time, pred_type=1).order_by('-pred_date').all()
+#                 update_pred_data_bulk = []
+#                 for data in pred_data:
+#                     # day predict
+#                     stmt = f"""
+#                         SELECT * FROM `{project[0].name}_event`
+#                         WHERE
+#                             Device_Name = '{dvs.name}' AND
+#                             Message = '{event.name}' AND
+#                             (Start_Time > '{data.pred_date}' AND Start_Time < '{data.pred_date + timedelta(days=7)}')
+#                             ORDER BY Start_Time DESC;
+#                         """
+#                     existed = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+#                     if len(existed) >= 1:
+#                         data.last_happened = datetime(existed[0]["Start_Time"])
 
-                await PredictResult.objects.bulk_update(
-                    objects=update_pred_data_bulk,
-                    columns=["last_happened", "last_happened_check"]
-                )
-    return
+#                     data.last_happened_check = 1
+#                     update_pred_data_bulk.append(data)
+
+#                 await PredictResult.objects.bulk_update(
+#                     objects=update_pred_data_bulk,
+#                     columns=["last_happened", "last_happened_check"]
+#                 )
+#     return

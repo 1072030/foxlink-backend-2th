@@ -28,7 +28,9 @@ if __name__ == "__main__":
     from app.log import logging, CustomFormatter, LOG_FORMAT_FILE
     from app.foxlink.db import foxlink_dbs
     from app.env import (
-        DEBUG
+        DEBUG,
+        FOXLINK_EVENT_DB_HOSTS,
+        FOXLINK_EVENT_DB_NAME
     )
     from app.core.database import (
         transaction,
@@ -40,7 +42,6 @@ if __name__ == "__main__":
         AuditLogHeader,
         PredictResult,
         AoiFeature,
-        ErrorFeature
     )
     from fastapi import HTTPException
     from app.services.project import(
@@ -60,8 +61,9 @@ if __name__ == "__main__":
         UpdatePreprocessingData,
         PredictData
     )
+    import json
     import traceback
-
+    host = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
     logger = logging.getLogger(f"foxlink(daemon)")
     logger.addHandler(
         logging.FileHandler('logs/foxlink(daemon).log', mode="w")
@@ -76,7 +78,7 @@ if __name__ == "__main__":
 
     MAIN_ROUTINE_MIN_RUNTIME = 600
     NOTIFICATION_INTERVAL = 30
-
+    
     def show_duration(func):
         async def wrapper(*args, **_args):
             logger.info(f'[{func.__name__}] started running.')
@@ -269,6 +271,49 @@ if __name__ == "__main__":
             await PredictData(detail['project_id'],detail['select_type'],"admin")
 
         return
+    
+    @transaction(callback=True)
+    @ show_duration
+    async def sync_foxlink_event_happened_handler(handler=[]):
+        projects = await Project.objects.select_related(["devices","devices__events"]).all()
+        result = await asyncio.gather(*[
+            sync_foxlink_event_happened(project,device,event)
+            for project in projects
+            for device in project.devices
+            for event in device.events
+        ])
+        print(result)
+        with open('happened.json','w') as jsonfile:
+            json.dump(result,jsonfile)
+    async def sync_foxlink_event_happened(project,device,event):
+        stmt = (
+            f"SELECT * FROM `{project.name}_event_new` WHERE "
+            f"Device_Name='{device.name}' AND "
+            f"Line = {device.line} AND "
+            f"Category = {event.category} AND "
+            f"Message = '{event.name}' AND "
+            f"Start_Time >= '{get_ntz_now().date()}' "
+            "ORDER BY ID DESC "
+            "LIMIT 100;"
+        )
+
+        try:
+            row = await foxlink_dbs[host].fetch_all(query=stmt)
+            return {
+                "event_id":event.id,
+                "recently":str(row[0]["Start_Time"]),
+                "happened":len(row)
+            }
+        except:
+            row = None
+            return {
+                "event_id":event.id,
+                "recently":row,
+                "happened":0
+            }
+
+
+
     ######### main #########
 
     def shutdown_callback():
@@ -324,6 +369,8 @@ if __name__ == "__main__":
                 await daily_project_data_handler()
 
                 await daily_project_predict_handler()
+
+                await sync_foxlink_event_happened_handler()
 
                 end_time = time.perf_counter()
 

@@ -103,7 +103,17 @@ class FoxlinkDatabasePool:
             })
         return data
     
-    
+    async def get_all_project_tabels(self):
+        stmt = (
+            f"""
+            Show tables;
+            """
+        )
+        dbs = [db for db in self.event_dbs.values()]
+        tables = await dbs[0].fetch_all(
+            query=stmt
+        )
+        return tables
 
     async def connect(self):
         db_connect_routines = [db.connect() for db in self.event_dbs.values()]

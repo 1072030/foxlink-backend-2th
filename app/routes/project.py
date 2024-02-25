@@ -24,6 +24,7 @@ from app.services.project import (
     UpdatePreprocessingData,
     TrainingData,
     PredictData,
+    GetFoxlinkTables
 )
 from app.services.auth import (
     get_current_user,
@@ -334,3 +335,7 @@ async def predict_data(project_id: int, pred_type: str, user: User = Depends(get
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"PREDICT_FAILED : {repr(e)}"
         )
     return
+
+@router.get('/tables',tags=["project"])
+async def get_foxlink_tables():
+    return await GetFoxlinkTables()

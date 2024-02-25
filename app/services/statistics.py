@@ -12,7 +12,7 @@ from app.core.database import (
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
-
+import json
 
 async def GetPredictResult(project_name: Optional[str] = None, device_name: Optional[str] = None):
     # if project_name is None:
@@ -27,7 +27,7 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
         except:
             print('not single')
 
-    if len(project_id_list) == 2:
+    if len(project_id_list) >= 2:
         data = await Project.objects.filter(id__in=project_id_list).select_related(['devices', 'devices__events']).all()
     else:
         if single is None:
@@ -62,30 +62,55 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
             getAllFirstResultData.append(firstResultData_day)
 
     formatData = {}
+    with open('happened.json','r') as happened:
+        happened_data = json.load(happened)
+
     for result in getAllFirstResultData:
         if result is None:
             continue
         for i in devices:
             if result.device.id == i.id:
+                # project name
                 dvs_project_name = " ".join(
                     (i.project.name).split(" ")).upper()
+                
+                # device name
                 dvs_name = i.name
+                
+                # format output
+                # Example output:
+                # "D7X E75": { "Device_5":[]}
                 if dvs_project_name not in formatData.keys():
                     formatData[dvs_project_name] = {}
                 if dvs_name not in formatData[dvs_project_name].keys():
                     formatData[dvs_project_name][dvs_name] = []
-                if result.pred_type == 1:
-                    pred_type = "週預測"
-                else:
-                    pred_type = "日預測"
+
+                pred_type = "週預測" if result.pred_type == 1 else "日預測"
+
+                try:
+                    happened = next((i for i in happened_data if i["event_id"] == result.event.id),None)
+                except:
+                    happened["recently"] = None
+                    happened["happened"] = 0
+
+
+                
+                # if result.pred_type == 1:
+                #     pred_type = "週預測"
+                # else:
+                #     pred_type = "日預測"
+
+
 
                 formatData[dvs_project_name][dvs_name].append({
                     'id': result.id,
                     'name': result.event.name,
+                    'category':result.event.category,
                     'lightColor': int(result.pred),
                     'date': result.pred_date,
                     'frequency': pred_type,
-                    'happenLastTime': True
+                    'happenLastTime': happened["recently"],
+                    'happened_times':happened["happened"]
                 })
     return formatData
 
