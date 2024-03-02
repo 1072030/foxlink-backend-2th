@@ -78,6 +78,14 @@ async def create_default_entries():
             Env(
                 key="diffbackup_path",
                 value="/app/diffbackup_path/"
+            ),
+            Env(
+                key="threshold",
+                value=0.6
+            ),
+            Env(
+                key="search_col",
+                value=[]
             )
         ]
         await Env.objects.bulk_create(envs)

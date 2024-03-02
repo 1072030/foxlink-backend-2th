@@ -282,8 +282,13 @@ if __name__ == "__main__":
             for device in project.devices
             for event in device.events
         ])
-        print(result)
+        # print(result)
         with open('happened.json','w') as jsonfile:
+            result = {
+                "data":result,
+                "timestamp":f'{get_ntz_now()+timedelta(hours=8)}'
+            }
+            print(result)
             json.dump(result,jsonfile)
     async def sync_foxlink_event_happened(project,device,event):
         stmt = (

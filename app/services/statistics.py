@@ -7,7 +7,7 @@ from app.core.database import (
     PredictResult,
     ErrorFeature,
     TrainPerformance,
-    transaction
+    Env
 )
 from datetime import datetime, timedelta
 import pandas as pd
@@ -56,15 +56,26 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
             if checkPredEvent is None:
                 continue
 
-            firstResultData_week = await PredictResult.objects.filter(device=dvs.id, event=event, pred_type=1).select_related(['event']).order_by('-pred_date').limit(1).get_or_none()
-            firstResultData_day = await PredictResult.objects.filter(device=dvs.id, event=event, pred_type=0).select_related(['event']).order_by('-pred_date').limit(1).get_or_none()
-            getAllFirstResultData.append(firstResultData_week)
-            getAllFirstResultData.append(firstResultData_day)
+            firstResultData_week = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=1,event__trainperformances__freq="week").select_related(['event','event__trainperformances']).order_by('-pred_date').limit(1).get_or_none()
+            firstResultData_day = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=0,event__trainperformances__freq="day").select_related(['event','event__trainperformances']).order_by('-pred_date').limit(1).get_or_none()
+            # print(firstResultData_week.event.trainperformances[0].arf)
+            # print(firstResultData_day.event.trainperformances[0].arf)
+            # arf_day = firstResultData_week.event.trainperformances
+            # arf_week = 
 
+            if firstResultData_week.event.trainperformances[0].arf > firstResultData_day.event.trainperformances[0].arf:
+                getAllFirstResultData.append(firstResultData_week)
+            else:
+                getAllFirstResultData.append(firstResultData_day)
+
+
+    threshold = await Env.objects.filter(key="threshold").get_or_none()
+    if threshold is None:
+        raise HTTPException(status_code=400, detail="cannot find 'threshold' env settings")
     formatData = {}
-    with open('happened.json','r') as happened:
-        happened_data = json.load(happened)
-
+    with open('happened.json','r') as happened_json:
+        happened_ori_data = json.load(happened_json)
+        
     for result in getAllFirstResultData:
         if result is None:
             continue
@@ -88,19 +99,14 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
                 pred_type = "週預測" if result.pred_type == 1 else "日預測"
 
                 try:
-                    happened = next((i for i in happened_data if i["event_id"] == result.event.id),None)
+                    happened = next((i for i in happened_ori_data["data"] if i["event_id"] == result.event.id),None)
                 except:
-                    happened["recently"] = "can not find recently data"
-                    happened["happened"] = 0
-
-
-                
-                # if result.pred_type == 1:
-                #     pred_type = "週預測"
-                # else:
-                #     pred_type = "日預測"
-
-
+                    # happened["recently"] = "can not find recently data"
+                    # happened["happened"] = 0
+                    happened = {
+                        "recently":"can not find recently data",
+                        "happened": 0
+                    }
 
                 formatData[dvs_project_name][dvs_name].append({
                     'id': result.id,
@@ -110,13 +116,17 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
                     'date': result.pred_date,
                     'frequency': pred_type,
                     'happenLastTime': happened["recently"],
-                    'happened_times':happened["happened"]
+                    'happened_times':happened["happened"],
+                    'faithful': True if result.event.trainperformances[0].arf > float(threshold.value) else False
                 })
     return formatData
 
 
 async def GetPredictCompareSearch(project_name: List, select_type: str, line: int, start_time: datetime, end_time: datetime):
     formatData = []
+    threshold = await Env.objects.filter(key="threshold").get_or_none()
+    if threshold is None:
+        raise HTTPException(status_code=400, detail="cannot find 'threshold' env settings")
     for project in project_name:
 
         if line is None:
@@ -160,7 +170,7 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
                             continue
 
                         faithful = 0
-                        if train_performance.arf >= 0.6:
+                        if train_performance.arf >= float(threshold.value):
                             faithful = 1
 
                         if faithful:
@@ -232,7 +242,7 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
                             continue
 
                         faithful = 0
-                        if train_performance.arf >= 0.6:
+                        if train_performance.arf >= float(threshold.value):
                             faithful = 1
 
                         if faithful:
@@ -285,6 +295,9 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
 
 async def GetPredictCompareAnalysis(project_name, line, select_type, start_date, end_date):
     formatData = []
+    threshold = await Env.objects.filter(key="threshold").get_or_none()
+    if threshold is None:
+        raise HTTPException(status_code=400, detail="cannot find 'threshold' env settings")
     data = await Project.objects.filter(name=project_name).select_related(["devices", "devices__events"]).filter(devices__line=line).all()
 
     devices = data[0].devices
@@ -320,7 +333,7 @@ async def GetPredictCompareAnalysis(project_name, line, select_type, start_date,
                         continue
 
                     faithful = 0
-                    if train_performance.arf >= 0.6:
+                    if train_performance.arf >= float(threshold.value):
                         faithful = 1
 
                     if faithful:
@@ -381,7 +394,7 @@ async def GetPredictCompareAnalysis(project_name, line, select_type, start_date,
                         continue
 
                     faithful = 0
-                    if train_performance.arf >= 0.6:
+                    if train_performance.arf >= float(threshold.value):
                         faithful = 1
 
                     if faithful:
