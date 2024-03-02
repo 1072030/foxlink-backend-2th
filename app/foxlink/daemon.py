@@ -200,7 +200,6 @@ if __name__ == "__main__":
             raise HTTPException(400,"can not find 'daily_project_predict' env settings")
         
         updateTimer = datetime.strptime(checkEnv.value,'%H:%M:%S')
-
         if get_ntz_now() <= get_ntz_now().replace(hour=updateTimer.hour,minute=updateTimer.minute,second=updateTimer.second):
             return
         
@@ -242,12 +241,7 @@ if __name__ == "__main__":
                     "select_type":"day"
                 })
                 # 確認每週預測時間點
-                checkWeeklyLogs = await PredictResult.objects.filter(
-                    pred_type=1,
-                    device=device.id,
-                    pred_date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0)
-                ).order_by('-ori_date').limit(1).get_or_none()
-                if checkWeeklyLogs is None:
+                if get_ntz_now().weekday() == 6:
                     predict_required.append({
                         "project_id":project.id,
                         "select_type":"week"
