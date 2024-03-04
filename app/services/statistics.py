@@ -112,8 +112,9 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
                     'id': result.id,
                     'name': result.event.name,
                     'category':result.event.category,
-                    'lightColor': int(result.pred),
-                    'date': result.pred_date,
+                    'steady': int(result.pred), # steady  
+                    'ori_date': result.ori_date,
+                    'pred_date':result.pred_date,
                     'frequency': pred_type,
                     'happenLastTime': happened["recently"],
                     'happened_times':happened["happened"],

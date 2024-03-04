@@ -2,6 +2,7 @@
 儲存資料庫中的環境變數
 """
 import shutil
+import json
 from fastapi import APIRouter, Depends
 from app.services.auth import get_manager_active_user
 from app.core.database import Env
@@ -16,6 +17,12 @@ async def space_statistic(user: User = Depends(get_manager_active_user)) -> str:
     total, used, _ = shutil.disk_usage("/")
     return used/total
 
+@router.get('/search-timestamp')
+async def search_timestamp_statistic() -> str:
+    with open('happened.json','r') as jsonfile:
+        data = json.load(jsonfile)
+        timestamp = data["timestamp"]
+        return timestamp
 
 @router.get("/env-settings")
 async def get_env_settings(key: str = None, user: User = Depends(get_manager_active_user)):

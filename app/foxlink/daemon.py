@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     _terminate = None
 
-    MAIN_ROUTINE_MIN_RUNTIME = 600
+    MAIN_ROUTINE_MIN_RUNTIME = 30
     NOTIFICATION_INTERVAL = 30
     
     def show_duration(func):
@@ -282,7 +282,6 @@ if __name__ == "__main__":
                 "data":result,
                 "timestamp":f'{get_ntz_now()+timedelta(hours=8)}'
             }
-            print(result)
             json.dump(result,jsonfile)
     async def sync_foxlink_event_happened(project,device,event):
         stmt = (
