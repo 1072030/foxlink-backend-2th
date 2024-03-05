@@ -20,7 +20,7 @@ from app.core.database import (
 )
 from enum import Enum
 from app.foxlink.db import foxlink_dbs
-
+import requests
 # -- init --
 jobstores = {
     # pickle_protocol=2,
@@ -53,6 +53,13 @@ def backup(path: str, description: str):
     subprocess.run(mysqldump_cmd, shell=True, check=True)
     foxlink_dbs.ntust_db.execute(
         f"INSERT INTO audit_log_headers (action,user,created_date,description) VALUES ('{AuditActionEnum.FULL_BACKUP.value}','admin','{get_ntz_now()}','{description}')")
+
+def pending_task():
+    requests.get(url="http://localhost/task")
+@router.get("/check-task", tags=["scheduler"])
+async def check_task():
+    asyncIOScheduler.add_job(pending_task,"interval",seconds=30,replace_existing=True)
+    return
 
 
 @router.get("/", tags=["scheduler"])

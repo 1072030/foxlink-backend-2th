@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     _terminate = None
 
-    MAIN_ROUTINE_MIN_RUNTIME = 30
+    MAIN_ROUTINE_MIN_RUNTIME = 60
     NOTIFICATION_INTERVAL = 30
     
     def show_duration(func):

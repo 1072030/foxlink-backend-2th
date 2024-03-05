@@ -13,6 +13,7 @@ from app.routes import (
     project,
     statistics,
     scheduler,
+    task,
     test
 )
 from app.core.database import api_db
@@ -21,7 +22,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.foxlink.db import foxlink_dbs
 
 from app.routes.scheduler import asyncIOScheduler
-
 
 logger = logging.getLogger(LOGGER_NAME)
 logger.propagate = False
@@ -41,6 +41,7 @@ origins = [
     "http://ntust2.foxlink.com.tw:*",
     "http://192.168.0.115:8080",
     "http://192.168.65.212:*",
+    "http://192.168.1.103:*"
 ]
 
 app.add_middleware(
@@ -63,7 +64,7 @@ app.include_router(backup.router)
 app.include_router(statistics.router)
 app.include_router(test.router)
 app.include_router(scheduler.router)
-
+app.include_router(task.router)
 asyncIOScheduler.start()
 
 
@@ -91,6 +92,7 @@ async def shutdown():
     # disconnect databases
     while True:
         try:
+            foxlink_dbs.ntust_db.execute('TRUNCATE TABLE job')
             await asyncio.gather(*[
                 api_db.disconnect(),
                 foxlink_dbs.disconnect(),

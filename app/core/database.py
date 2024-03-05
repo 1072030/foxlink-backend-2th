@@ -186,6 +186,17 @@ class EnvEnum(Enum):
     rescue_count = "rescue_count"
     history_record_days = "history_record_days"
 
+class TaskAction(Enum):
+    DATA_PREPROCESSING = "DATA_PREPROCESSING"
+    TRAINING_DAY = "TRAINING_DAY"
+    TRAINING_WEEK = "TRAINING_WEEK"
+
+class TaskStatus(Enum):
+    Failure = "Failure"
+    Pending = "Pending"
+    Processing = "Processing"
+    Succeeded = "Succeeded"
+
 
 class AuditActionEnum(Enum):
     USER_LOGIN = "USER_LOGIN"
@@ -283,6 +294,17 @@ class User(ormar.Model):
     # def User_flag_fetch():
     #     return User.objects.filter(flag=True)
 
+class Task(ormar.Model):
+    class Meta(MainMeta):
+        tablename="task"
+
+    id: int = ormar.Integer(
+        primary_key=True, autoincrement=True, nullable=False)
+    action:str = ormar.String(max_length=50, index=True,nullable=False,choices=list(TaskAction))
+    status:str = ormar.String(max_length=50, index=True,nullable=False,choices=list(TaskStatus))
+    args:str = ormar.String(max_length=50,nullable=False)
+    updated_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
+    created_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
 
 class Project(ormar.Model):
     class Meta(MainMeta):

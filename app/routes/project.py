@@ -12,7 +12,10 @@ from app.core.database import (
     User,
     AuditActionEnum,
     AuditLogHeader,
-    UserLevel
+    UserLevel,
+    Task,
+    TaskAction,
+    TaskStatus
 )
 from app.services.project import (
     AddNewProjectWorker,
@@ -150,6 +153,7 @@ async def add_project_and_events(dto: List[NewProjectDto], user: User = Depends(
     """
     # add new project
     user = await checkAdminPermission(user)
+
     if len(dto) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"please select device"
@@ -167,6 +171,26 @@ async def add_project_and_events(dto: List[NewProjectDto], user: User = Depends(
         user=user.badge,
         description=project.id
     )
+
+    tasks = [
+        Task(
+            action=TaskAction.DATA_PREPROCESSING.value,
+            status=TaskStatus.Pending.value,
+            args=f"{project.id}"
+        ),
+        Task(
+            action=TaskAction.TRAINING_DAY.value,
+            status=TaskStatus.Pending.value,
+            args=f"{project.id},day"
+        ),
+        Task(
+            action=TaskAction.TRAINING_WEEK.value,
+            status=TaskStatus.Pending.value,
+            args=f"{project.id},week"
+        )
+    ]
+    await Task.objects.bulk_create(tasks)
+    return
     # preprocess
     try:
         await PreprocessingData(project.id)
