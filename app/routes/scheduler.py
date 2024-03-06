@@ -55,7 +55,7 @@ def backup(path: str, description: str):
         f"INSERT INTO audit_log_headers (action,user,created_date,description) VALUES ('{AuditActionEnum.FULL_BACKUP.value}','admin','{get_ntz_now()}','{description}')")
 
 def pending_task():
-    requests.get(url="http://localhost/task")
+    requests.get(url="http://localhost/task/check-task")
 @router.get("/check-task", tags=["scheduler"])
 async def check_task():
     asyncIOScheduler.add_job(pending_task,"interval",seconds=30,replace_existing=True)

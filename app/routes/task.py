@@ -5,6 +5,8 @@ from app.core.database import (
     Task,
     TaskAction,
     TaskStatus,
+    AuditLogHeader,
+    AuditActionEnum,
     get_ntz_now
 )
 from app.services.project import(
@@ -31,20 +33,19 @@ async def remove_task(dto:List[str]):
     return
 
 
-@router.get("/checking", tags=["task"])
+@router.get("/check-task", tags=["task"])
 async def checking_task():
     pending_task = await Task.objects.order_by('id').filter(status=TaskStatus.Pending.value).limit(1).get_or_none()
     processing_task = await Task.objects.order_by('id').filter(status=TaskStatus.Processing.value).limit(1).get_or_none()
 
-    # 運作時間過長
-    if processing_task.updated_date >= get_ntz_now() - timedelta(hours=3):
-        processing_task.status = TaskStatus.Failure.value
-        await processing_task.update()
-        return
     # 正在執行
     if processing_task is not None:
+        # 運作時間過長
+        # if processing_task.updated_date >= get_ntz_now() - timedelta(hours=3):
+        #     processing_task.status = TaskStatus.Failure.value
+        #     await processing_task.update()
         return
-
+    
     # 沒有任務
     if pending_task is None:
         return
@@ -56,11 +57,64 @@ async def checking_task():
     await pending_task.update()
     try:
         if pending_task.action == TaskAction.DATA_PREPROCESSING.value:
-            await PreprocessingData(int(args[0]))
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
+                user='admin',
+                description=args[0]
+            )
+            try:
+                await PreprocessingData(int(args[0]))
+                await AuditLogHeader.objects.create(
+                    action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
+                    user='admin',
+                    description=args[0]
+                )
+            except Exception as e:
+                await AuditLogHeader.objects.create(
+                    action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
+                    user='admin',
+                    description=f'{args[0]} detail:{e}'
+                )
+        # 日預測
         elif pending_task.action == TaskAction.TRAINING_DAY.value:
-            await TrainingData(int(args[0]),args[1])
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.TRAINING_STARTED_DAILY.value,
+                user='admin',
+                description=args[0]
+            )
+            try:
+                await TrainingData(int(args[0]),args[1])
+                await AuditLogHeader.objects.create(
+                    action=AuditActionEnum.TRAINING_SUCCEEDED_DAILY.value,
+                    user='admin',
+                    description=args[0]
+                )
+            except Exception as e:
+                await AuditLogHeader.objects.create(
+                    action=AuditActionEnum.TRAINING_FAILED_DAILY.value,
+                    user='admin',
+                    description=f'{args[0]} detail:{e}'
+                )
+        # 週預測
         elif pending_task.action == TaskAction.TRAINING_WEEK.value:
-            await TrainingData(int(args[0]),args[1])
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.TRAINING_STARTED_WEEKLY.value,
+                user='admin',
+                description=args[0]
+            )
+            try:
+                await TrainingData(int(args[0]),args[1])
+                await AuditLogHeader.objects.create(
+                    action=AuditActionEnum.TRAINING_SUCCEEDED_WEEKLY.value,
+                    user='admin',
+                    description=args[0]
+                )
+            except Exception as e:
+                await AuditLogHeader.objects.create(
+                    action=AuditActionEnum.TRAINING_FAILED_WEEKLY.value,
+                    user='admin',
+                    description=f'{args[0]} detail:{e}'
+                )
         pending_task.status = TaskStatus.Succeeded.value
         pending_task.updated_date = get_ntz_now()
         await pending_task.update()
