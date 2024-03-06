@@ -55,8 +55,8 @@ async def checking_task():
     pending_task.status = TaskStatus.Processing.value
     pending_task.updated_date = get_ntz_now()
     await pending_task.update()
-    try:
-        if pending_task.action == TaskAction.DATA_PREPROCESSING.value:
+    
+    if pending_task.action == TaskAction.DATA_PREPROCESSING.value:
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
                 user='admin',
@@ -69,14 +69,23 @@ async def checking_task():
                     user='admin',
                     description=args[0]
                 )
+
+                pending_task.status = TaskStatus.Succeeded.value
+                pending_task.updated_date = get_ntz_now()
+                await pending_task.update()
+
             except Exception as e:
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
                     user='admin',
                     description=f'{args[0]} detail:{e}'
                 )
+
+                pending_task.status = TaskStatus.Failure.value
+                await pending_task.update()
+
         # 日預測
-        elif pending_task.action == TaskAction.TRAINING_DAY.value:
+    elif pending_task.action == TaskAction.TRAINING_DAY.value:
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_STARTED_DAILY.value,
                 user='admin',
@@ -89,14 +98,22 @@ async def checking_task():
                     user='admin',
                     description=args[0]
                 )
+
+                pending_task.status = TaskStatus.Succeeded.value
+                pending_task.updated_date = get_ntz_now()
+                await pending_task.update()
+
             except Exception as e:
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.TRAINING_FAILED_DAILY.value,
                     user='admin',
                     description=f'{args[0]} detail:{e}'
                 )
+                pending_task.status = TaskStatus.Failure.value
+                await pending_task.update()
+
         # 週預測
-        elif pending_task.action == TaskAction.TRAINING_WEEK.value:
+    elif pending_task.action == TaskAction.TRAINING_WEEK.value:
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_STARTED_WEEKLY.value,
                 user='admin',
@@ -109,16 +126,19 @@ async def checking_task():
                     user='admin',
                     description=args[0]
                 )
+
+                pending_task.status = TaskStatus.Succeeded.value
+                pending_task.updated_date = get_ntz_now()
+                await pending_task.update()
+
             except Exception as e:
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.TRAINING_FAILED_WEEKLY.value,
                     user='admin',
                     description=f'{args[0]} detail:{e}'
                 )
-        pending_task.status = TaskStatus.Succeeded.value
-        pending_task.updated_date = get_ntz_now()
-        await pending_task.update()
-    except Exception as e:
-        pending_task.status = TaskStatus.Failure.value
-        await pending_task.update()
+
+                pending_task.status = TaskStatus.Failure.value
+                await pending_task.update()
+
     return

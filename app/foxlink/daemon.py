@@ -207,9 +207,9 @@ if __name__ == "__main__":
         projects_temp = []
         for i in projects:
             # 確認aoi_feature資料存在
-            checkAoi_featureData = await AoiFeature.objects.filter(
-                date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0) + timedelta(days=-7)
-            ).all()
+            # checkAoi_featureData = await AoiFeature.objects.filter(
+            #     date__gte=get_ntz_now().replace(hour=0,minute=0,second=0,microsecond=0) + timedelta(days=-7)
+            # ).all()
 
 
             # # 確認每日預測是否成功執行過

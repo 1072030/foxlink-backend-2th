@@ -56,7 +56,8 @@ def backup(path: str, description: str):
 
 def pending_task():
     requests.get(url="http://localhost/task/check-task")
-@router.get("/check-task", tags=["scheduler"])
+    
+@router.get("/pending-task-activate", tags=["scheduler"])
 async def check_task():
     asyncIOScheduler.add_job(pending_task,"interval",seconds=30,replace_existing=True)
     return

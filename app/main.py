@@ -17,7 +17,7 @@ from app.routes import (
     test
 )
 from app.core.database import api_db
-from app.log import LOGGER_NAME
+from app.log import LOGGER_NAME,CustomFormatter,LOG_FORMAT_FILE
 from fastapi.middleware.cors import CORSMiddleware
 from app.foxlink.db import foxlink_dbs
 
@@ -25,6 +25,10 @@ from app.routes.scheduler import asyncIOScheduler
 
 logger = logging.getLogger(LOGGER_NAME)
 logger.propagate = False
+logger.addHandler(
+    logging.FileHandler('logs/uvicorn.log', mode="w")
+)
+logger.handlers[-1].setFormatter(CustomFormatter(LOG_FORMAT_FILE))
 
 app = FastAPI(title="Foxlink API Backend", version="0.0.1")
 
@@ -67,6 +71,14 @@ app.include_router(scheduler.router)
 app.include_router(task.router)
 asyncIOScheduler.start()
 
+# import random
+# import string
+# import time
+@app.middleware("http")
+async def log_requests(request, call_next):
+    response = await call_next(request)
+    logger.info(f"{request.client.host}:{request.client.port} - {request.url._url} {request.scope['type']}/{request.scope['http_version']} {response.status_code}")
+    return response
 
 @app.on_event("startup")
 async def startup():

@@ -192,71 +192,71 @@ async def add_project_and_events(dto: List[NewProjectDto], user: User = Depends(
     await Task.objects.bulk_create(tasks)
     return
     # preprocess
-    try:
-        await PreprocessingData(project.id)
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
-            user=user.badge,
-            description=project.id
-        )
-    except Exception as e:
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
-            user=user.badge,
-            description=project.id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f"DATA_PREPROCESSING_FAILED : {repr(e)}"
-        )    
-    # training type : day
-    await AuditLogHeader.objects.create(
-        action=AuditActionEnum.TRAINING_STARTED_DAILY.value,
-        user=user.badge,
-        description=project.id
-    )
-    try:
-        await TrainingData(project.id, "day")
+    # try:
+    #     await PreprocessingData(project.id)
+    #     await AuditLogHeader.objects.create(
+    #         action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
+    #         user=user.badge,
+    #         description=project.id
+    #     )
+    # except Exception as e:
+    #     await AuditLogHeader.objects.create(
+    #         action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
+    #         user=user.badge,
+    #         description=project.id
+    #     )
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST, detail=f"DATA_PREPROCESSING_FAILED : {repr(e)}"
+    #     )    
+    # # training type : day
+    # await AuditLogHeader.objects.create(
+    #     action=AuditActionEnum.TRAINING_STARTED_DAILY.value,
+    #     user=user.badge,
+    #     description=project.id
+    # )
+    # try:
+    #     await TrainingData(project.id, "day")
 
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.TRAINING_SUCCEEDED_DAILY.value,
-            user=user.badge,
-            description=project.id
-        )
-    except Exception as e:
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.TRAINING_FAILED_DAILY.value,
-            user=user.badge,
-            description=project.id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f"TRAINING_FAILED_DAILY : {repr(e)}"
-        )
+    #     await AuditLogHeader.objects.create(
+    #         action=AuditActionEnum.TRAINING_SUCCEEDED_DAILY.value,
+    #         user=user.badge,
+    #         description=project.id
+    #     )
+    # except Exception as e:
+    #     await AuditLogHeader.objects.create(
+    #         action=AuditActionEnum.TRAINING_FAILED_DAILY.value,
+    #         user=user.badge,
+    #         description=project.id
+    #     )
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST, detail=f"TRAINING_FAILED_DAILY : {repr(e)}"
+    #     )
 
-    # training type : week
-    await AuditLogHeader.objects.create(
-        action=AuditActionEnum.TRAINING_STARTED_WEEKLY.value,
-        user=user.badge,
-        description=project.id
-    )
-    try:
-        await TrainingData(project.id, "week")
+    # # training type : week
+    # await AuditLogHeader.objects.create(
+    #     action=AuditActionEnum.TRAINING_STARTED_WEEKLY.value,
+    #     user=user.badge,
+    #     description=project.id
+    # )
+    # try:
+    #     await TrainingData(project.id, "week")
         
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.TRAINING_SUCCEEDED_WEEKLY.value,
-            user=user.badge,
-            description=project.id
-        )
-    except Exception as e:
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.TRAINING_FAILED_WEEKLY.value,
-            user=user.badge,
-            description=project.id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f"TRAINING_FAILED_WEEKLY : {repr(e)}"
-        )
+    #     await AuditLogHeader.objects.create(
+    #         action=AuditActionEnum.TRAINING_SUCCEEDED_WEEKLY.value,
+    #         user=user.badge,
+    #         description=project.id
+    #     )
+    # except Exception as e:
+    #     await AuditLogHeader.objects.create(
+    #         action=AuditActionEnum.TRAINING_FAILED_WEEKLY.value,
+    #         user=user.badge,
+    #         description=project.id
+    #     )
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST, detail=f"TRAINING_FAILED_WEEKLY : {repr(e)}"
+    #     )
 
-    return
+    # return
 
 
 

@@ -6,4 +6,4 @@ mkdir -p model_week/
 cat > happenend.json
 python -m app.server_daemons &
 sleep 15
-curl -X GET "http://localhost/scheduler/check-task"
+curl -X GET "http://localhost/scheduler/pending-task-activate"
