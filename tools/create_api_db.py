@@ -81,11 +81,11 @@ async def create_default_entries():
             ),
             Env(
                 key="threshold",
-                value=0.6
+                value="0.6"
             ),
             Env(
                 key="search_col",
-                value=[]
+                value="[]"
             )
         ]
         await Env.objects.bulk_create(envs)
