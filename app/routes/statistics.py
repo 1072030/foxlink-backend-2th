@@ -25,6 +25,9 @@ router = APIRouter(prefix="/statistics")
 
 @router.get("/", tags=["statistics"])
 async def get_all_project_statistics(user: User = Depends(get_current_user())):
+    """
+    給前端請求伺服器資料列表
+    """
     project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_worker.value)
     # await GetAllProjectStatistics()
     data = await Project.objects.filter(id__in=project_id_list).select_related(["devices"]).all()
@@ -39,6 +42,9 @@ async def get_all_project_statistics(user: User = Depends(get_current_user())):
 
 @router.get("/predict_result", tags=["statistics"])
 async def get_predict_result(project_name: Optional[str] = None, device_name: Optional[str] = None, user: User = Depends(get_current_user())):
+    """
+    儀表板內容和機況預測api
+    """
     project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_worker.value)
     project = []
     if project_name is not None:
@@ -61,6 +67,9 @@ async def get_predict_result(project_name: Optional[str] = None, device_name: Op
 
 @router.get("/predict-compare-list", tags=["statistics"])
 async def get_predict_compare_list(user: User = Depends(get_current_user())):
+    """
+    給前端請求的資料內容
+    """
     project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_worker.value)
     data = await Project.objects.filter(id__in=project_id_list).select_related("devices").all()
     output = []
@@ -80,6 +89,9 @@ async def get_predict_compare_list(user: User = Depends(get_current_user())):
 
 @router.get("/predict-compare-search", tags=["statistics"])
 async def get_predict_compare_search(start_time: datetime, end_time: datetime, select_type: str, project_name: Optional[str] = None, line: Optional[int] = None, user: User = Depends(get_current_user())):
+    """
+    機況比較api
+    """
     project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_worker.value)
     start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
     end_time = end_time.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -96,6 +108,9 @@ async def get_predict_compare_search(start_time: datetime, end_time: datetime, s
 
 @router.get("/predict-compare-analysis", tags=["statistics"])
 async def get_predict_compare_analysis(project_name: str, line: str, select_type: str, start_date: datetime, end_date: datetime, user: User = Depends(get_current_user())):
+    """
+    比較圖表
+    """
     project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_worker.value)
     start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
     end_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)

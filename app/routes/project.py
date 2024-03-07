@@ -362,4 +362,7 @@ async def predict_data(project_id: int, pred_type: str, user: User = Depends(get
 
 @router.get('/tables',tags=["project"])
 async def get_foxlink_tables():
+    """
+    取得所有aoi資料表中的table_name
+    """
     return await GetFoxlinkTables()

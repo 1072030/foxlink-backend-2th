@@ -17,10 +17,23 @@ from typing import List
 router = APIRouter(prefix="/task")
 @router.get("/", tags=["task"])
 async def get_all_task():
+    """
+    取得所有的task
+    """
     return await Task.objects.all()
+
+@router.delete("/",tags=["task"])
+async def remove_task(dto:List[str]):
+    """
+    刪除task 目前無作用
+    """
+    return
 
 @router.post("/redo", tags=["task"])
 async def redo_task(id:int,action:TaskAction,args:List[str]):
+    """
+    重新執行task
+    """
     task = Task(
         action=action,
         stauts=TaskStatus.Pending.value,
@@ -28,13 +41,11 @@ async def redo_task(id:int,action:TaskAction,args:List[str]):
     )
     await Task.objects.create(task)
 
-@router.delete("/",tags=["task"])
-async def remove_task(dto:List[str]):
-    return
-
-
 @router.get("/check-task", tags=["task"])
 async def checking_task():
+    """
+    task queue的api
+    """
     pending_task = await Task.objects.order_by('id').filter(status=TaskStatus.Pending.value).limit(1).get_or_none()
     processing_task = await Task.objects.order_by('id').filter(status=TaskStatus.Processing.value).limit(1).get_or_none()
 
@@ -111,6 +122,7 @@ async def checking_task():
                 )
                 pending_task.status = TaskStatus.Failure.value
                 await pending_task.update()
+
 
         # 週預測
     elif pending_task.action == TaskAction.TRAINING_WEEK.value:

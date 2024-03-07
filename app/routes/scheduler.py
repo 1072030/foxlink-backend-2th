@@ -59,12 +59,18 @@ def pending_task():
     
 @router.get("/pending-task-activate", tags=["scheduler"])
 async def check_task():
+    """
+    產生每30秒請求api的background scheduler
+    """
     asyncIOScheduler.add_job(pending_task,"interval",seconds=30,replace_existing=True)
     return
 
 
 @router.get("/", tags=["scheduler"])
 async def get_all_jobs():
+    """
+    取得全部的jobs
+    """
     res = asyncIOScheduler.get_jobs()
     # return res.__repr__()
 
@@ -72,7 +78,9 @@ async def get_all_jobs():
 
 @router.delete("/", tags=["scheduler"])
 async def delete_job(job_id: str):
-
+    """
+    刪除job
+    """
     try:
         asyncIOScheduler.remove_job(job_id)
         return "Delete Successful"
@@ -84,6 +92,9 @@ async def delete_job(job_id: str):
 
 @router.post("/date", tags=["scheduler"])
 async def set_date_job(time: datetime, description: str = "完整備份"):
+    """
+    設定完整備份
+    """
     backup_path = await Env.objects.filter(key="backup_path").get_or_none()
     time = time + timedelta(hours=-8)
     if backup_path is None:
@@ -107,6 +118,9 @@ async def set_date_job(time: datetime, description: str = "完整備份"):
 
 @router.post("/cron", tags=["scheduler"])
 async def set_cron_job(time: datetime, select_type: Select_type, description: str = "差異備份"):
+    """
+    設定差異備份
+    """
     time = time + timedelta(hours=-8)
     diffbackup_path = await Env.objects.filter(key="diffbackup_path").get_or_none()
     if diffbackup_path is None:
