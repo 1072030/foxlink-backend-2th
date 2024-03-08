@@ -18,6 +18,9 @@ services:
       - FOXLINK_DEVICE_DB_HOST=172.168.1.231:3306
       - FOXLINK_DEVICE_DB_USER=ntust2
       - FOXLINK_DEVICE_DB_PWD=ntust2pwd
+      - ACCESS_LOG=logs/access.log
+      - ERROR_LOG=logs/error.log
+      - LOG_LEVEL=debug
     restart: unless-stopped
     ports:
       - 19001:80

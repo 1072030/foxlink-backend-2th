@@ -69,7 +69,7 @@ app.include_router(statistics.router)
 app.include_router(test.router)
 app.include_router(scheduler.router)
 app.include_router(task.router)
-asyncIOScheduler.start()
+
 
 # import random
 # import string
@@ -89,6 +89,9 @@ async def startup():
                 api_db.connect(),
                 foxlink_dbs.connect(),
             ])
+            asyncIOScheduler.start()
+            # remove job table
+            foxlink_dbs.ntust_db.execute('TRUNCATE TABLE job')
             # Starting scheduler
         except Exception as e:
             logger.error(f"Start up error: {e}")
@@ -104,7 +107,6 @@ async def shutdown():
     # disconnect databases
     while True:
         try:
-            foxlink_dbs.ntust_db.execute('TRUNCATE TABLE job')
             await asyncio.gather(*[
                 api_db.disconnect(),
                 foxlink_dbs.disconnect(),

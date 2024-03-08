@@ -121,7 +121,7 @@ async def SearchProjectDevices(project_name: str):
     #             i["selected"] = True
     #     return data
 
-
+@transaction()
 async def AddNewProjectEvents(dto: List[NewProjectDto]):
     project_name = dto[0].project.upper()
     # check selected devices
@@ -148,17 +148,22 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
         dvs_aoi[device].append(measure.lower())
 
     # check project in system duplicated
-    check_duplicate = await Project.objects.get_or_none(name=project_name)
+    project = await Project.objects.select_related(["devices"]).get_or_none(name=project_name)
 
     if len(device) != 0:
-        if check_duplicate is None:
-            project = await Project.objects.create(name=project_name)
+        if project is None:
+            project_create = await Project.objects.create(name=project_name)
             # add admin into project
             admin = await User.objects.filter(badge='admin').get_or_none() 
-            await ProjectUser.objects.create(project=project.id, user=admin.badge, permission=4)
+            await ProjectUser.objects.create(project=project_create.id, user=admin.badge, permission=4)
         else:
-            raise HTTPException(
-                status_code=400, detail="The project name duplicated.")
+            device_name_in_project = [dvs.name for dvs in project.devices]
+            for i in dto:
+                if i.device in device_name_in_project:
+                    dto.remove(i)
+
+            # raise HTTPException(
+            #     status_code=400, detail="The project name duplicated.")
     else:
         raise HTTPException(
             status_code=400, detail="The project name is not existed.")
@@ -207,7 +212,8 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
             name=content.split('-')[0],
             line=content.split('-')[1],
             cname=content.split('-')[2],
-            project=project.id
+            project=project.id,
+            flag=False
         )
         bulk_create_device.append(device)
 
@@ -216,8 +222,10 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
 
     # get device detail
     new_devices = await Device.objects.filter(
-        project=project.id
+        project=project.id,
+        flag=0
     ).all()
+
     for device in new_devices:
         # check selected events
         for events in event_data[device.name + '-' + str(device.line) + '-' + device.cname]:
@@ -253,7 +261,10 @@ async def PreprocessingData(project_id: int):
         now_workday) + pd.Timedelta(hours=7, minutes=40)
     project = await Project.objects.filter(id=project_id).select_related(
         ["devices", "devices__aoimeasures"]
+    ).filter(
+        devices__flag=False
     ).all()
+
     if len(project) == 0:
         raise HTTPException(
             status_code=400, detail="this project doesnt existed.")
@@ -594,7 +605,9 @@ async def PreprocessingData(project_id: int):
                         error['happened_last_time'].median(), inplace=True)
 
                     err_fea = pd.DataFrame()
+
                     dvs_id = await Device.objects.filter(name=dvs,project=project_id).get_or_none()
+
                     if dvs_id is None:
                         raise HTTPException(
                             status_code=400, detail="cant find this device")
@@ -644,6 +657,14 @@ async def PreprocessingData(project_id: int):
             print(pred_target.info())
             pred_target.to_sql(con=conn, name="pred_targets",
                             if_exists='append', index=False)
+            
+            # bulk_update_devices : List[Device] = []
+            devices = await Device.objects.filter(project=project_id,flag=False).all()
+            for dvs in devices:
+                temp_device = await Device.objects.get(id=dvs.id)
+                temp_device.flag=True
+                await temp_device.save()
+
             trans.commit()
             conn.close()
         except Exception as e:

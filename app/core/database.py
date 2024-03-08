@@ -325,7 +325,7 @@ class Device(ormar.Model):
     cname:str = ormar.String(max_length=100, nullable=False)
     project: int = ormar.ForeignKey(
         Project, index=True, nullable=False, ondelete="CASCADE")
-    
+    flag: bool = ormar.Boolean(default=False)
     created_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
 
 

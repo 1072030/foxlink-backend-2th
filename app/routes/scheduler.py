@@ -21,16 +21,18 @@ from app.core.database import (
 from enum import Enum
 from app.foxlink.db import foxlink_dbs
 import requests
+import time
+import random
 # -- init --
 jobstores = {
     # pickle_protocol=2,
     "default": SQLAlchemyJobStore(url=f"mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}", tablename="job")
 }
 executors = {
-    "default": ThreadPoolExecutor(20),
+    "default": ThreadPoolExecutor(10),
     "processpool": ProcessPoolExecutor(5),
 }
-job_defaults = {"coalesce": False, "max_instances": 3}
+job_defaults = {"coalesce": False, "max_instances": 1}
 # backgroundScheduler = BackgroundScheduler(
 #     jobstores=jobstores, executors=executors, job_defaults=job_defaults)
 asyncIOScheduler = AsyncIOScheduler(
@@ -62,7 +64,7 @@ async def check_task():
     """
     產生每30秒請求api的background scheduler
     """
-    asyncIOScheduler.add_job(pending_task,"interval",seconds=30,replace_existing=True)
+    asyncIOScheduler.add_job(id="產生每30秒請求api",func=pending_task,trigger="interval",seconds=30,replace_existing=True)
     return
 
 
