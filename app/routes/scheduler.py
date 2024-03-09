@@ -29,10 +29,10 @@ jobstores = {
     "default": SQLAlchemyJobStore(url=f"mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}", tablename="job")
 }
 executors = {
-    "default": ThreadPoolExecutor(10),
-    "processpool": ProcessPoolExecutor(5),
+    "default": ThreadPoolExecutor(1),
+    "processpool": ProcessPoolExecutor(1),
 }
-job_defaults = {"coalesce": False, "max_instances": 1}
+job_defaults = {"coalesce": True, "max_instances": 1}
 # backgroundScheduler = BackgroundScheduler(
 #     jobstores=jobstores, executors=executors, job_defaults=job_defaults)
 asyncIOScheduler = AsyncIOScheduler(

@@ -658,15 +658,16 @@ async def PreprocessingData(project_id: int):
             pred_target.to_sql(con=conn, name="pred_targets",
                             if_exists='append', index=False)
             
-            # bulk_update_devices : List[Device] = []
-            devices = await Device.objects.filter(project=project_id,flag=False).all()
-            for dvs in devices:
-                temp_device = await Device.objects.get(id=dvs.id)
-                temp_device.flag=True
-                await temp_device.save()
-
             trans.commit()
             conn.close()
+
+            # update function need after commit
+            devices = await Device.objects.filter(project=project_id,flag=False).all()
+            for dvs in devices:
+                temp = await Device.objects.filter(id=dvs.id).get_or_none()
+                if temp is not None:
+                    temp.flag=1
+                    await temp.update()
         except Exception as e:
             trans.rollback()
             raise HTTPException(
