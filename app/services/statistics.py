@@ -87,7 +87,7 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
                 
                 # device name
                 dvs_name = i.name
-                
+                dvs_line = i.line
                 # format output
                 # Example output:
                 # "D7X E75": { "Device_5":[]}
@@ -113,11 +113,12 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
                     'name': result.event.name,
                     'category':result.event.category,
                     'steady': int(result.pred), # steady  
-                    'ori_date': result.ori_date.date(),
-                    'pred_date':result.pred_date.date(),
+                    'ori_date': result.ori_date.date().strftime("%m-%d"),
+                    'pred_date':result.pred_date.date().strftime("%m-%d"),
                     'frequency': pred_type,
                     'happenLastTime': happened["recently"],
                     'happened_times':happened["happened"],
+                    'line':dvs_line,
                     'faithful': True if result.event.trainperformances[0].arf > float(threshold.value) else False
                 })
     return formatData
@@ -365,7 +366,8 @@ async def GetPredictCompareAnalysis(project_name, line, select_type, start_date,
             device_accuracy = (np.array(total_accuracy)).mean()
             formatData.append({
                 "date": date,
-                "value": str(device_accuracy)
+                # "value": str(device_accuracy)
+                "value": '%.2f' % device_accuracy,
             })
     else:
         for date in dr_week:
@@ -428,8 +430,10 @@ async def GetPredictCompareAnalysis(project_name, line, select_type, start_date,
                 total_accuracy.append(device_accuracy)
             device_accuracy = (np.array(total_accuracy)).mean()
             formatData.append({
-                "date": date,
-                "value": str(device_accuracy)
+                # "date": date,
+                # "value": str(device_accuracy)
+                "date": actual_predict_date,
+                "value": '%.2f' % device_accuracy,
             })
             
     return formatData

@@ -47,15 +47,40 @@ FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
 ntust_engine = foxlink_dbs.ntust_db
 foxlink_engine = foxlink_dbs.foxlink_db
 
-async def DeleteProject(project_id: int):
+async def DeleteDevices(project_id: int,device_name: List[str]):
     project = await Project.objects.filter(id=project_id).get_or_none()
     if project is None:
-        raise HTTPException(404, 'user is not found')
+        raise HTTPException(404,'project is not found')
+    
+    # data = await Project.objects.filter(id = project_id).select_related(["devices"]).all()
+    data = await Project.objects.select_related("devices").filter(id=project_id).all()
+    if data is None:
+        raise HTTPException(404,'device is not found')
+    
+    output = []
     try:
-        await project.delete()
-        return project.name
+        for pjt in data:
+            for dvs in pjt.devices:
+                if dvs.name in device_name:
+                    await dvs.delete()
+                    output.append({
+                        "project_name": pjt.name.upper(),
+                        "device_name": dvs.name,
+                        })
+            
     except:
         raise HTTPException(400, 'project can not delete')
+    
+    return output
+# async def DeleteProject(project_id: int):
+#     project = await Project.objects.filter(id=project_id).get_or_none()
+#     if project is None:
+#         raise HTTPException(404, 'user is not found')
+#     try:
+#         await project.delete()
+#         return project.name
+#     except:
+#         raise HTTPException(400, 'project can not delete')
 
 
 async def AddNewProjectWorker(project_id: int, user_id: str, permission: int = UserLevel):
@@ -109,8 +134,19 @@ async def RemoveProjectWorker(project_id: int, user_id: str):
 
 
 async def SearchProjectDevices(project_name: str):
+    data = await foxlink_dbs.get_device_names(project_name=project_name)
+    devices = await Project.objects.filter(name = project_name).select_related(["devices"]).get_or_none()
+    for dev in data:
+        dev['select'] = 0
+        for device in devices.devices:
+            if device.name == dev['device'] and device.line==dev['line']:
+                dev['select'] = 1
+                break
+                
 
-    return await foxlink_dbs.get_device_names(project_name=project_name)
+    return data
+    # return await foxlink_dbs.get_device_names(project_name=project_name)
+
     # project = await Project.objects.filter(name = project_name).select_related(["devices"]).get_or_none()
     # if project is None:
     #     return data
@@ -148,16 +184,16 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
         dvs_aoi[device].append(measure.lower())
 
     # check project in system duplicated
-    project = await Project.objects.select_related(["devices"]).get_or_none(name=project_name)
+    project_create = await Project.objects.select_related(["devices"]).get_or_none(name=project_name)
 
     if len(device) != 0:
-        if project is None:
+        if project_create is None:
             project_create = await Project.objects.create(name=project_name)
             # add admin into project
             admin = await User.objects.filter(badge='admin').get_or_none() 
             await ProjectUser.objects.create(project=project_create.id, user=admin.badge, permission=4)
         else:
-            device_name_in_project = [dvs.name for dvs in project.devices]
+            device_name_in_project = [dvs.name for dvs in project_create.devices]
             for i in dto:
                 if i.device in device_name_in_project:
                     dto.remove(i)
@@ -212,7 +248,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
             name=content.split('-')[0],
             line=content.split('-')[1],
             cname=content.split('-')[2],
-            project=project.id,
+            project=project_create.id,
             flag=False
         )
         bulk_create_device.append(device)
@@ -222,7 +258,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
 
     # get device detail
     new_devices = await Device.objects.filter(
-        project=project.id,
+        project=project_create.id,
         flag=0
     ).all()
 
@@ -249,7 +285,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
 
     await AoiMeasure.objects.bulk_create(bulk_create_aoi_measure)
 
-    return project
+    return project_create
 
 @transaction()
 async def PreprocessingData(project_id: int):
@@ -1166,7 +1202,7 @@ async def PredictData(project_id: int, select_type: str,user:str):
                         df['event'] = event
                         if select_type == 'week':
                             df['pred_date'] = df.date.apply(
-                                lambda x: x + pd.Timedelta(days=7))
+                                lambda x: x + pd.Timedelta(days=6))
                             df.reset_index(inplace=True, drop=True)
                             df['pred_type'] = 1
                         else:
@@ -1198,7 +1234,16 @@ async def PredictData(project_id: int, select_type: str,user:str):
 
 async def GetFoxlinkTables():
     tables = await foxlink_dbs.get_all_project_tabels()
-    return tables
+    # project = [item.split("_")[0] for item in tables]
+    # project = [item.split("_")[0] for item in tables if len(item.split("_")) == 2]
+    # project = [item for item in tables if item.endswith("_event")]
+    project = [item for item in tables if item.endswith("_event")]
+    project = [item.split("_")[0] for item in project if len(item.split("_")) == 2]
+    project = list(set(project))
+
+    return project
+    # tables = await foxlink_dbs.get_all_project_tabels()
+    # return tables
 
 # async def HappenedCheck(project_id: int, start_time: datetime, select_type: str):
 #     # data = await Project.objects.filter(id=project_id).select_related(

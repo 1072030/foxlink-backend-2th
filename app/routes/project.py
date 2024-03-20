@@ -21,7 +21,8 @@ from app.services.project import (
     AddNewProjectWorker,
     SearchProjectDevices,
     AddNewProjectEvents,
-    DeleteProject,
+    # DeleteProject,
+    DeleteDevices,
     RemoveProjectWorker,
     PreprocessingData,
     UpdatePreprocessingData,
@@ -76,17 +77,31 @@ async def get_all_project(project_id: int, user: User = Depends(get_current_user
 
 
 @router.delete("/", tags=["project"])
-async def delete_project(project_id: int, user: User = Depends(get_current_user())):
+# async def delete_project(project_id: int, user: User = Depends(get_current_user())):
+#     """
+#     刪除專案(僅專案內最高階級人員)
+#     """
+#     user = await checkUserProjectPermission(project_id, user, UserLevel.project_manager.value)
+    # if user is not None:
+    #     project_name = await DeleteProject(project_id)
+
+    #     await AuditLogHeader.objects.create(
+    #         action=AuditActionEnum.DELECT_PROJECT.value,
+    #         user=user.badge,
+    #         description=f"{project_name}"
+    #     )
+    #     return
+async def delete_devices(project_id: int, device_name: List[str], user: User = Depends(get_current_user())):
     """
     刪除專案(僅專案內最高階級人員)
     """
     user = await checkUserProjectPermission(project_id, user, UserLevel.project_manager.value)
     if user is not None:
-        project_name = await DeleteProject(project_id)
+        devices_name = await DeleteDevices(project_id,device_name)
         await AuditLogHeader.objects.create(
-            action=AuditActionEnum.DELECT_PROJECT.value,
+            action=AuditActionEnum.DELECT_DEVICES.value,
             user=user.badge,
-            description=f"{project_name}"
+            description=f"Deleted devices:{devices_name}"
         )
         return
     else:

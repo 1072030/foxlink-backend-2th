@@ -67,7 +67,7 @@ async def get_logs(
 
     params = {
         "created_date__gte": start_date,
-        "created_date__lte": end_date,
+        "created_date__lte": end_date.replace(hour=23,minute=59,second=59),
         "user__badge": badge,
         "user__username": username,
         "description__contains": project_name
@@ -94,7 +94,7 @@ async def get_logs(
                 username=log.user.username,
                 # user=log.user if log.user is not None else None,
                 description=log.description,
-                created_date=log.created_date,
+                created_date=log.created_date.strftime('%Y-%m-%d %H:%M:%S'),
             )
             for log in logs
         ],

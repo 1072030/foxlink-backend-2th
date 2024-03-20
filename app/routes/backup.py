@@ -36,9 +36,15 @@ async def get_backup_detail(user: User = Depends(get_current_user())):
         for i in text:
             log = await AuditLogHeader.objects.filter(action=AuditActionEnum.FULL_BACKUP.value, description=i).order_by("-created_date").limit(1).get_or_none()
             if log is not None:
-                logs.append(log)
+                logs.append({"name": log.description, "date": str(log.created_date)[:19]})
+        return logs
+    # try:
+    #     for i in text:
+    #         log = await AuditLogHeader.objects.filter(action=AuditActionEnum.FULL_BACKUP.value, description=i).order_by("-created_date").limit(1).get_or_none()
+    #         if log is not None:
+    #             logs.append(log)
 
-        return [{"name": data.description, "date": data.created_date} for data in logs]
+    #     return [{"name": data.description, "date": data.created_date} for data in logs]
     except Exception as e:
         raise HTTPException(status_code=200, detail=e.__repr__())
 

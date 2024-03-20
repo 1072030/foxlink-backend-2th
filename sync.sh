@@ -1,6 +1,7 @@
 #!/bin/bash
-backend=/home/foxlink/Desktop/foxlink-backend-2th/
+backend=/home/simslab/Foxlink2/foxlink-backend-2th/
 frontend=/home/foxlink/Desktop/foxlink-second
+
 
 final_backend=/home/ntust/foxlink-backend-2th/
 final_frontend=/home/ntust/temp/
