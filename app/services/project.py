@@ -47,8 +47,10 @@ FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
 ntust_engine = foxlink_dbs.ntust_db
 foxlink_engine = foxlink_dbs.foxlink_db
 
-async def DeleteDevices(project_id: int,device_name: List[str]):
-    project = await Project.objects.filter(id=project_id).get_or_none()
+async def DeleteDevices(dto: List[NewProjectDto]):
+    project_name = dto[0].project.name
+    project = await Project.objects.filter(name=project_name).get_or_none()
+    # project = await Project.objects.filter(id=project_id).get_or_none()
     if project is None:
         raise HTTPException(404,'project is not found')
     
@@ -136,12 +138,18 @@ async def RemoveProjectWorker(project_id: int, user_id: str):
 async def SearchProjectDevices(project_name: str):
     data = await foxlink_dbs.get_device_names(project_name=project_name)
     devices = await Project.objects.filter(name = project_name).select_related(["devices"]).get_or_none()
-    for dev in data:
-        dev['select'] = 0
-        for device in devices.devices:
-            if device.name == dev['device'] and device.line==dev['line']:
-                dev['select'] = 1
-                break
+    if devices is None:
+        for dev in data:
+            dev['select'] = 0
+            
+
+    else:
+        for dev in data:
+            dev['select'] = 0
+            for device in devices.devices:
+                if device.name == dev['device'] and device.line==dev['line']:
+                    dev['select'] = 1
+                    break
                 
 
     return data
@@ -1244,6 +1252,14 @@ async def GetFoxlinkTables():
     return project
     # tables = await foxlink_dbs.get_all_project_tabels()
     # return tables
+
+@transaction()
+async def AddNewProjects(projects: List[str]):
+    pjt = []
+    for project in projects:
+        pjt.append(project.upper())
+    
+
 
 # async def HappenedCheck(project_id: int, start_time: datetime, select_type: str):
 #     # data = await Project.objects.filter(id=project_id).select_related(

@@ -27,7 +27,7 @@ async def search_timestamp_statistic() -> str:
     """
     with open('happened.json','r') as jsonfile:
         data = json.load(jsonfile)
-        timestamp = data["timestamp"]
+        timestamp = data["timestamp"][:19]
         return timestamp
 
 @router.get("/env-settings")

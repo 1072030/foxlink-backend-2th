@@ -28,7 +28,8 @@ from app.services.project import (
     UpdatePreprocessingData,
     TrainingData,
     PredictData,
-    GetFoxlinkTables
+    GetFoxlinkTables,
+    AddNewProjects
 )
 from app.services.auth import (
     get_current_user,
@@ -91,13 +92,16 @@ async def get_all_project(project_id: int, user: User = Depends(get_current_user
     #         description=f"{project_name}"
     #     )
     #     return
-async def delete_devices(project_id: int, device_name: List[str], user: User = Depends(get_current_user())):
+async def delete_devices(dto: List[NewProjectDto], user: User = Depends(get_current_user())):
     """
     刪除專案(僅專案內最高階級人員)
     """
+    project_name = dto[0].project.name
+    project_id = await Project.objects.filter(name=project_name).values("id").get_or_none()
+
     user = await checkUserProjectPermission(project_id, user, UserLevel.project_manager.value)
     if user is not None:
-        devices_name = await DeleteDevices(project_id,device_name)
+        devices_name = await DeleteDevices(dto)
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DELECT_DEVICES.value,
             user=user.badge,
@@ -181,11 +185,11 @@ async def add_project_and_events(dto: List[NewProjectDto], user: User = Depends(
             description=project.id
         )
 
-    await AuditLogHeader.objects.create(
-        action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
-        user=user.badge,
-        description=project.id
-    )
+    # await AuditLogHeader.objects.create(
+    #     action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
+    #     user=user.badge,
+    #     description=project.id
+    # )
 
     tasks = [
         Task(
@@ -313,3 +317,25 @@ async def get_foxlink_tables():
     取得所有aoi資料表中的table_name
     """
     return await GetFoxlinkTables()
+
+@router.post("/add-project", tags=["project"])
+async def add_project(projects: List[str], user: User = Depends(get_current_user())):
+    """
+    新增專案名稱 
+    """
+    # add new project
+    user = await checkAdminPermission(user)
+    if len(projects) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"please select project"
+        ) 
+    if user is not None:
+        projects = await AddNewProjects(projects)
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.ADD_NEW_PROJECT.value,
+            user=user.badge,
+            description=projects.name
+        )
+
+
+

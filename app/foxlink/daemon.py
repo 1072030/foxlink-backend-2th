@@ -294,9 +294,11 @@ if __name__ == "__main__":
             "ORDER BY ID DESC "
             "LIMIT 100;"
         )
+        # print(stmt)
 
         try:
             row = await foxlink_dbs[host].fetch_all(query=stmt)
+            # print(row)
             return {
                 "event_id":event.id,
                 "recently":str(row[0]["Start_Time"]),

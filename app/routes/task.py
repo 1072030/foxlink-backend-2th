@@ -69,7 +69,7 @@ async def checking_task():
     
     if pending_task.action == TaskAction.DATA_PREPROCESSING.value:
             await AuditLogHeader.objects.create(
-                action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
+                action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
                 user='admin',
                 description=args[0]
             )

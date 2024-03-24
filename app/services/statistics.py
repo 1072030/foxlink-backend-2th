@@ -200,6 +200,8 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
                         })
 
                     # per day event accuracy
+                    print(predict_check)
+                    print(actual_check)
                     device_accuracy = (np.array(actual_check)
                                        == np.array(predict_check)).mean()
                     if len(predict_check) == 0 and len(actual_check) == 0:
