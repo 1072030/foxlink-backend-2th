@@ -30,15 +30,14 @@ async def remove_task(dto:List[str]):
     return
 
 @router.post("/redo", tags=["task"])
-async def redo_task(id:int,action:TaskAction,args:List[str]):
+async def redo_task(id:int,action:TaskAction,project:List[int]):
     """
     重新執行task
     """
     task = Task(
         action=action,
         stauts=TaskStatus.Pending.value,
-        args=args
-    )
+       project=project)
     await Task.objects.create(task)
 
 @router.get("/check-task", tags=["task"])
@@ -62,7 +61,7 @@ async def checking_task():
         return
         
         #--- 執行任務
-    args = pending_task.args.split(',')
+    args = pending_task.project.id
     pending_task.status = TaskStatus.Processing.value
     pending_task.updated_date = get_ntz_now()
     await pending_task.update()
@@ -71,14 +70,14 @@ async def checking_task():
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
                 user='admin',
-                description=args[0]
+                description=str(args)
             )
             try:
-                await PreprocessingData(int(args[0]))
+                await PreprocessingData(int(args))
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
                     user='admin',
-                    description=args[0]
+                    description=str(args)
                 )
 
                 pending_task.status = TaskStatus.Succeeded.value
@@ -89,7 +88,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
                     user='admin',
-                    description=f'{args[0]} detail:{e}'
+                    description=f'{args} detail:{e}'
                 )
 
                 pending_task.status = TaskStatus.Failure.value
@@ -100,14 +99,14 @@ async def checking_task():
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_STARTED_DAILY.value,
                 user='admin',
-                description=args[0]
+                description=str(args)
             )
             try:
-                await TrainingData(int(args[0]),args[1])
+                await TrainingData(int(args),'day')
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.TRAINING_SUCCEEDED_DAILY.value,
                     user='admin',
-                    description=args[0]
+                    description=str(args)
                 )
 
                 pending_task.status = TaskStatus.Succeeded.value
@@ -118,7 +117,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.TRAINING_FAILED_DAILY.value,
                     user='admin',
-                    description=f'{args[0]} detail:{e}'
+                    description=f'{args} detail:{e}'
                 )
                 pending_task.status = TaskStatus.Failure.value
                 await pending_task.update()
@@ -129,14 +128,14 @@ async def checking_task():
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_STARTED_WEEKLY.value,
                 user='admin',
-                description=args[0]
+                description=str(args)
             )
             try:
-                await TrainingData(int(args[0]),args[1])
+                await TrainingData(int(args),'week')
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.TRAINING_SUCCEEDED_WEEKLY.value,
                     user='admin',
-                    description=args[0]
+                    description=str(args)
                 )
 
                 pending_task.status = TaskStatus.Succeeded.value
@@ -147,7 +146,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.TRAINING_FAILED_WEEKLY.value,
                     user='admin',
-                    description=f'{args[0]} detail:{e}'
+                    description=f'{args} detail:{e}'
                 )
 
                 pending_task.status = TaskStatus.Failure.value

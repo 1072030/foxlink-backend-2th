@@ -1,8 +1,8 @@
 """initialize
 
-Revision ID: c0192abbc8fc
+Revision ID: c5ebffa18d6a
 Revises: 
-Create Date: 2024-02-18 07:56:34.301661
+Create Date: 2024-03-24 07:00:39.367421
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'c0192abbc8fc'
+revision = 'c5ebffa18d6a'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -30,6 +30,17 @@ def upgrade() -> None:
     sa.Column('created_date', sa.DateTime(timezone=True), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('task',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('action', sa.String(length=50), nullable=False),
+    sa.Column('status', sa.String(length=50), nullable=False),
+    sa.Column('args', sa.String(length=50), nullable=False),
+    sa.Column('updated_date', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('created_date', sa.DateTime(timezone=True), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_task_action'), 'task', ['action'], unique=False)
+    op.create_index(op.f('ix_task_status'), 'task', ['status'], unique=False)
     op.create_table('users',
     sa.Column('badge', sa.String(length=100), nullable=False),
     sa.Column('username', sa.String(length=50), nullable=False),
@@ -60,6 +71,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=100), nullable=False),
     sa.Column('cname', sa.String(length=100), nullable=False),
     sa.Column('project', sa.Integer(), nullable=False),
+    sa.Column('flag', sa.Boolean(), nullable=True),
     sa.Column('created_date', sa.DateTime(timezone=True), nullable=True),
     sa.ForeignKeyConstraint(['project'], ['projects.id'], name='fk_devices_projects_id_project', ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
@@ -225,6 +237,9 @@ def downgrade() -> None:
     op.drop_table('audit_log_headers')
     op.drop_index(op.f('ix_users_badge'), table_name='users')
     op.drop_table('users')
+    op.drop_index(op.f('ix_task_status'), table_name='task')
+    op.drop_index(op.f('ix_task_action'), table_name='task')
+    op.drop_table('task')
     op.drop_table('projects')
     op.drop_table('env')
     # ### end Alembic commands ###

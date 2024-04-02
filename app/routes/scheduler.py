@@ -57,14 +57,14 @@ def backup(path: str, description: str):
         f"INSERT INTO audit_log_headers (action,user,created_date,description) VALUES ('{AuditActionEnum.FULL_BACKUP.value}','admin','{get_ntz_now()}','{description}')")
 
 def pending_task():
-    requests.get(url="http://localhost/task/check-task")
+    requests.get(url="http://localhost/task/check-task",headers={'Connection':'close'})
     
 @router.get("/pending-task-activate", tags=["scheduler"])
 async def check_task():
     """
     產生每30秒請求api的background scheduler
     """
-    asyncIOScheduler.add_job(id="產生每30秒請求api",func=pending_task,trigger="interval",seconds=30,replace_existing=True)
+    asyncIOScheduler.add_job(id="產生每30秒請求api",func=pending_task,trigger="interval",seconds=600,replace_existing=True)
     return
 
 

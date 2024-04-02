@@ -45,7 +45,8 @@ origins = [
     "http://ntust2.foxlink.com.tw:*",
     "http://192.168.0.115:8080",
     "http://192.168.65.212:*",
-    "http://192.168.1.103:*"
+    "http://192.168.1.103:*",
+    "http://192.168.50.130"
 ]
 
 app.add_middleware(
@@ -74,11 +75,11 @@ app.include_router(task.router)
 # import random
 # import string
 # import time
-@app.middleware("http")
-async def log_requests(request, call_next):
-    response = await call_next(request)
-    logger.info(f"{request.client.host}:{request.client.port} - {request.url._url} {request.scope['type']}/{request.scope['http_version']} {response.status_code}")
-    return response
+# @app.middleware("http")
+# async def log_requests(request, call_next):
+#     response = await call_next(request)
+#     logger.info(f"{request.client.host}:{request.client.port} - {request.url._url} {request.scope['type']}/{request.scope['http_version']} {response.status_code}")
+#     return response
 
 @app.on_event("startup")
 async def startup():

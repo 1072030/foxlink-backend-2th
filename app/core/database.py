@@ -295,6 +295,27 @@ class User(ormar.Model):
     # def User_flag_fetch():
     #     return User.objects.filter(flag=True)
 
+# class Task(ormar.Model):
+#     class Meta(MainMeta):
+#         tablename="task"
+
+#     id: int = ormar.Integer(
+#         primary_key=True, autoincrement=True, nullable=False)
+#     action:str = ormar.String(max_length=50, index=True,nullable=False,choices=list(TaskAction))
+#     status:str = ormar.String(max_length=50, index=True,nullable=False,choices=list(TaskStatus))
+#     # args:str = ormar.String(max_length=50,nullable=False)
+#     project: int = ormar.ForeignKey(Project , index=True, nullable=False, ondelete="CASCADE")
+#     updated_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
+#     created_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
+
+class Project(ormar.Model):
+    class Meta(MainMeta):
+        tablename = "projects"
+    id: int = ormar.Integer(
+        primary_key=True, autoincrement=True, nullable=False)
+    name: str = ormar.String(max_length=50, nullable=False)
+    created_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
+
 class Task(ormar.Model):
     class Meta(MainMeta):
         tablename="task"
@@ -303,16 +324,9 @@ class Task(ormar.Model):
         primary_key=True, autoincrement=True, nullable=False)
     action:str = ormar.String(max_length=50, index=True,nullable=False,choices=list(TaskAction))
     status:str = ormar.String(max_length=50, index=True,nullable=False,choices=list(TaskStatus))
-    args:str = ormar.String(max_length=50,nullable=False)
+    # args:str = ormar.String(max_length=50,nullable=False)
+    project: int = ormar.ForeignKey(Project , index=True, nullable=False, ondelete="CASCADE")
     updated_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
-    created_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
-
-class Project(ormar.Model):
-    class Meta(MainMeta):
-        tablename = "projects"
-    id: int = ormar.Integer(
-        primary_key=True, autoincrement=True, nullable=False)
-    name: str = ormar.String(max_length=50, nullable=False)
     created_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
 
 

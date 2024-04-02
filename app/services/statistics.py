@@ -146,11 +146,13 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
         dr_week = pd.date_range(start_time, end_time, freq='7D').astype(str)
         if select_type == "day":
             for date in dr_day:
-                actual_check = []
-                predict_check = []
+                # actual_check = []
+                # predict_check = []
                 total_accuracy = []
                 devices_detail = {}
                 for dvs in devices:
+                    actual_check = []
+                    predict_check = []
                     events = dvs.events
                     for event in events:
                         # checkPredEvent = await PredictResult.objects.filter(event=event.id,pred_type=0).order_by('-pred_date').limit(1).get_or_none()
@@ -200,8 +202,8 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
                         })
 
                     # per day event accuracy
-                    print(predict_check)
-                    print(actual_check)
+                    # print(predict_check)
+                    # print(actual_check)
                     device_accuracy = (np.array(actual_check)
                                        == np.array(predict_check)).mean()
                     if len(predict_check) == 0 and len(actual_check) == 0:
@@ -211,7 +213,7 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
                     total_accuracy.append(device_accuracy)
 
                 device_accuracy = (np.array(total_accuracy)).mean()
-                if len(predict_check) != 0 and len(actual_check) != 0:
+                if len(total_accuracy) != 0:
                     formatData.append({
                         "id": None,
                         "projectName": project,
@@ -225,11 +227,13 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
             for date in dr_week:
                 date_check = datetime.strptime(date,"%Y-%m-%d")
                 next_day = (date_check + timedelta(days=7)).strftime("%Y-%m-%d")
-                actual_check = []
-                predict_check = []
+                # actual_check = []
+                # predict_check = []
                 total_accuracy = []
                 devices_detail = {}
                 for dvs in devices:
+                    actual_check = []
+                    predict_check = []
                     events = dvs.events
                     for event in events:
                         data = await PredictResult.objects.filter(event=event.id, ori_date__gte=date,ori_date__lte=next_day, pred_type=1).select_related("device").order_by('-pred_date').limit(1).get_or_none()
@@ -284,7 +288,7 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
 
                     total_accuracy.append(device_accuracy)
                 device_accuracy = (np.array(total_accuracy)).mean()
-                if len(predict_check) != 0 and len(actual_check) != 0:
+                if len(total_accuracy) != 0:
                     formatData.append({
                         "id": None,
                         "projectName": project,

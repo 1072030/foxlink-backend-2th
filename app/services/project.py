@@ -48,8 +48,9 @@ ntust_engine = foxlink_dbs.ntust_db
 foxlink_engine = foxlink_dbs.foxlink_db
 
 async def DeleteDevices(dto: List[NewProjectDto]):
-    project_name = dto[0].project.name
+    project_name = dto[0].project.upper()
     project = await Project.objects.filter(name=project_name).get_or_none()
+    project_id = project.id
     # project = await Project.objects.filter(id=project_id).get_or_none()
     if project is None:
         raise HTTPException(404,'project is not found')
@@ -62,14 +63,16 @@ async def DeleteDevices(dto: List[NewProjectDto]):
     output = []
     try:
         for pjt in data:
-            for dvs in pjt.devices:
-                if dvs.name in device_name:
-                    await dvs.delete()
-                    output.append({
-                        "project_name": pjt.name.upper(),
-                        "device_name": dvs.name,
-                        })
-            
+            for i in dto:
+                for dvs in pjt.devices:
+                    if dvs.line==i.line and dvs.name==i.device:
+                        await dvs.delete()
+                        output.append({
+                            "project_name": pjt.name.upper(),
+                            "device_name": dvs.name,
+                            })
+                        break
+                
     except:
         raise HTTPException(400, 'project can not delete')
     
@@ -211,6 +214,9 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
     else:
         raise HTTPException(
             status_code=400, detail="The project name is not existed.")
+
+    if len(dto)==0:
+        return
 
 
     event_data = {}
@@ -1258,7 +1264,34 @@ async def AddNewProjects(projects: List[str]):
     pjt = []
     for project in projects:
         pjt.append(project.upper())
-    
+    # all_project = await Project.objects.values_list('name', flat=True).all()
+    # all_project = await Project.objects.values('name').all()
+    for project in pjt:
+        project_create = await Project.objects.filter(name=project).get_or_none()
+        if project_create is None:
+            project_create = await Project.objects.create(name=project)
+            admin = await User.objects.filter(badge='admin').get_or_none() 
+            await ProjectUser.objects.create(project=project_create.id, user=admin.badge, permission=4)
+    return pjt
+
+@transaction()
+async def DeleteProjects(projects: List[str]):
+    pjt = []
+    for project in projects:
+        pjt.append(project.upper())
+    output = []
+    try:
+        for pjt in projects:
+            project = await Project.objects.filter(name=pjt).get_or_none()
+            if project is not None:
+                await project.delete()
+                output.append({project.name.upper()})
+                
+    except:
+        raise HTTPException(400, 'project can not delete') 
+    return output 
+
+
 
 
 # async def HappenedCheck(project_id: int, start_time: datetime, select_type: str):

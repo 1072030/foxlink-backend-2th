@@ -294,8 +294,17 @@ if __name__ == "__main__":
             "ORDER BY ID DESC "
             "LIMIT 100;"
         )
-        # print(stmt)
-
+        
+        # stmt1 = (
+        #     f"SELECT * FROM `{project.name}_event_new` WHERE "
+        #     f"Device_Name='{device.name}' AND "
+        #     f"Line = {device.line} AND "
+        #     f"Category = {event.category} AND "
+        #     f"Message = '{event.name}' "
+        #     "ORDER BY Start_Time DESC "
+        #     "LIMIT 1;"
+        # )
+        # print(stmt1)
         try:
             row = await foxlink_dbs[host].fetch_all(query=stmt)
             # print(row)
@@ -306,6 +315,8 @@ if __name__ == "__main__":
             }
         except:
             row = None
+            # row = await foxlink_dbs[host].fetch_all(query=stmt1)
+            # print(row)
             return {
                 "event_id":event.id,
                 "recently":row,
