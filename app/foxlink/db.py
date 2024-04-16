@@ -103,22 +103,29 @@ class FoxlinkDatabasePool:
             })
         return data
     
-    async def get_all_project_tabels(self):
-        stmt = (
-            f"""
-            Show tables;
-            """
-        )
-        dbs = [db for db in self.event_dbs.values()]
-        tables = await dbs[0].fetch_all(
-            query=stmt
-        )
-        output = []
-        for table in tables:
-            format = re.sub(r"[\'\(\),]",'',str(table))
-            output.append(format)
+    # async def get_all_project_tabels(self):
+    #     stmt = (
+    #         f"""
+    #         Show tables;
+    #         """
+    #     )
+    #     dbs = [db for db in self.event_dbs.values()]
+    #     tables = await dbs[0].fetch_all(
+    #         query=stmt
+    #     )
+    #     output = []
+    #     for table in tables:
+    #         format = re.sub(r"[\'\(\),]",'',str(table))
+    #         output.append(format)
 
-        return output
+    #     return output
+    async def get_all_project_tabels(self):
+        all_tables = []
+        for db in self.event_dbs.values():
+            tables = await db.fetch_all(query="SHOW TABLES;")
+            formatted_tables = [re.sub(r"[\'\(\),]", '', str(table)) for table in tables]
+            all_tables.extend(formatted_tables)
+        return all_tables
 
     async def connect(self):
         db_connect_routines = [db.connect() for db in self.event_dbs.values()]

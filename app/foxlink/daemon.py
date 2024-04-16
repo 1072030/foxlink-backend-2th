@@ -18,6 +18,15 @@ def create(**p):
     parser.parse_args(args)
     return [__name__] + args
 
+# async def choose_database(stmt):
+#     FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
+#     await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+#     project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
+#     if project:
+#         return FOXLINK_AOI_DATABASE
+#     else:
+#         FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
+#         return FOXLINK_AOI_DATABASE
 
 if __name__ == "__main__":
     import asyncio
@@ -63,7 +72,7 @@ if __name__ == "__main__":
     )
     import json
     import traceback
-    host = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
+    # host = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
     logger = logging.getLogger(f"foxlink(daemon)")
     logger.addHandler(
         logging.FileHandler('logs/foxlink(daemon).log', mode="w")
@@ -76,7 +85,7 @@ if __name__ == "__main__":
 
     _terminate = None
 
-    MAIN_ROUTINE_MIN_RUNTIME = 60
+    MAIN_ROUTINE_MIN_RUNTIME = 90
     NOTIFICATION_INTERVAL = 30
     
     def show_duration(func):
@@ -88,7 +97,6 @@ if __name__ == "__main__":
             logger.info(f'[{func.__name__}] took {end - start:.2f} seconds.')
             return result
         return wrapper
-
     # @transaction(callback=True)
     # @show_duration
     # async def new_project_data_handler(handler=[]):
@@ -283,6 +291,18 @@ if __name__ == "__main__":
                 "timestamp":f'{get_ntz_now()+timedelta(hours=8)}'
             }
             json.dump(result,jsonfile)
+
+    async def choose_database(stmt):
+        FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
+        await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+        project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
+        if project:
+            return FOXLINK_AOI_DATABASE
+        else:
+            FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
+            return FOXLINK_AOI_DATABASE
+
+
     async def sync_foxlink_event_happened(project,device,event):
         stmt = (
             f"SELECT * FROM `{project.name}_event_new` WHERE "
@@ -295,16 +315,17 @@ if __name__ == "__main__":
             "LIMIT 100;"
         )
         
-        # stmt1 = (
-        #     f"SELECT * FROM `{project.name}_event_new` WHERE "
-        #     f"Device_Name='{device.name}' AND "
-        #     f"Line = {device.line} AND "
-        #     f"Category = {event.category} AND "
-        #     f"Message = '{event.name}' "
-        #     "ORDER BY Start_Time DESC "
-        #     "LIMIT 1;"
-        # )
-        # print(stmt1)
+        stmt1 = (
+            f"SELECT * FROM `{project.name}_event` WHERE "
+            f"Device_Name='{device.name}' AND "
+            f"Line={device.line} AND "
+            f"Category={event.category} AND "
+            f"Message='{event.name}' "
+            "ORDER BY Start_Time DESC "
+            "LIMIT 1;"
+        )
+        host = await choose_database(stmt1)
+        # print(host)
         try:
             row = await foxlink_dbs[host].fetch_all(query=stmt)
             # print(row)
@@ -314,14 +335,23 @@ if __name__ == "__main__":
                 "happened":len(row)
             }
         except:
-            row = None
-            # row = await foxlink_dbs[host].fetch_all(query=stmt1)
+            # row = None
+            row = await foxlink_dbs[host].fetch_all(query=stmt1)
             # print(row)
-            return {
-                "event_id":event.id,
-                "recently":row,
-                "happened":0
-            }
+            if row is not None:
+                return {
+                    "event_id":event.id,
+                    "recently":str(row[0]["Start_Time"]),
+                    # "recently":row,
+                    "happened":0
+                }
+            else:
+                return {
+                    "event_id":event.id,
+                    # "recently":str(row[0]["Start_Time"]),
+                    "recently":None,
+                    "happened":0
+                }
 
 
 

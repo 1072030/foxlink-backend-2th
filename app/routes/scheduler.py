@@ -64,7 +64,7 @@ async def check_task():
     """
     產生每30秒請求api的background scheduler
     """
-    asyncIOScheduler.add_job(id="產生每30秒請求api",func=pending_task,trigger="interval",seconds=600,replace_existing=True)
+    asyncIOScheduler.add_job(id="產生每30秒請求api",func=pending_task,trigger="interval",seconds=30,replace_existing=True)
     return
 
 

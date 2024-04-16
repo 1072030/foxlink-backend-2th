@@ -368,17 +368,34 @@ async def add_project_task(user: User = Depends(get_current_user())):
         formatData = []
         project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_worker.value)
         for project_id in project_id_list:
-            data = await Project.objects.select_related(["tasks"]).filter(id = project_id).get_or_none()
+            data = await Project.objects.select_related(["tasks"]).filter(id = project_id).order_by('-created_date').get_or_none()
             if data is not None:
-                for i in data.tasks:
-                    temp = {}
-                    temp['project_name'] = data.name
-                    temp['action'] = i.action
-                    temp['status'] = i.status
-                    temp['created_date'] = i.created_date
-                    temp['updated_date'] = i.updated_date
-                    formatData.append(temp)
+                tasks = await data.tasks.order_by('-created_date').all()
+                for i in tasks:
+                    project_name = data.name
+                    action = i.action
+                    if not any(item['project_name'] == project_name and item['action'] == action for item in formatData):
+                    # if data.name not in formatData['project_name']:
+                        temp = {}
+                        temp['project_name'] = data.name
+                        temp['action'] = i.action
+                        temp['status'] = i.status
+                        temp['created_date'] = i.created_date
+                        temp['updated_date'] = i.updated_date
+                        formatData.append(temp)
     return formatData
+    #     for project_id in project_id_list:
+    #         data = await Project.objects.select_related(["tasks"]).filter(id = project_id).get_or_none()
+    #         if data is not None:
+    #             for i in data.tasks:
+    #                 temp = {}
+    #                 temp['project_name'] = data.name
+    #                 temp['action'] = i.action
+    #                 temp['status'] = i.status
+    #                 temp['created_date'] = i.created_date
+    #                 temp['updated_date'] = i.updated_date
+    #                 formatData.append(temp)
+    # return formatData
 
 @router.get("/user-projects", tags=["project"])
 async def get_all_project(user_id: str, user: User = Depends(get_current_user())):

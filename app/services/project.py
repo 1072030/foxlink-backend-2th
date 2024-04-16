@@ -43,7 +43,18 @@ from tqdm import tqdm
 import joblib
 # ----
 
-FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
+# FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
+async def choose_database(stmt):
+    FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
+    await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+    device = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
+    if device:
+        return FOXLINK_AOI_DATABASE
+    else:
+        FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
+        return FOXLINK_AOI_DATABASE
+
+
 ntust_engine = foxlink_dbs.ntust_db
 foxlink_engine = foxlink_dbs.foxlink_db
 
@@ -171,6 +182,7 @@ async def SearchProjectDevices(project_name: str):
 @transaction()
 async def AddNewProjectEvents(dto: List[NewProjectDto]):
     project_name = dto[0].project.upper()
+    project_line = dto[0].line
     # check selected devices
     if len(dto) == 0:
         raise HTTPException(
@@ -182,6 +194,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
     )
     try:
         # check query project
+        FOXLINK_AOI_DATABASE = await choose_database(stmt)
         await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
         device = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
     except:
@@ -195,8 +208,8 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
         dvs_aoi[device].append(measure.lower())
 
     # check project in system duplicated
-    project_create = await Project.objects.select_related(["devices"]).get_or_none(name=project_name)
-
+    # project_create = await Project.objects.select_related(["devices"]).get_or_none(name=project_name)
+    project_create = await Project.objects.filter(name=project_name).select_related(["devices"]).get_or_none()
     if len(device) != 0:
         if project_create is None:
             project_create = await Project.objects.create(name=project_name)
@@ -204,9 +217,10 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
             admin = await User.objects.filter(badge='admin').get_or_none() 
             await ProjectUser.objects.create(project=project_create.id, user=admin.badge, permission=4)
         else:
-            device_name_in_project = [dvs.name for dvs in project_create.devices]
+            # device_name_in_project = [dvs.name for dvs in project_create.devices]
+            device_name_in_project = [(dvs.name, dvs.line) for dvs in project_create.devices]
             for i in dto:
-                if i.device in device_name_in_project:
+                if (i.device, i.line) in device_name_in_project:
                     dto.remove(i)
 
             # raise HTTPException(
@@ -334,6 +348,7 @@ async def PreprocessingData(project_id: int):
                     # 資料表第一筆資料
 
                     sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;"
+                    FOXLINK_AOI_DATABASE = await choose_database(sql)
                     first_data_date = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=sql)
                     # [5] = Code3
 
@@ -1254,6 +1269,7 @@ async def GetFoxlinkTables():
     project = [item for item in tables if item.endswith("_event")]
     project = [item.split("_")[0] for item in project if len(item.split("_")) == 2]
     project = list(set(project))
+    project = [p.upper() for p in project]
 
     return project
     # tables = await foxlink_dbs.get_all_project_tabels()
