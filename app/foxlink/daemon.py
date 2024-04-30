@@ -18,15 +18,7 @@ def create(**p):
     parser.parse_args(args)
     return [__name__] + args
 
-# async def choose_database(stmt):
-#     FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
-#     await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-#     project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
-#     if project:
-#         return FOXLINK_AOI_DATABASE
-#     else:
-#         FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
-#         return FOXLINK_AOI_DATABASE
+
 
 if __name__ == "__main__":
     import asyncio
@@ -293,12 +285,13 @@ if __name__ == "__main__":
             json.dump(result,jsonfile)
 
     async def choose_database(stmt):
-        FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
-        await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-        project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
-        if project:
-            return FOXLINK_AOI_DATABASE
-        else:
+        try:
+            FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
+            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+            project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
+            if project:
+                return FOXLINK_AOI_DATABASE
+        except:
             FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
             return FOXLINK_AOI_DATABASE
 
@@ -312,7 +305,7 @@ if __name__ == "__main__":
             f"Message = '{event.name}' AND "
             f"Start_Time >= '{get_ntz_now().date()}' "
             "ORDER BY ID DESC "
-            "LIMIT 100;"
+            # "LIMIT 100;"
         )
         
         stmt1 = (
@@ -324,6 +317,7 @@ if __name__ == "__main__":
             "ORDER BY Start_Time DESC "
             "LIMIT 1;"
         )
+        # host = await foxlink_dbs.choose_database(stmt1)
         host = await choose_database(stmt1)
         # print(host)
         try:

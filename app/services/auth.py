@@ -213,7 +213,7 @@ async def getFoxlinkUser(user_id: str , system_id: int = 16, checkSSH: bool = Fa
         ip = "192.168.65.210"
         username = "ntust"
         password = "aa946809"
-        command = f'curl -X POST -d "user_id=130316&system_id=1&type=checkUserExist" "http://mms.foxlink.com.tw/scbg/addons/register/server/server.php"'
+        command = f'curl -X POST -d "user_id=130316&system_id=16&type=checkUserExist" "http://mms.foxlink.com.tw/scbg/addons/register/server/server.php"'
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         client.connect(ip, port=22, username=username,

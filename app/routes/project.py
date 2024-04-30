@@ -321,6 +321,7 @@ async def get_foxlink_tables(user: User = Depends(get_current_user())):
     user = await checkAdminPermission(user)
     if user is not None:
         return await GetFoxlinkTables()
+    
 
 @router.post("/project", tags=["project"])
 async def add_project(projects: List[str], user: User = Depends(get_current_user())):

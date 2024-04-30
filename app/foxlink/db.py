@@ -64,7 +64,7 @@ class FoxlinkDatabasePool:
         full_cnames: Dict[str, str] = {k: v for k, v in full_cnames}
         query =  f"""
                 SELECT DISTINCT dsl.Device_Name,dsl.Dev_Func,dsl.Line 
-                from sfc.device_setting_log as dsl 
+                from sfc.device_setting as dsl 
                 where 
                     dsl.Project = :project and 
                     dsl.Dev_Func is not null 
@@ -103,22 +103,6 @@ class FoxlinkDatabasePool:
             })
         return data
     
-    # async def get_all_project_tabels(self):
-    #     stmt = (
-    #         f"""
-    #         Show tables;
-    #         """
-    #     )
-    #     dbs = [db for db in self.event_dbs.values()]
-    #     tables = await dbs[0].fetch_all(
-    #         query=stmt
-    #     )
-    #     output = []
-    #     for table in tables:
-    #         format = re.sub(r"[\'\(\),]",'',str(table))
-    #         output.append(format)
-
-    #     return output
     async def get_all_project_tabels(self):
         all_tables = []
         for db in self.event_dbs.values():
@@ -149,5 +133,29 @@ class FoxlinkDatabasePool:
         if self.device_db.is_connected:
             await self.device_db.disconnect()
 
-
+    async def choose_database(self, stmt):
+        try:
+            FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
+            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+            project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
+            if project is None:
+                FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
+                return FOXLINK_AOI_DATABASE
+            else: 
+                return FOXLINK_AOI_DATABASE
+            
+        except Exception as e:
+            print("Error occurred:", e)
+            FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
+            return FOXLINK_AOI_DATABASE 
+        
+    async def foxlink_db_engine(self, FOXLINK_AOI_DATABASE):
+        host = FOXLINK_AOI_DATABASE.split('@')[0]
+        name = FOXLINK_AOI_DATABASE.split('@')[1]
+        path = create_engine(
+            f'mysql+pymysql://{FOXLINK_EVENT_DB_USER}:{FOXLINK_EVENT_DB_PWD}@{host}/{name}',pool_pre_ping=True
+        )
+        
+        return path       
+    
 foxlink_dbs = FoxlinkDatabasePool()

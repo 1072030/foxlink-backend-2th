@@ -24,7 +24,8 @@ from app.core.database import (
     Project,
     ProjectEvent,
     Device,
-    ErrorFeature
+    ErrorFeature,
+    PredictResult
 )
 from app.env import (
     FOXLINK_EVENT_DB_HOSTS,
@@ -58,10 +59,10 @@ class FoxlinkPredict:
     async def data_preprocessing_from_sql(self,project_id:int,select_type:str):
         ## Todo：要將SQL目標改成要query的時間，這邊先以原數據做示範。
         infos = {}
-        if select_type == "day":
-            predict_date = get_ntz_now().date() + timedelta(days=-1)
-        elif select_type == "week":
-            predict_date = get_ntz_now().date() + timedelta(days=-7)
+        # if select_type == "day":
+        #     predict_date = get_ntz_now().date() + timedelta(days=-1)
+        # elif select_type == "week":
+        #     predict_date = get_ntz_now().date() + timedelta(days=-7)
         project = await Project.objects.filter(id=project_id).select_related(
             ["devices","devices__aoimeasures"]
         ).all()
@@ -97,6 +98,28 @@ class FoxlinkPredict:
             # ntust_measure = for i in ntust_measure[0].aoimeasures
             ntust_measure = ntust_measure[0].aoimeasures
             
+            if select_type == "day":
+                sql = f"""
+                    SELECT * FROM dn_mf 
+                    WHERE 
+                        device='{dvs.id}' and
+                        pcs>'0' and
+                        operation_time<'{get_ntz_now().date() + timedelta(days=-1)}'
+                    ORDER BY ID DESC 
+                    LIMIT 1;
+                """
+                date = pd.read_sql(sql, self.ntust_engine)
+
+                if len(date) >= 1:
+                   predict_date = date.iloc[0]['date']
+                #    print(predict_date)
+
+                else:
+                    predict_date = get_ntz_now().date() + timedelta(days=-1)
+
+            elif select_type == "week":
+                predict_date = get_ntz_now().date() + timedelta(days=-7)
+
             for row in events: # 預測目標異常 Y
                 # print(f"{get_ntz_now} : starting preprocessing {row.message}")
                 sql = f"""

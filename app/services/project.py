@@ -19,7 +19,8 @@ from app.core.database import (
     AoiFeature,
     PredictResult,
     AuditLogHeader,
-    AuditActionEnum
+    AuditActionEnum,
+    TrainPerformance
 )
 from app.env import (
     FOXLINK_EVENT_DB_HOSTS,
@@ -43,20 +44,8 @@ from tqdm import tqdm
 import joblib
 # ----
 
-# FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
-async def choose_database(stmt):
-    FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
-    await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-    device = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
-    if device:
-        return FOXLINK_AOI_DATABASE
-    else:
-        FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
-        return FOXLINK_AOI_DATABASE
-
-
 ntust_engine = foxlink_dbs.ntust_db
-foxlink_engine = foxlink_dbs.foxlink_db
+# foxlink_engine = foxlink_dbs.foxlink_db
 
 async def DeleteDevices(dto: List[NewProjectDto]):
     project_name = dto[0].project.upper()
@@ -194,7 +183,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
     )
     try:
         # check query project
-        FOXLINK_AOI_DATABASE = await choose_database(stmt)
+        FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
         await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
         device = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
     except:
@@ -342,14 +331,17 @@ async def PreprocessingData(project_id: int):
         trans = conn.begin()
         try:
             for dvs in project[0].devices:
+                # line = dvs.line
+                # device = dvs.name
                 for measure in dvs.aoimeasures:
                     
                     aoi = pd.DataFrame()
                     # 資料表第一筆資料
 
                     sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;"
-                    FOXLINK_AOI_DATABASE = await choose_database(sql)
+                    FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(sql)
                     first_data_date = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=sql)
+                    foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
                     # [5] = Code3
 
                     # get keys
@@ -358,7 +350,6 @@ async def PreprocessingData(project_id: int):
 
                     dr = pd.date_range(
                         first_data_date, datetime.datetime.now().date(), freq='2M').astype(str)
-
                     print(
                         f"{get_ntz_now()} : starting query {dvs.name} {measure.name} {first_data_date} to {dr[0]}")
                     sql = f"""
@@ -623,8 +614,10 @@ async def PreprocessingData(project_id: int):
             event.sort_values('Start_Time', inplace=True)
             pred_target = pd.DataFrame()
             error_feature = pd.DataFrame()
-            for dvs in dvs_name:
-
+            for device in project[0].devices:
+                line = device.line
+                dvs = device.name
+            # for dvs in dvs_name:
                 # 判斷預知維修目標
                 op_day = pd.DataFrame()
                 op_day['date'] = sorted(list(operation_day[dvs]))
@@ -636,7 +629,7 @@ async def PreprocessingData(project_id: int):
                     'Device_Name', 'Category'], key=natsort_keygen()).reset_index(drop=True)
                 dcm['target'] = dcm.apply(lambda x: target_label(x), axis=1)
 
-                dcm_id = await Device.objects.filter(name=dvs, project=project_id).get_or_none()
+                dcm_id = await Device.objects.filter(name=dvs,line = line,project=project_id).get_or_none()
                 if dcm_id is None:
                     raise HTTPException(
                         status_code=400, detail="cant find dcm device")
@@ -647,12 +640,19 @@ async def PreprocessingData(project_id: int):
 
                 pred_target_evnets = await ProjectEvent.objects.filter(device=dcm_id).all()
                 events_id = []
+                rows_to_remove = []
                 for index, row in dcm.iterrows():
+                    event_found = False
                     for i in pred_target_evnets:
                         if row['message'] == i.name and row['category'] == i.category:
+                            event_found = True
                             events_id.append(i.id)
+                            
+                    if not event_found:
+                        rows_to_remove.append(index)
 
                 # 異常每天發生次數(預知維修目標)
+                dcm = dcm.drop(rows_to_remove)
                 target = dcm[dcm['target'] == 1]
                 dcm = dcm.drop(['category', 'message'], axis=1)
                 dcm['event'] = events_id
@@ -671,7 +671,7 @@ async def PreprocessingData(project_id: int):
 
                     err_fea = pd.DataFrame()
 
-                    dvs_id = await Device.objects.filter(name=dvs,project=project_id).get_or_none()
+                    dvs_id = await Device.objects.filter(name=dvs,line = line,project=project_id).get_or_none()
 
                     if dvs_id is None:
                         raise HTTPException(
@@ -770,7 +770,9 @@ async def UpdatePreprocessingData(project_id: int,user:str):
             trans = conn.begin()
             for dvs in project[0].devices:
                 for measure in dvs.aoimeasures:
-
+                    sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;"
+                    FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(sql)
+                    foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
                     sql = f"""
                         SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
                         WHERE 
@@ -1018,9 +1020,12 @@ async def UpdatePreprocessingData(project_id: int,user:str):
                                     'D', 'N'])  # 班別 1~12為早班(D) 13~24為晚班(N)
             event.sort_values('Start_Time', inplace=True)
             error_feature = pd.DataFrame()
-            for dvs in dvs_name:
+            # for dvs in dvs_name:
+            for device in project[0].devices:
+                line = device.line
+                dvs = device.name
                 dvs_event = event[event['Device_Name'] == dvs]
-                dvs_data = await Device.objects.filter(name=dvs, project=project_id).get()
+                dvs_data = await Device.objects.filter(name=dvs,line = line, project=project_id).get()
 
                 # operation = (await AoiFeature.objects.filter(
                 #     device=dvs_data.id,
@@ -1103,10 +1108,19 @@ async def UpdatePreprocessingData(project_id: int,user:str):
 
 @transaction()
 async def TrainingData(project_id: int, select_type: str):
-    input_data_dict = await foxlink_train.data_preprocessing_from_sql(project_id=project_id)
+    input_data_dict = await foxlink_train.data_preprocessing_from_sql(project_id=project_id,select_type=select_type)
     every_error_performance = {}
     timenow = get_ntz_now().strftime("%Y%m%d%H%M")
-    devices = await Device.objects.filter(project=project_id).all()
+    all_devices = await Device.objects.filter(project=project_id).all()
+    devices = []
+    for dvs in all_devices:
+        device = await TrainPerformance.objects.filter(device = dvs.id,freq = select_type).all()
+        if len(device) == 0 :
+            devices.append(dvs)
+
+    if len(devices) == 0:
+        return
+    
     with ntust_engine.connect() as conn:
         trans = conn.begin()
         try:
@@ -1262,16 +1276,29 @@ async def PredictData(project_id: int, select_type: str,user:str):
 
 
 async def GetFoxlinkTables():
+    formatData = {}
     tables = await foxlink_dbs.get_all_project_tabels()
     # project = [item.split("_")[0] for item in tables]
     # project = [item.split("_")[0] for item in tables if len(item.split("_")) == 2]
     # project = [item for item in tables if item.endswith("_event")]
-    project = [item for item in tables if item.endswith("_event")]
-    project = [item.split("_")[0] for item in project if len(item.split("_")) == 2]
-    project = list(set(project))
-    project = [p.upper() for p in project]
-
-    return project
+    all_project = [item for item in tables if item.endswith("_event")]
+    all_project = [item.split("_")[0] for item in all_project if len(item.split("_")) == 2]
+    all_project = list(set(all_project))
+    all_project = [p.upper() for p in all_project]
+    for project in all_project:
+        formatData[project] = []
+        pjt = await Project.objects.filter(name = project).get_or_none()        
+        if pjt:
+            formatData[project].append({
+                'name':project,
+                'select':1
+            })
+        else:
+            formatData[project].append({
+                'name':project,
+                'select':0
+            })
+    return formatData
     # tables = await foxlink_dbs.get_all_project_tabels()
     # return tables
 

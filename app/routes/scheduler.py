@@ -130,10 +130,10 @@ async def set_cron_job(time: datetime, select_type: Select_type, description: st
     else:
         diffbackup_path = diffbackup_path.value
         # args=[backup_path],
-    if select_type == Select_type.Daily.value:
+    if select_type.value == Select_type.Daily.value:
         task = asyncIOScheduler.add_job(id=description, func=backup, args=[diffbackup_path, description], trigger='cron',
                                         replace_existing=True, hour=time.hour, minute=time.minute, second=time.second)
-    elif select_type == Select_type.Weekly.value:
+    elif select_type.value == Select_type.Weekly.value:
         task = asyncIOScheduler.add_job(id=description, func=backup, args=[diffbackup_path, description], trigger='cron', day_of_week=time.weekday(
         ), hour=time.hour, minute=time.minute, second=time.second, replace_existing=True)
     else:

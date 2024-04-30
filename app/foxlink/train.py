@@ -34,7 +34,8 @@ from app.core.database import (
     AoiMeasure,
     AoiFeature,
     PredTarget,
-    ErrorFeature
+    ErrorFeature,
+    TrainPerformance
 )
 from app.env import (
     FOXLINK_EVENT_DB_HOSTS,
@@ -68,7 +69,7 @@ class FoxlinkTrain:
         self.ntust_engine = foxlink_dbs.ntust_db
         self.foxlink_engine = foxlink_dbs.foxlink_db
         
-    async def data_preprocessing_from_sql(self,project_id:int):    
+    async def data_preprocessing_from_sql(self,project_id:int,select_type: str):    
         """
         從台科資料庫讀取處理好的資料做portion and feature selection
         Returns:
@@ -82,7 +83,18 @@ class FoxlinkTrain:
                     status_code=400, detail="this project doesnt existed.")
         # 用來存每個device的每個error的輸入表
         input_data_dict = {}
-        for dvs in project[0].devices:
+        all_devices = await Device.objects.filter(project=project_id).all()
+        devices = []
+        
+        for dvs in all_devices:
+            device = await TrainPerformance.objects.filter(device = dvs.id,freq = select_type).all()
+            if len(device) == 0 :
+                devices.append(dvs)
+
+        if len(devices) == 0:
+            return
+        
+        for dvs in devices:
             print(f"{get_ntz_now()} : starting preprocessing {dvs.name}")
             event = await ErrorFeature.objects.filter(
                 device=dvs.id,
@@ -99,7 +111,11 @@ class FoxlinkTrain:
                     Project='{project[0].name}'
                     ORDER BY Workno_Order;
             """
-            dvs_aoi_measure = pd.read_sql(sql, self.foxlink_engine)['Measure_Workno']
+            stmt = f"SELECT * FROM `{project[0].name}_event` LIMIT 1;"
+            FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
+            foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
+
+            dvs_aoi_measure = pd.read_sql(sql, foxlink_engine)['Measure_Workno']
             first_aoi_measure = dvs_aoi_measure[0].lower()
             ntust_measure = await Device.objects.select_related(['aoimeasures']).filter(name=dvs.name,project=project_id).all()
             # ntust_measure = for i in ntust_measure[0].aoimeasures
