@@ -69,6 +69,9 @@ class FoxlinkPredict:
         if project is None:
             raise HTTPException(
                     status_code=400, detail="this project doesnt existed.")
+        stmt = f"SELECT * FROM `{project[0].name}_event` LIMIT 1;"
+        FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
+        foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
         # 用來存每個device的每個error的輸入表
         input_data_dict = {}
         for dvs in project[0].devices:
@@ -92,26 +95,27 @@ class FoxlinkPredict:
                     Project='{project[0].name}'
                     ORDER BY Workno_Order;
             """
-            dvs_aoi_measure = pd.read_sql(sql, self.foxlink_engine)['Measure_Workno']
+            dvs_aoi_measure = pd.read_sql(sql, foxlink_engine)['Measure_Workno']
             first_aoi_measure = dvs_aoi_measure[0].lower()
-            ntust_measure = await Device.objects.select_related(['aoimeasures']).filter(name=dvs.name).all()
+            ntust_measure = await Device.objects.select_related(['aoimeasures']).filter(project = project_id,name=dvs.name).all()
             # ntust_measure = for i in ntust_measure[0].aoimeasures
-            ntust_measure = ntust_measure[0].aoimeasures
+            # ntust_measure = ntust_measure[0].aoimeasures
+            ntust_measure = [measure for device in ntust_measure for measure in device.aoimeasures]
             
             if select_type == "day":
                 sql = f"""
-                    SELECT * FROM dn_mf 
+                    SELECT * FROM aoi_feature 
                     WHERE 
                         device='{dvs.id}' and
-                        pcs>'0' and
-                        operation_time<'{get_ntz_now().date() + timedelta(days=-1)}'
+                        operation_day = '1' and
+                        date<'{get_ntz_now().date() + timedelta(days=-1)}'
                     ORDER BY ID DESC 
                     LIMIT 1;
                 """
                 date = pd.read_sql(sql, self.ntust_engine)
 
                 if len(date) >= 1:
-                   predict_date = date.iloc[0]['date']
+                   predict_date = date.iloc[0]['date'].date()
                 #    print(predict_date)
 
                 else:

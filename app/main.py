@@ -1,8 +1,9 @@
 
-
+import inspect
 import logging
 import asyncio
-from fastapi import FastAPI
+from fastapi import FastAPI,applications
+from fastapi.openapi.docs import get_swagger_ui_html
 from app.routes import (
     health,
     user,
@@ -30,6 +31,31 @@ logger.addHandler(
 )
 logger.handlers[-1].setFormatter(CustomFormatter(LOG_FORMAT_FILE))
 
+def get_function_default_args(func):
+    '''获取函数默认参数'''
+    sign = inspect.signature(func)
+    return {
+        k: v.default
+        for k, v in sign.parameters.items()
+        if v.default is not inspect.Parameter.empty
+    }
+
+def swagger_monkey_patch(*args, **kwargs):
+    """
+    Wrap the function which is generating the HTML for the /docs endpoint and
+    overwrite the default values for the swagger js and css.
+    """
+    param_dict = get_function_default_args(get_swagger_ui_html)
+    swagger_js_url = param_dict['swagger_js_url'].replace('https://cdn.jsdelivr.net/npm/', 'https://unpkg.com/')
+    swagger_css_url = param_dict['swagger_css_url'].replace('https://cdn.jsdelivr.net/npm/', 'https://unpkg.com/')
+    return get_swagger_ui_html(
+        *args, **kwargs,
+        swagger_js_url=swagger_js_url,
+        swagger_css_url=swagger_css_url
+    )
+
+applications.get_swagger_ui_html  = swagger_monkey_patch
+
 app = FastAPI(title="Foxlink API Backend", version="0.0.1")
 
 
@@ -46,7 +72,8 @@ origins = [
     "http://192.168.0.115:8080",
     "http://192.168.65.212:*",
     "http://192.168.1.103:*",
-    "http://192.168.50.130"
+    "http://192.168.50.130",
+    "ntust2.foxlink.com.tw",
 ]
 
 app.add_middleware(

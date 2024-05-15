@@ -40,6 +40,9 @@ AuditLogHeaderRef = ForwardRef("AuditLogHeader")
 UserRef = ForwardRef("User")
 DeviceRef = ForwardRef("Device")
 
+def one_year_ago():
+    one_year_ago = date.today() - timedelta(days=365)
+    return one_year_ago
 
 def generate_uuidv4():
     return str(uuid.uuid4())
@@ -190,6 +193,8 @@ class TaskAction(Enum):
     DATA_PREPROCESSING = "DATA_PREPROCESSING"
     TRAINING_DAY = "TRAINING_DAY"
     TRAINING_WEEK = "TRAINING_WEEK"
+    PREDICT_DAY = "PREDICT_DAY"
+    PREDICT_WEEK = "PREDICT_WEEK"
 
 class TaskStatus(Enum):
     Failure = "Failure"
@@ -221,12 +226,18 @@ class AuditActionEnum(Enum):
 
     TRAINING_STARTED_DAILY = "TRAINING_STARTED_DAILY"
     TRAINING_STARTED_WEEKLY = "TRAINING_STARTED_WEEKLY"
+    RETRAIN_STARTED_DAILY = "RETRAIN_STARTED_DAILY"
+    RETRAIN_STARTED_WEEKLY = "RETRAIN_STARTED_WEEKLY"
     
     TRAINING_SUCCEEDED_DAILY = "TRAINING_SUCCEEDED_DAILY"
     TRAINING_SUCCEEDED_WEEKLY = "TRAINING_SUCCEEDED_WEEKLY"
+    RETRAIN_SUCCEEDED_DAILY = "RETRAIN_SUCCEEDED_DAILY"
+    RETRAIN_SUCCEEDED_WEEKLY = "RETRAIN_SUCCEEDED_WEEKLY"
 
     TRAINING_FAILED_DAILY = "TRAINING_FAILED_DAILY"
     TRAINING_FAILED_WEEKLY = "TRAINING_FAILED_WEEKLY"
+    RETRAIN_FAILED_DAILY = "RETRAIN_FAILED_DAILY"
+    RETRAIN_FAILED_WEEKLY = "RETRAIN_FAILED_WEEKLY"
 
     PREDICT_STARTED = "PREDICT_STARTED"
     PREDICT_SUCCEEDED = "PREDICT_SUCCEEDED"
@@ -341,6 +352,8 @@ class Device(ormar.Model):
     project: int = ormar.ForeignKey(
         Project, index=True, nullable=False, ondelete="CASCADE")
     flag: bool = ormar.Boolean(default=False)
+    start_date: date = ormar.Date(default= one_year_ago)
+    retrain: bool = ormar.Boolean(default = False)
     created_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
 
 

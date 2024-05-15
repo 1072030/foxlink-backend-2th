@@ -442,7 +442,8 @@ async def GetPredictCompareAnalysis(project_name, line, select_type, start_date,
             formatData.append({
                 # "date": date,
                 # "value": str(device_accuracy)
-                "date": actual_predict_date,
+                # "date": actual_predict_date,
+                "date": date,
                 "value": str(device_accuracy),
             })
             

@@ -28,5 +28,6 @@ async def get_foxlink_user(user_id: str, system_id: str):
     """
     暫時無功能
     """
+    
     return await getFoxlinkUser(user_id, system_id)
 

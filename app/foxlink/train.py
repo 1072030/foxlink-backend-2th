@@ -3,7 +3,7 @@
 """
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime,date
 
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, StackingClassifier
@@ -117,7 +117,7 @@ class FoxlinkTrain:
 
             dvs_aoi_measure = pd.read_sql(sql, foxlink_engine)['Measure_Workno']
             first_aoi_measure = dvs_aoi_measure[0].lower()
-            ntust_measure = await Device.objects.select_related(['aoimeasures']).filter(name=dvs.name,project=project_id).all()
+            ntust_measure = await Device.objects.select_related(['aoimeasures']).filter(name=dvs.name,line = dvs.line,project=project_id).all()
             # ntust_measure = for i in ntust_measure[0].aoimeasures
             ntust_measure = ntust_measure[0].aoimeasures
             # sql = f"""
@@ -249,6 +249,172 @@ class FoxlinkTrain:
     
         return input_data_dict
     
+
+    async def auto_data_preprocessing_from_sql(self,project_id:int,start_date: date):    
+        """
+        從台科資料庫讀取處理好的資料做portion and feature selection
+        Returns:
+            dict: 內容為每個Device的error特徵
+        """
+        project = await Project.objects.filter(id=project_id).select_related(
+            ["devices","devices__aoimeasures"]
+        ).all()
+        if project is None:
+            raise HTTPException(
+                    status_code=400, detail="this project doesnt existed.")
+        # 用來存每個device的每個error的輸入表
+        input_data_dict = {}
+        devices = await Device.objects.filter(project=project_id,retrain = True).all()
+       
+        start_datetime = datetime.combine(start_date, datetime.min.time())
+        for dvs in devices:
+            print(f"{get_ntz_now()} : starting preprocessing {dvs.name}")
+            event = await ErrorFeature.objects.filter(
+                device=dvs.id,
+                project=project_id
+            ).all()
+            event = set([row.event.id for row in event])
+            events = await ProjectEvent.objects.filter(id__in=event).all()
+            # event = set([row.name for row in events])
+
+            sql = f"""
+                SELECT Measure_Workno FROM aoi.measure_info 
+                WHERE 
+                    Device_Name='{dvs.name}' and
+                    Project='{project[0].name}'
+                    ORDER BY Workno_Order;
+            """
+            stmt = f"SELECT * FROM `{project[0].name}_event` LIMIT 1;"
+            FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
+            foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
+
+            dvs_aoi_measure = pd.read_sql(sql, foxlink_engine)['Measure_Workno']
+            first_aoi_measure = dvs_aoi_measure[0].lower()
+            ntust_measure = await Device.objects.select_related(['aoimeasures']).filter(name=dvs.name,line = dvs.line,project=project_id).all()
+            ntust_measure = ntust_measure[0].aoimeasures
+
+            
+            for row in events: # 預測目標異常 Y
+                sql = f"""
+                    SELECT * FROM error_feature
+                    WHERE 
+                        device = '{dvs.id}' and 
+                        project = {project_id} and 
+                        event = '{row.id}';
+                """
+                target_Y = pd.read_sql(sql, self.ntust_engine)
+                target_Y.rename(columns={'happened':row.name}, inplace=True)
+                target_feature = target_Y.drop(['id','project','operation_day'], axis=1)
+                
+                # 加入AOI檢測特徵
+                for measure in dvs_aoi_measure:
+                    measure = measure.lower()
+                    for i in ntust_measure:
+                        if i.name == measure:
+                            measure_id = i.id
+
+                    if measure == first_aoi_measure: # 用第一個AOI生產數做比例補值
+                        sql = f"""
+                            SELECT * FROM aoi_feature 
+                            WHERE 
+                                device = {dvs.id} and 
+                                aoi_measure = {measure_id};
+                        """
+                        aoi_fea = pd.read_sql(sql, self.ntust_engine)
+                        aoi_fea.rename(columns={
+                            'pcs':measure+'_pcs',
+                            'ng_num':measure+'_ng_num',
+                            'ng_rate':measure+'_ng_rate',
+                            'ct_max':measure+'_ct_max',
+                            'ct_mean':measure+'_ct_mean',
+                            'ct_min':measure+'_ct_min'
+                            }, inplace=True
+                    )
+
+                        #移除不需要的欄位
+                        aoi_fea.drop(['id','device','aoi_measure'],axis=1, inplace=True)
+                        
+                        #合併兩個dataframe
+                        target_feature = pd.merge(target_feature, aoi_fea, on=['date'], how='outer')
+
+                        #補0
+                        target_feature[['operation_day', measure+'_pcs']] = target_feature[['operation_day', measure+'_pcs']].fillna(0)
+
+                        #所有可執行日的pcs總和
+                        op_day_total_pcs = aoi_fea[aoi_fea['operation_day']==1][measure+'_pcs'].sum()
+
+                        #將發生次數總和
+                        op_day_total_error = target_feature[target_feature['operation_day']==1][row.name].sum()
+
+                        #計算平均發生次數
+                        error_per_pcs = op_day_total_error / op_day_total_pcs # 計算比例
+
+                        #
+                        invalid_date_index = target_feature[target_feature['operation_day']==0].index
+                        target_feature.loc[invalid_date_index, row.name] = round(target_feature.loc[invalid_date_index, measure+'_pcs'] * error_per_pcs) # 依照生產比例補值
+                        
+                    else:
+                        sql = f"SELECT * FROM aoi_feature WHERE device = '{dvs.name}' and aoi_measure = '{measure_id}' ;"
+                        aoi_fea = pd.read_sql(sql, self.ntust_engine)
+                        aoi_fea.rename(columns={
+                            'pcs':measure+'_pcs',
+                            'ng_num':measure+'_ng_num',
+                            'ng_rate':measure+'_ng_rate',
+                            'ct_max':measure+'_ct_max',
+                            'ct_mean':measure+'_ct_mean',
+                            'ct_min':measure+'_ct_min'
+                            }, inplace=True
+                        )
+                        aoi_fea.drop(['id','device','aoi_measure','operation_day'],axis=1, inplace=True)
+                        target_feature = pd.merge(target_feature, aoi_fea, on=['date'], how='outer')
+                # 加入同機台其他異常事件發生次數
+                for others in events:
+                    if others.name == row.name:
+                        continue
+                    else:
+                        # SELECT e.date, p.name, e.happened FROM error_feature as e JOIN project_events as p ON p.id=e.event WHERE e.device = 35 and event = 371 and project=26;
+                        sql = f"""
+                        SELECT e.date, p.category, e.happened 
+                        FROM error_feature as e 
+                        JOIN project_events as p 
+                        ON p.id=e.event 
+                        WHERE 
+                            e.device = {dvs.id} and 
+                            e.event = {others.id} and 
+                            e.project={project_id} ;
+                        """
+                        other_error_happened = pd.read_sql(sql, self.ntust_engine) # 預測目標異常的特徵
+                        category = str(other_error_happened['category'].iloc[0])
+                        other_error_happened.rename(columns={'happened':category}, inplace=True)
+                        target_feature = pd.merge(target_feature, other_error_happened[['date', category]], on='date', how='outer')
+                        
+                target_feature.sort_values('date', inplace=True)
+                target_feature.reset_index(drop=True, inplace=True)
+                steady_index = target_feature[target_feature['operation_day']==1].index.min() # 穩定生產第一天
+                target_feature = target_feature[steady_index:]
+
+                target_feature.drop(['device', 'event', 'operation_day'], axis=1, inplace=True)
+                target_feature.fillna(0, inplace=True)
+                target_feature.set_index('date', inplace=True)
+                # feature selection
+                pearson = target_feature.corr(method='pearson') # 線性相關
+                spearman = target_feature.corr(method='spearman') # 非線性相關
+
+                pf = set(pearson[row.name][pearson[row.name].abs()>0.4].index) # 選擇特徵
+                sf = set(spearman[row.name][spearman[row.name].abs()>0.4].index) # 選擇特徵
+                pnsf = list(pf|sf)
+                target_feature.reset_index(inplace=True)
+                input_data = pd.merge(target_feature[['date',row.name]], target_feature[['date']+pnsf])
+
+                if dvs.name not in input_data_dict:
+                    input_data_dict[dvs.name] = {}
+                    
+                input_data_dict[dvs.name][row.name] = input_data
+    
+        return input_data_dict
+    
+
+    
     def light_labeling(self, df, events, Threshold):
         df.rename(columns = {events:'count'}, inplace = True)
         cutting_point = np.quantile(df['count'], Threshold)
@@ -290,9 +456,12 @@ class FoxlinkTrain:
                 oversample = RandomOverSampler(sampling_strategy='auto')
                 x_train, y_train =  oversample.fit_resample(x_train, y_train)
         elif upsample_method == 'upsample':
-            print('upsample method: RandomUpsample')
-            oversample = RandomOverSampler(sampling_strategy='auto')
-            x_train, y_train =  oversample.fit_resample(x_train, y_train)
+            try:
+                print('upsample method: RandomUpsample')
+                oversample = RandomOverSampler(sampling_strategy='auto')
+                x_train, y_train =  oversample.fit_resample(x_train, y_train)
+            except Exception as e:
+                raise e
         else:
             print('沒有這種upsample的方式，會報錯')
 

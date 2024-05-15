@@ -35,6 +35,7 @@ async def get_all_project_statistics(user: User = Depends(get_current_user())):
     for i in data:
         temp = {}
         temp['project_name'] = i.name.upper()
+        temp['line'] = [device.line for device in i.devices]
         temp['devices'] = [device.name for device in i.devices]
         formatData.append(temp)
     return formatData

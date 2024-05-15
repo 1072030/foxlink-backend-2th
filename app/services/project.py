@@ -169,7 +169,7 @@ async def SearchProjectDevices(project_name: str):
     #     return data
 
 @transaction()
-async def AddNewProjectEvents(dto: List[NewProjectDto]):
+async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
     project_name = dto[0].project.upper()
     project_line = dto[0].line
     # check selected devices
@@ -266,7 +266,8 @@ async def AddNewProjectEvents(dto: List[NewProjectDto]):
             line=content.split('-')[1],
             cname=content.split('-')[2],
             project=project_create.id,
-            flag=False
+            flag=False,
+            start_date = start_date
         )
         bulk_create_device.append(device)
 
@@ -337,8 +338,9 @@ async def PreprocessingData(project_id: int):
                     
                     aoi = pd.DataFrame()
                     # 資料表第一筆資料
-
-                    sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;"
+                    start_date = dvs.start_date
+                    start_date = start_date.strftime("%Y-%m-%d")
+                    sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` WHERE Code3 >= '{str(start_date)}' LIMIT 1;"
                     FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(sql)
                     first_data_date = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=sql)
                     foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
@@ -1201,21 +1203,125 @@ async def TrainingData(project_id: int, select_type: str):
     return
 
 @transaction()
+async def auto_TrainingData(project_id: int, select_type: str, start_date: date):
+    input_data_dict = await foxlink_train.auto_data_preprocessing_from_sql(project_id=project_id,start_date = start_date)
+    every_error_performance = {}
+    timenow = get_ntz_now().strftime("%Y%m%d%H%M")
+    devices = await Device.objects.filter(project=project_id,retrain = True).all()
+    start_date = pd.Timestamp(start_date)
+    with ntust_engine.connect() as conn:
+        trans = conn.begin()
+        try:
+            for dv in input_data_dict:
+                # every_error_performance = []
+                for events in tqdm(input_data_dict[dv]):
+                    temp = []
+                    count = 0
+                    for t in foxlink_train.Threshold:
+                        count += 1
+                        print(dv + ' '+events + ' T = ', t)
+                        df = input_data_dict[dv][events]
+                        if select_type == "week" and count == 1:
+                            df['date'] = pd.to_datetime(df['date'])
+                            df.set_index('date', inplace=True)
+                            # df = df.resample('W').sum()
+                            df = df.resample('W').agg(
+                                {col: foxlink_train.choose_agg_func(col) for col in df.columns})
+                            
+                        if select_type == 'week':
+                            df = df[df.index >= start_date]
+                        else:
+                            df = df[df['date'].dt.date >= start_date]        # 想切出起始時間之後的資料
+                        
+                        # 透過device與Message去Map出Category
+                        for i in devices:
+                            if dv == i.name:
+                                device_id = i.id
+                        event = await ProjectEvent.objects.filter(name=events, device=device_id).get()
+                        ca = foxlink_train.map_category(device_id, event.id)
+                        try:
+                            # 貼標
+                            df, lights, cutting_point = foxlink_train.light_labeling(
+                                df, events=events, Threshold=t)
+                            # 把欄位提取出來
+                            used_col = df.columns.to_list()
+                            used_col.remove('light')
+                            # 訓練模型前的最後資料前處理
+                            foxlink_train.training_data_preprocessing(df)
+                            # 挑選了哪些模型
+                            es = foxlink_train.select_model()
+                            # 訓練模型
+                            model, report = foxlink_train.stacking(es)
+                            # 計算評估指標
+                            acc, red_recall, red_f1, arf = foxlink_train.ARF(report)
+                            # 存至暫存器
+                            temp.append((t, arf))
+                            if dv not in every_error_performance:
+                                every_error_performance[dv] = {}
+                            if events not in every_error_performance[dv]:
+                                every_error_performance[dv][events] = {}
+                            if t not in every_error_performance[dv][events]:
+                                every_error_performance[dv][events][t] = {'device': device_id,
+                                                                        'event': event.id,
+                                                                        'threshold': t,
+                                                                        'actual_cutpoint': cutting_point,
+                                                                        'model': model,
+                                                                        'arf': arf,
+                                                                        'acc': acc,
+                                                                        'red_recall': red_recall,
+                                                                        'red_f1score': red_f1,
+                                                                        'used_col': str(used_col),
+                                                                        'created_date': timenow}
+                        except:
+                            print('無法訓練')
+                  
+                    # 找最佳ARF的Threshold
+                    best_t = sorted(temp, key=lambda x: (x[1]), reverse=True)[0][0]
+                    best_model = every_error_performance[dv][events][best_t]['model']
+                    # 儲存模型
+                    if select_type == 'week':
+                        joblib.dump(
+                            best_model, f'/app/model_week/{dv}_{ca}_{timenow}.pkl')
+                    else:
+                        joblib.dump(best_model, f'/app/model/{dv}_{ca}_{timenow}.pkl')
+
+                    # every_error_performance[dv][events][best_t]['freq'] = select_type
+                    # retrain_result =  pd.DataFrame(every_error_performance[dv][events][best_t], index=[0]).drop(
+                    #     columns='model')
+                    retrain_result =  every_error_performance[dv][events][best_t]
+                    # retrain_result : List[TrainPerformance] = []
+                    # retrain_result.append(error_performance)
+                    # 寫入資料庫      
+                    await TrainPerformance.objects.filter(device=device_id, event=event.id, freq=select_type).update(
+                        threshold=best_t,
+                        actual_cutpoint= int(retrain_result['actual_cutpoint']),
+                        arf=retrain_result['arf'],
+                        acc=retrain_result['acc'],
+                        red_recall=retrain_result['red_recall'],
+                        red_f1score=retrain_result['red_f1score'],
+                        used_col=retrain_result['used_col'],
+                        created_date=retrain_result['created_date']
+                    )
+
+            trans.commit() 
+        except Exception as e:
+            trans.rollback()
+            raise e
+            
+    return
+
+
+
+@transaction()
 async def PredictData(project_id: int, select_type: str,user:str):
     with ntust_engine.connect() as conn:
         trans = conn.begin()
         try:
             input_data_dict, infos = await foxlink_predict.data_preprocessing_from_sql(project_id=project_id,select_type=select_type)
             for dv in input_data_dict:
-                device = await Device.objects.filter(
-                    project = project_id,
-                    name=dv
-                ).get_or_none()
-                if device is None:
-                    raise HTTPException(
-                        status_code=400, detail="this device_id doesnt existed.")
-                device_id = device.id
+  
                 for events in tqdm(input_data_dict[dv]):
+                        device_id = int(str(infos[dv][events]['device']).split()[1])
 
                         df = input_data_dict[dv][events]
                         if select_type == 'week':

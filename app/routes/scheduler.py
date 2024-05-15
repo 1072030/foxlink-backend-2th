@@ -12,17 +12,26 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, status
 from fastapi.exceptions import HTTPException
-from app.core.database import Env
+from app.core.database import (
+    Env,
+    Device,
+    AuditLogHeader
+)
 
 from app.core.database import (
     get_ntz_now,
     AuditActionEnum,
 )
+from app.routes.project import (
+    auto_train
+)
 from enum import Enum
 from app.foxlink.db import foxlink_dbs
+from typing import List
 import requests
 import time
 import random
+
 # -- init --
 jobstores = {
     # pickle_protocol=2,
@@ -58,7 +67,61 @@ def backup(path: str, description: str):
 
 def pending_task():
     requests.get(url="http://localhost/task/check-task",headers={'Connection':'close'})
-    
+
+def auto_train_job(preprocessing_days: int, days_before_retrain: int, description: str):
+    url = "http://localhost/project/auto-training-data"
+    headers = {'Connection': 'close'}
+    params = {
+        'preprocessing_days': preprocessing_days,
+        'days_before_retrain': days_before_retrain,
+        'description': description
+    }
+    response = requests.get(url, headers=headers, params=params)
+    # requests.get(url="http://localhost/project/auto-training-data",headers={'Connection':'close'})
+
+# def auto_train(preprocessing_days: int, days_before_retrain: int, description: str):
+
+#     current_date = get_ntz_now().date()
+#     created_date = get_ntz_now()
+#     ago = current_date - timedelta(days = days_before_retrain)
+#     start_date = current_date - timedelta(days = preprocessing_days)
+#     devices = Device.objects.all()
+#     auto_train_device : List[Device] = []
+#     for device in devices:
+#         date = device.created_date.date()
+#         if date <= ago:
+#             device.flag = False
+#             device.created_date = created_date
+#             device.start_date = start_date
+#             auto_train_device.append(device)
+#     Device.objects.bulk_update(auto_train_device,['flag','created_date','start_date'])
+#     projects = set(device.project for device in auto_train_device)
+
+#     for project in projects:
+#         try:
+#             a = auto_TrainingData(project,'day',start_date)
+#             AuditLogHeader.objects.create(
+#                 action=AuditActionEnum.TRAINING_SUCCEEDED_DAILY.value,
+#                 description=project
+#             )
+#         except:
+#             AuditLogHeader.objects.create(
+#                 action=AuditActionEnum.TRAINING_FAILED_DAILY.value,
+#                 description=project
+#             )
+#         try:
+#             b = auto_TrainingData(project,'week',start_date)
+#             AuditLogHeader.objects.create(
+#                 action=AuditActionEnum.TRAINING_SUCCEEDED_WEEKLY.value,
+#                 description=project
+#             )
+#         except:
+#             AuditLogHeader.objects.create(
+#                 action=AuditActionEnum.TRAINING_FAILED_WEEKLY.value,
+#                 description=project
+#             )
+
+
 @router.get("/pending-task-activate", tags=["scheduler"])
 async def check_task():
     """
@@ -141,3 +204,13 @@ async def set_cron_job(time: datetime, select_type: Select_type, description: st
             id=description, func=backup, args=[diffbackup_path, description], trigger='cron', day=time.day, hour=time.hour, minute=time.minute, second=time.second, replace_existing=True)
 
     return {"id": task.id, "func": task.func_ref, "next_run_time": task.next_run_time}
+
+# 固定時間自動作訓練:
+@router.post("/auto_train", tags=["scheduler"])
+async def set_auto_train_job(preprocessing_months:int, months_before_retrain: int = 1, description: str = "固定時間自動訓練"):
+    """
+    固定時間自動做訓練
+    """    
+    task = asyncIOScheduler.add_job(id=description, func=auto_train_job, args=[preprocessing_months,months_before_retrain,description], trigger='cron',
+                                        replace_existing=True, hour=16, minute=00, second=00)
+    return{"start_months":months_before_retrain,"train_months":preprocessing_months}

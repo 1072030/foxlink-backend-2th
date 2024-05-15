@@ -15,7 +15,10 @@ from app.core.database import (
     UserLevel,
     Task,
     TaskAction,
-    TaskStatus
+    TaskStatus,
+    Env,
+    Device,
+    get_ntz_now
 )
 from app.services.project import (
     AddNewProjectWorker,
@@ -29,7 +32,8 @@ from app.services.project import (
     TrainingData,
     PredictData,
     GetFoxlinkTables,
-    AddNewProjects
+    AddNewProjects,
+    auto_TrainingData
 )
 from app.services.auth import (
     get_current_user,
@@ -39,6 +43,7 @@ from app.services.auth import (
     checkFoxlinkAuth,
 )
 from app.models.schema import NewProjectDto, NewUserDto
+from datetime import datetime,date,timedelta
 router = APIRouter(prefix="/project")
 
 
@@ -78,20 +83,6 @@ async def get_all_project(project_id: int, user: User = Depends(get_current_user
 
 
 @router.delete("/", tags=["project"])
-# async def delete_project(project_id: int, user: User = Depends(get_current_user())):
-#     """
-#     刪除專案(僅專案內最高階級人員)
-#     """
-#     user = await checkUserProjectPermission(project_id, user, UserLevel.project_manager.value)
-    # if user is not None:
-    #     project_name = await DeleteProject(project_id)
-
-    #     await AuditLogHeader.objects.create(
-    #         action=AuditActionEnum.DELECT_PROJECT.value,
-    #         user=user.badge,
-    #         description=f"{project_name}"
-    #     )
-    #     return
 async def delete_devices(dto: List[NewProjectDto], user: User = Depends(get_current_user())):
     """
     刪除專案(僅專案內最高階級人員)
@@ -167,7 +158,7 @@ async def search_project_devices(project_name: str):
     return await SearchProjectDevices(project_name)
 
 @router.post("/add-project-events", status_code=200, tags=["project"])
-async def add_project_and_events(dto: List[NewProjectDto], user: User = Depends(get_current_user())):
+async def add_project_and_events(dto: List[NewProjectDto], start_date: date = None ,user: User = Depends(get_current_user())):
     """
     搜尋專案內的所有事件(會確認新增者權限 = admin)
     """
@@ -177,9 +168,17 @@ async def add_project_and_events(dto: List[NewProjectDto], user: User = Depends(
     if len(dto) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"please select device"
-        )    
+        )
+
+    if start_date is None:
+        checkEnv = await Env.objects.filter(key="preprocess_days").get_or_none()
+        if checkEnv is None:
+            raise HTTPException(400,"can not find 'preprocess_days' env settings")
+        preprocess_days = int(checkEnv.value)
+        start_date = date.today() - timedelta(days = preprocess_days)
+    
     if user is not None:
-        project = await AddNewProjectEvents(dto)
+        project = await AddNewProjectEvents(dto,start_date)
         if project is not None:
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.ADD_NEW_PROJECT.value,
@@ -206,6 +205,16 @@ async def add_project_and_events(dto: List[NewProjectDto], user: User = Depends(
                 ),
                 Task(
                     action=TaskAction.TRAINING_WEEK.value,
+                    status=TaskStatus.Pending.value,
+                    project=project.id
+                ),
+                Task(
+                    action=TaskAction.PREDICT_DAY.value,
+                    status=TaskStatus.Pending.value,
+                    project=project.id
+                ),
+                Task(
+                    action=TaskAction.PREDICT_WEEK.value,
                     status=TaskStatus.Pending.value,
                     project=project.id
                 )
@@ -294,8 +303,69 @@ async def training_data(project_id: int, select_type: str, user: User = Depends(
         )
     return
 
+@router.get("/auto-training-data", tags=["project"])
+async def auto_train(preprocessing_days: int, days_before_retrain: int, description: str):
 
-@router.get("/predict-data", tags=["project"])
+    current_date = get_ntz_now().date()
+    created_date = get_ntz_now()
+    ago = current_date - timedelta(days=days_before_retrain)
+    start_date = current_date - timedelta(days=preprocessing_days)
+    devices = await Device.objects.all()  
+    auto_train_device: List[Device] = []
+
+    for device in devices:
+        date = device.created_date.date()
+
+        if date <= ago:
+            device.retrain = True
+            device.created_date = created_date
+            device.start_date = start_date
+            auto_train_device.append(device)
+
+    if len(auto_train_device) != 0:
+        await Device.objects.bulk_update(auto_train_device, ['retrain', 'created_date', 'start_date'])
+    else:
+        return
+    
+    projects = []
+    for device in auto_train_device:
+        if device.project.id not in projects:
+            projects.append(device.project.id)
+    # projects = set(device.project for device in auto_train_device)
+
+    for project in projects:
+        await AuditLogHeader.objects.create(
+                action=AuditActionEnum.TRAINING_STARTED_WEEKLY.value,
+                user='admin',
+                description=project
+            )
+        try:
+            await auto_TrainingData(project, 'day', start_date)  
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.RETRAIN_SUCCEEDED_DAILY.value,
+                description=project
+            )
+        except:
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.RETRAIN_FAILED_DAILY.value,
+                description=project
+            )
+        try:
+            await auto_TrainingData(project, 'week', start_date)  
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.RETRAIN_SUCCEEDED_WEEKLY.value,
+                description=project
+            )
+        except:
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.RETRAIN_FAILED_WEEKLY.value,
+                description=project
+            )
+
+        await Device.objects.filter(project=project,retrain = True).update(retrain = False)
+        
+
+@router.post("/predict-data", tags=["project"])
 async def predict_data(project_id: int, pred_type: str, user: User = Depends(get_current_user())):
     """
     從已訓練模型(.pkl)進行每日預測

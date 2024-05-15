@@ -12,6 +12,7 @@ from app.core.database import (
 from app.services.project import(
     PreprocessingData,
     TrainingData,
+    PredictData
 )
 from typing import List
 router = APIRouter(prefix="/task")
@@ -94,7 +95,7 @@ async def checking_task():
                 pending_task.status = TaskStatus.Failure.value
                 await pending_task.update()
 
-        # 日預測
+        # 日訓練
     elif pending_task.action == TaskAction.TRAINING_DAY.value:
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_STARTED_DAILY.value,
@@ -123,7 +124,7 @@ async def checking_task():
                 await pending_task.update()
 
 
-        # 週預測
+        # 週訓練
     elif pending_task.action == TaskAction.TRAINING_WEEK.value:
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_STARTED_WEEKLY.value,
@@ -145,6 +146,64 @@ async def checking_task():
             except Exception as e:
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.TRAINING_FAILED_WEEKLY.value,
+                    user='admin',
+                    description=f'{args} detail:{e}'
+                )
+
+                pending_task.status = TaskStatus.Failure.value
+                await pending_task.update()
+
+        # 日預測
+    elif pending_task.action == TaskAction.PREDICT_DAY.value:
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.PREDICT_STARTED.value,
+                user='admin',
+                description=str(args)
+            )
+            try:
+                await PredictData(int(args),'day','admin')
+                await AuditLogHeader.objects.create(
+                    action=AuditActionEnum.PREDICT_SUCCEEDED.value,
+                    user='admin',
+                    description=str(args)
+                )
+
+                pending_task.status = TaskStatus.Succeeded.value
+                pending_task.updated_date = get_ntz_now()
+                await pending_task.update()
+
+            except Exception as e:
+                await AuditLogHeader.objects.create(
+                    action=AuditActionEnum.PREDICT_FAILED.value,
+                    user='admin',
+                    description=f'{args} detail:{e}'
+                )
+
+                pending_task.status = TaskStatus.Failure.value
+                await pending_task.update()
+
+        # 週預測
+    elif pending_task.action == TaskAction.PREDICT_WEEK.value:
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.PREDICT_STARTED.value,
+                user='admin',
+                description=str(args)
+            )
+            try:
+                await PredictData(int(args),'week','admin')
+                await AuditLogHeader.objects.create(
+                    action=AuditActionEnum.PREDICT_SUCCEEDED.value,
+                    user='admin',
+                    description=str(args)
+                )
+
+                pending_task.status = TaskStatus.Succeeded.value
+                pending_task.updated_date = get_ntz_now()
+                await pending_task.update()
+
+            except Exception as e:
+                await AuditLogHeader.objects.create(
+                    action=AuditActionEnum.PREDICT_FAILED.value,
                     user='admin',
                     description=f'{args} detail:{e}'
                 )

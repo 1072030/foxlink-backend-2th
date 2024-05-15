@@ -2,6 +2,7 @@ import requests
 import paramiko
 import json
 import requests
+import subprocess
 from jose.constants import ALGORITHMS
 from jose.exceptions import ExpiredSignatureError
 from app.core.database import (
@@ -182,24 +183,25 @@ async def checkUserSearchProjectPermission(user: User, permission: int):
     return user_access_project_id, user_access_project_name
 
 
-async def checkFoxlinkAuth(type:str,user_id:str,password:str,system:str,checkSSH: bool = False):
+async def checkFoxlinkAuth(type:str,user_id:str,user_password:str,system:str,checkSSH: bool = False):
     if checkSSH:
         ip = "192.168.65.210"
         username = "ntust"
         password = "aa946809"
-        command = f'curl -X POST -d "type=login&user_id=001&password=foxlink&system=001" http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
+        command = f'curl -X POST -d "type=login&user_id=001&user_password=foxlink&system=001" http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         client.connect(ip, port=22, username=username,
-                       password=password, timeout=20)
+                       password=password, timeout=30)
         stdin, stdout, stderr = client.exec_command(command)
         return json.loads(stdout.read().decode("utf-8"))
+
     else:
         url = 'http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
         myobj = {
             "type": type,
             "user_id": user_id,
-            "password": password,
+            "password": user_password,
             "system": system
         }
         response = requests.post(url, data=myobj)
