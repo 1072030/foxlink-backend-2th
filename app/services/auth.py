@@ -49,7 +49,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 
-async def authenticate_user(badge: str, password: str):
+# async def authenticate_user(badge: str, password: str):
+async def authenticate_user(badge: str):
     user = await get_worker_by_badge(badge, [])
 
     if user is None:
@@ -162,7 +163,7 @@ async def checkUserProjectPermission(project_id: int, user: User, permission: in
 
 
 async def checkAdminPermission(user: User):
-    if user.badge == "admin":
+    if user.level == 4:
         return user
     else:
         raise HTTPException(
@@ -206,11 +207,12 @@ async def checkFoxlinkAuth(type:str,user_id:str,user_password:str,system:str,che
         }
         response = requests.post(url, data=myobj)
         response.raise_for_status()  # 如果请求不成功，则抛出异常
+        print(response)
         # 返回 JSON 响应
         return response.json()
 
 
-async def getFoxlinkUser(user_id: str , system_id: int = 16, checkSSH: bool = False):
+async def getFoxlinkUser(trpe:str,user_id: str , system_id: int = 16, checkSSH: bool = False):
     if checkSSH:
         ip = "192.168.65.210"
         username = "ntust"
@@ -225,6 +227,30 @@ async def getFoxlinkUser(user_id: str , system_id: int = 16, checkSSH: bool = Fa
     else:
         url = 'http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
         myobj = {
+        #     "trpe":"checkUserExist",
+            "type":type,
+            "user_id": user_id,
+            "system": system_id
+        }
+        response = requests.post(url, data=myobj)
+        return response.json()
+
+async def getUserGroup(user_id: str , system_id: int = 16, checkSSH: bool = False):
+    if checkSSH:
+        ip = "192.168.65.210"
+        username = "ntust"
+        password = "aa946809"
+        command = f'curl -X POST -d "user_id=130316&system_id=16&type=checkUserExist" "http://mms.foxlink.com.tw/scbg/addons/register/server/server.php"'
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(ip, port=22, username=username,
+                       password=password, timeout=20)
+        stdin, stdout, stderr = client.exec_command(command)
+        return json.loads(stdout.read().decode("utf-8"))
+    else:
+        url = 'http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
+        myobj = {
+            "trpe":"getUserGroupList",
             "user_id": user_id,
             "system": system_id
         }

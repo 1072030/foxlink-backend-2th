@@ -15,6 +15,7 @@ from app.services.project import(
     PredictData
 )
 from typing import List
+from fastapi.exceptions import HTTPException
 router = APIRouter(prefix="/task")
 @router.get("/", tags=["task"])
 async def get_all_task():
@@ -89,7 +90,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
                     user='admin',
-                    description=f'{args} detail:{e}'
+                    description=f'{args} detail:{e.detail.detail}'
                 )
 
                 pending_task.status = TaskStatus.Failure.value
@@ -173,11 +174,11 @@ async def checking_task():
                 await pending_task.update()
 
             except Exception as e:
-                await AuditLogHeader.objects.create(
-                    action=AuditActionEnum.PREDICT_FAILED.value,
-                    user='admin',
-                    description=f'{args} detail:{e}'
-                )
+                # await AuditLogHeader.objects.create(
+                #     action=AuditActionEnum.PREDICT_FAILED.value,
+                #     user='admin',
+                #     description=f'{args} detail:{e}'
+                # )
 
                 pending_task.status = TaskStatus.Failure.value
                 await pending_task.update()
@@ -202,11 +203,11 @@ async def checking_task():
                 await pending_task.update()
 
             except Exception as e:
-                await AuditLogHeader.objects.create(
-                    action=AuditActionEnum.PREDICT_FAILED.value,
-                    user='admin',
-                    description=f'{args} detail:{e}'
-                )
+                # await AuditLogHeader.objects.create(
+                #     action=AuditActionEnum.PREDICT_FAILED.value,
+                #     user='admin',
+                #     description=f'{args} detail:{e}'
+                # )
 
                 pending_task.status = TaskStatus.Failure.value
                 await pending_task.update()

@@ -10,7 +10,7 @@ from app.core.database import AuditActionEnum, AuditLogHeader, User
 from typing import Optional
 
 from app.services.auth import get_manager_active_user
-
+from datetime import timedelta
 router = APIRouter(prefix="/logs")
 
 
@@ -94,7 +94,7 @@ async def get_logs(
                 username=log.user.username,
                 # user=log.user if log.user is not None else None,
                 description=log.description,
-                created_date=log.created_date.strftime('%Y-%m-%d %H:%M:%S'),
+                created_date=(log.created_date + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M:%S'),
             )
             for log in logs
         ],

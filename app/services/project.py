@@ -108,6 +108,8 @@ async def AddNewProjectWorker(project_id: int, user_id: str, permission: int = U
             user=user.badge,
             permission=permission
         )
+        if permission > user.level:
+            await User.objects.filter(badge = user_id).update(level = permission)
         return True
     else:
         raise HTTPException(400, 'this user is already in the project')
@@ -342,6 +344,7 @@ async def PreprocessingData(project_id: int):
                     start_date = start_date.strftime("%Y-%m-%d")
                     sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` WHERE Code3 >= '{str(start_date)}' LIMIT 1;"
                     FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(sql)
+                    await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
                     first_data_date = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=sql)
                     foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
                     # [5] = Code3
@@ -368,20 +371,24 @@ async def PreprocessingData(project_id: int):
                     aoi = aoi.append(tmp_data)
 
                     # 先測試三個月的 之後再進行到1年
-                    for index in range(1, len(dr)):
-                        sql = f"""
-                            SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
-                            WHERE 
-                                (Code3 = '{dr[index-1]}' AND Code4 >= '07:40:00') OR
-                                (Code3 > '{dr[index-1]}' AND Code3 < '{dr[index]}') OR
-                                (Code3 = '{dr[index]}' AND Code4 <= '07:40:00')
-                                AND Code2 < 3 ;
-                            """
-                        print(
-                            f"{get_ntz_now()} : starting query {index} {dvs.name} {measure.name} {dr[index - 1]} to {dr[index]}")
-                        tmp_data = pd.read_sql(sql, foxlink_engine)
-                        if len(tmp_data) != 0:
-                            aoi = aoi.append(tmp_data)
+                    try:
+                        for index in range(1, len(dr)):
+                            sql = f"""
+                                SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
+                                WHERE 
+                                    (Code3 = '{dr[index-1]}' AND Code4 >= '07:40:00') OR
+                                    (Code3 > '{dr[index-1]}' AND Code3 < '{dr[index]}') OR
+                                    (Code3 = '{dr[index]}' AND Code4 <= '07:40:00')
+                                    AND Code2 < 3 ;
+                                """
+                            print(
+                                f"{get_ntz_now()} : starting query {index} {dvs.name} {measure.name} {dr[index - 1]} to {dr[index]}")
+                            tmp_data = pd.read_sql(sql, foxlink_engine)
+                            if len(tmp_data) != 0:
+                                aoi = aoi.append(tmp_data)
+                    except:
+                        raise HTTPException(status_code=400, detail="Insufficient memory.")
+
                     aoi = aoi[(aoi['Code2'] < 3)]
 
                     aoi['MF_Time'] = pd.to_datetime(aoi['Code3']) + aoi['Code4']
@@ -481,14 +488,17 @@ async def PreprocessingData(project_id: int):
                     dpcs = working[working['shift'] == 'D']['pcs']
                     npcs = working[working['shift'] == 'N']['pcs']
 
-                    d_timelower = np.percentile(
-                        dtime, 25) - 1.5*(np.percentile(dtime, 75)-np.percentile(dtime, 25))  # 25%-1.5IQR
-                    n_timelower = np.percentile(
-                        ntime, 25) - 1.5*(np.percentile(ntime, 75)-np.percentile(ntime, 25))  # 25%-1.5IQR
-                    d_pcslower = np.percentile(
-                        dpcs, 25) - 1.5*(np.percentile(dpcs, 75)-np.percentile(dpcs, 25))  # 25%-1.5IQR
-                    n_pcslower = np.percentile(
-                        npcs, 25) - 1.5*(np.percentile(npcs, 75)-np.percentile(npcs, 25))  # 25%-1.5IQR
+                    try:
+                        d_timelower = np.percentile(
+                            dtime, 25) - 1.5*(np.percentile(dtime, 75)-np.percentile(dtime, 25))  # 25%-1.5IQR
+                        n_timelower = np.percentile(
+                            ntime, 25) - 1.5*(np.percentile(ntime, 75)-np.percentile(ntime, 25))  # 25%-1.5IQR
+                        d_pcslower = np.percentile(
+                            dpcs, 25) - 1.5*(np.percentile(dpcs, 75)-np.percentile(dpcs, 25))  # 25%-1.5IQR
+                        n_pcslower = np.percentile(
+                            npcs, 25) - 1.5*(np.percentile(npcs, 75)-np.percentile(npcs, 25))  # 25%-1.5IQR
+                    except Exception as e:
+                        raise HTTPException(status_code=400, detail=e)
 
                     dvs_operation_day = (
                         set(dn_mf[(dn_mf['shift'] == 'D') & (
@@ -530,9 +540,13 @@ async def PreprocessingData(project_id: int):
                     print("starting input aoi_feature...")
                     print(aoi_fea)
                     print(aoi_fea.info())
-                    aoi_fea.to_sql(con=conn, name="aoi_feature",
-                                       if_exists='append', index=False)
-                    aoi_feature = aoi_feature.append(aoi_fea)
+                    try:
+                        aoi_fea.to_sql(con=conn, name="aoi_feature",
+                                        if_exists='append', index=False)
+                        aoi_feature = aoi_feature.append(aoi_fea)
+                    except:
+                        raise HTTPException(
+                            status_code=400, detail="aoi_measure does not start from the same date")
 
 
 
@@ -735,11 +749,13 @@ async def PreprocessingData(project_id: int):
                 if temp is not None:
                     temp.flag=1
                     await temp.update()
-        except Exception as e:
+        except Exception as e:    
             trans.rollback()
             raise HTTPException(
                 status_code=400, detail=e)
     return
+
+ 
 
 
 async def UpdatePreprocessingData(project_id: int,user:str):
@@ -774,6 +790,7 @@ async def UpdatePreprocessingData(project_id: int,user:str):
                 for measure in dvs.aoimeasures:
                     sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;"
                     FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(sql)
+                    await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
                     foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
                     sql = f"""
                         SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`

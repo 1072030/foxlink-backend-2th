@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordRequestForm
 # from app.mqtt import mqtt_client
-from app.services.auth import authenticate_user, create_access_token,checkFoxlinkAuth
+from app.services.auth import authenticate_user, create_access_token,checkFoxlinkAuth,getFoxlinkUser,get_current_user
+from app.services.user import check_users
 from datetime import datetime, timedelta, timezone
 from app.core.database import (
     transaction,
@@ -23,6 +24,7 @@ from app.utils.utils import AsyncEmitter, BenignObj
 
 class Token(BaseModel):
     access_token: str
+    permission:int
     token_type: str
 
 
@@ -33,34 +35,72 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # 使用者登入
 @router.post("/token", response_model=Token, responses={401: {"description": "Invalid username/password"}})
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    return await login_routine(form_data)
+    """
+    使用者登入
+    """
+    log_in = await login_routine(form_data)
+    return log_in
 
+@router.get("/permission")
+async def login_for_permission(user_id:str = None,user: User = Depends(get_current_user())):
+    user = await check_users(user_id)
+    level = user.level
+    return level
+
+# 打開
 # transaction的用意是在交付一致性
 # 全有全無律
 @transaction(callback=True)
 async def login_routine(form_data, handler=[], checkFoxlink:bool = True):
-    user = await authenticate_user(form_data.username, form_data.password)
+    
+    
+    foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16")
+    user = await authenticate_user(form_data.username)
+    print(user)
+    print(foxlink)
+    if foxlink['data']['code'] == 1:
 
-    # if checkFoxlink and user is None:
-    #     foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16",checkSSH=True)
-    # elif(user is None):
-    #     raise HTTPException(
-    #         status_code=400, detail="user badge doesnt exist."
-    #     )
-    # elif checkFoxlink and user:
-    #     foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16")
+        if user is None:
+            await User.objects.create(
+                badge=foxlink['data']['data']['user_id'],
+                username=foxlink['data']['data']['user_name'],
+                current_UUID=form_data.client_id,
+                flag=1,
+                level = 1
+            )
+            user = await authenticate_user(form_data.username)
+            print(user)
 
-    # if foxlink['data']['code'] == 1:
-    #     await User.objects.create(
-    #         badge=foxlink['data']['data']['user_id'],
-    #         username=foxlink['data']['data']['user_name'],
-    #         current_UUID=0,
-    #         flag=1
-    #     )
-    # else:
-    #     raise HTTPException(
-    #         status_code=400, detail="user doesnt exist in foxlink dbs."
-    #     )
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.USER_LOGIN.value,
+                user=user.badge
+            )
+
+        else:
+            changes = BenignObj()
+            emitter = AsyncEmitter()
+
+            changes.current_UUID = form_data.client_id
+            changes.login_date = get_ntz_now()
+
+            emitter.add(
+                AuditLogHeader.objects.create(
+                    action=AuditActionEnum.USER_LOGIN.value,
+                    user=user.badge,
+                )
+            )
+
+            emitter.add(
+                user.update(
+                    **changes.query()
+                )
+            )
+
+            await emitter.emit()
+    else:
+       raise HTTPException(
+            status_code=400, detail="user doesnt exist in foxlink dbs."
+        )
 
     access_token = create_access_token(
         data={
@@ -70,27 +110,62 @@ async def login_routine(form_data, handler=[], checkFoxlink:bool = True):
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
-    changes = BenignObj()
-    emitter = AsyncEmitter()
+    return {"access_token": access_token, "permission":user.level ,"token_type": "bearer"}
 
-    changes.current_UUID = form_data.client_id
-    changes.login_date = get_ntz_now()
+# @transaction(callback=True)
+# async def login_routine(form_data, handler=[], checkFoxlink:bool = True):
+#     user = await authenticate_user(form_data.username)
 
-    emitter.add(
-        AuditLogHeader.objects.create(
-            action=AuditActionEnum.USER_LOGIN.value,
-            user=user.badge,
-        )
-    )
+#     # if checkFoxlink and user is None:
+#     #     foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16",checkSSH=True)
+#     # elif(user is None):
+#     #     raise HTTPException(
+#     #         status_code=400, detail="user badge doesnt exist."
+#     #     )
+#     # elif checkFoxlink and user:
+#     #     foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16")
 
-    emitter.add(
-        user.update(
-            **changes.query()
-        )
-    )
+#     # if foxlink['data']['code'] == 1:
+#     #     await User.objects.create(
+#     #         badge=foxlink['data']['data']['user_id'],
+#     #         username=foxlink['data']['data']['user_name'],
+#     #         current_UUID=0,
+#     #         flag=1
+#     #     )
+#     # else:
+#     #     raise HTTPException(
+#     #         status_code=400, detail="user doesnt exist in foxlink dbs."
+#     #     )
 
-    await emitter.emit()
+#     access_token = create_access_token(
+#         data={
+#             "sub": user.badge,
+#             "UUID": form_data.client_id
+#         },
+#         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+#     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+#     changes = BenignObj()
+#     emitter = AsyncEmitter()
+
+#     changes.current_UUID = form_data.client_id
+#     changes.login_date = get_ntz_now()
+
+#     emitter.add(
+#         AuditLogHeader.objects.create(
+#             action=AuditActionEnum.USER_LOGIN.value,
+#             user=user.badge,
+#         )
+#     )
+
+#     emitter.add(
+#         user.update(
+#             **changes.query()
+#         )
+#     )
+
+#     await emitter.emit()
+
+#     return {"access_token": access_token, "permission":user.level ,"token_type": "bearer"}
 
 

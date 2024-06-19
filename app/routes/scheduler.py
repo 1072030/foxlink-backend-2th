@@ -207,10 +207,10 @@ async def set_cron_job(time: datetime, select_type: Select_type, description: st
 
 # 固定時間自動作訓練:
 @router.post("/auto_train", tags=["scheduler"])
-async def set_auto_train_job(preprocessing_months:int, months_before_retrain: int = 1, description: str = "固定時間自動訓練"):
+async def set_auto_train_job(preprocessing_days:int = 365, days_before_retrain: int = 180, description: str = "固定時間自動訓練"):
     """
     固定時間自動做訓練
     """    
-    task = asyncIOScheduler.add_job(id=description, func=auto_train_job, args=[preprocessing_months,months_before_retrain,description], trigger='cron',
+    task = asyncIOScheduler.add_job(id=description, func=auto_train_job, args=[preprocessing_days,days_before_retrain,description], trigger='cron',
                                         replace_existing=True, hour=16, minute=00, second=00)
-    return{"start_months":months_before_retrain,"train_months":preprocessing_months}
+    return{"start_months":days_before_retrain,"train_months":preprocessing_days}

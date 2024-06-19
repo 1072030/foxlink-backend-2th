@@ -17,17 +17,22 @@ from app.core.database import (
 )
 from app.services.auth import (
     get_current_user,
-    getFoxlinkUser
+    getFoxlinkUser,
 )
+from app.services.user import(check_users)
 
 router = APIRouter(prefix="/users")
 
 
 @router.get("/foxlink", tags=["users"])
-async def get_foxlink_user(user_id: str, system_id: str):
+async def get_foxlink_user(user_id: str, system_id: int = 16):
     """
-    暫時無功能
+    確認人員是否在User表中
     """
-    
-    return await getFoxlinkUser(user_id, system_id)
+    user = await check_users(user_id)
+    if user is None:
+        raise HTTPException(400,"User not found")
+    return user.username
+    # 打開
+    # return await getFoxlinkUser(user_id, system_id)
 

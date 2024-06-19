@@ -14,7 +14,7 @@ import pandas as pd
 import numpy as np
 import json
 
-async def GetPredictResult(project_name: Optional[str] = None, device_name: Optional[str] = None):
+async def GetPredictResult(project_name: Optional[str] = None, line:Optional[int] = None, device_name: Optional[str] = None):
     # if project_name is None:
     project_id_list = []
     check_project_name = project_name.split(',')
@@ -31,10 +31,12 @@ async def GetPredictResult(project_name: Optional[str] = None, device_name: Opti
         data = await Project.objects.filter(id__in=project_id_list).select_related(['devices', 'devices__events']).all()
     else:
         if single is None:
-            if device_name is None:
+            if line is None:
                 data = await Project.objects.filter(name=project_name).select_related(['devices', 'devices__events']).all()
+            elif device_name is None:
+                data = await Project.objects.filter(name=project_name).select_related(['devices', 'devices__events']).filter(devices__line=line).all()
             else:
-                data = await Project.objects.filter(name=project_name).select_related(['devices', 'devices__events']).filter(devices__name=device_name).all()
+                data = await Project.objects.filter(name = project_name,devices__line = line,devices__name=device_name).select_related(['devices', 'devices__events']).all()
         else:
             data = await Project.objects.filter(id=single).select_related(['devices', 'devices__events']).all()
 
@@ -165,7 +167,7 @@ async def GetPredictCompareSearch(project_name: List, select_type: str, line: in
                         if data is None:
                             continue
 
-                        error_feature = await ErrorFeature.objects.filter(event=event.id, date=date).get_or_none()
+                        error_feature = await ErrorFeature.objects.filter(event=event.id, date=date).order_by('-date').limit(1).get_or_none()
                         if error_feature is None:
                             continue
 
@@ -334,7 +336,8 @@ async def GetPredictCompareAnalysis(project_name, line, select_type, start_date,
                     if data is None:
                         continue
 
-                    error_feature = await ErrorFeature.objects.filter(event=event.id, date=date).get_or_none()
+                    # error_feature = await ErrorFeature.objects.filter(event=event.id, date=date).get_or_none()
+                    error_feature = await ErrorFeature.objects.filter(event=event.id, date=date).order_by('-date').limit(1).get_or_none()
                     if error_feature is None:
                         continue
 

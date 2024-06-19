@@ -37,6 +37,10 @@ async def get_users() -> List[User]:
     # need flag
     return await User.objects().all()
 
+async def check_users(user_id:str):
+    user = await User.objects.filter(badge = user_id).get_or_none()
+    return user
+
 
 async def get_worker_by_badge(
     badge,

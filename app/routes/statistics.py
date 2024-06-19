@@ -42,7 +42,7 @@ async def get_all_project_statistics(user: User = Depends(get_current_user())):
 
 
 @router.get("/predict_result", tags=["statistics"])
-async def get_predict_result(project_name: Optional[str] = None, device_name: Optional[str] = None, user: User = Depends(get_current_user())):
+async def get_predict_result(project_name: Optional[str] = None, line:Optional[int] = None, device_name: Optional[str] = None, user: User = Depends(get_current_user())):
     """
     儀表板內容和機況預測api
     """
@@ -52,10 +52,10 @@ async def get_predict_result(project_name: Optional[str] = None, device_name: Op
         project = project_name.split('+')
     else:
         project_name = ','.join([f'{dvs}' for dvs in project_id_list])
-    if len(project) == 2:
+    if len(project) >= 2:
         project_name = ' '.join(project)
     try:
-        return await GetPredictResult(project_name, device_name)
+        return await GetPredictResult(project_name, line, device_name)
     except Exception as e:
         # await AuditLogHeader.objects.create(
         #     action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,

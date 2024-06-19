@@ -86,6 +86,10 @@ async def create_default_entries():
             Env(
                 key="search_col",
                 value="[]"
+            ),
+            Env(
+                key="preprocess_days",
+                value="365"
             )
         ]
         await Env.objects.bulk_create(envs)

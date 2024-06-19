@@ -113,6 +113,7 @@ class FoxlinkTrain:
             """
             stmt = f"SELECT * FROM `{project[0].name}_event` LIMIT 1;"
             FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
+            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
             foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
 
             dvs_aoi_measure = pd.read_sql(sql, foxlink_engine)['Measure_Workno']
@@ -286,6 +287,7 @@ class FoxlinkTrain:
             """
             stmt = f"SELECT * FROM `{project[0].name}_event` LIMIT 1;"
             FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
+            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
             foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
 
             dvs_aoi_measure = pd.read_sql(sql, foxlink_engine)['Measure_Workno']

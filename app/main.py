@@ -73,6 +73,7 @@ origins = [
     "http://192.168.65.212:*",
     "http://192.168.1.103:*",
     "http://192.168.50.130",
+    "http://192.168.50.207:*",
     "ntust2.foxlink.com.tw",
 ]
 
@@ -94,7 +95,7 @@ app.include_router(project.router)
 app.include_router(log.router)
 app.include_router(backup.router)
 app.include_router(statistics.router)
-app.include_router(test.router)
+# app.include_router(test.router)
 app.include_router(scheduler.router)
 app.include_router(task.router)
 

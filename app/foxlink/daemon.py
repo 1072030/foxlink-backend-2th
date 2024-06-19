@@ -287,12 +287,14 @@ if __name__ == "__main__":
     async def choose_database(stmt):
         try:
             FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
-            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+            # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
             project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
             if project:
                 return FOXLINK_AOI_DATABASE
         except:
+            # await foxlink_dbs[FOXLINK_AOI_DATABASE].disconnect()
             FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
+            # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
             return FOXLINK_AOI_DATABASE
 
 

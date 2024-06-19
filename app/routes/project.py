@@ -52,7 +52,7 @@ async def get_all_project(user: User = Depends(get_current_user())):
     """
     取得所有專案內容(當前使用者權限內所有的專案)
     """
-    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_manager.value)
+    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_worker.value)
     if len(project_id_list) != 0:
         return await (Project.objects.filter(
             id__in=project_id_list
@@ -64,7 +64,7 @@ async def get_all_project(project_id: int, user: User = Depends(get_current_user
     """
     取得對應專案內的所有人員(當前使用者權限內的專案)
     """
-    user = await checkUserProjectPermission(project_id, user, UserLevel.project_manager.value)
+    user = await checkUserProjectPermission(project_id, user, UserLevel.project_leader.value)
 
     try:
         user = await ProjectUser.objects.select_related(['user']).filter(project=project_id).all()
@@ -85,7 +85,7 @@ async def get_all_project(project_id: int, user: User = Depends(get_current_user
 @router.delete("/", tags=["project"])
 async def delete_devices(dto: List[NewProjectDto], user: User = Depends(get_current_user())):
     """
-    刪除專案(僅專案內最高階級人員)
+    刪除專案(僅專案管理者以上之人員)
     """
     project_name = dto[0].project.upper()
     project = await Project.objects.filter(name=project_name).get_or_none()
@@ -129,7 +129,7 @@ async def add_new_workers(dto: NewUserDto, user: User = Depends(get_current_user
 @router.delete("/remove-project-worker", tags=["project"])
 async def delete_workers(project_id: int, user_id: str, user: User = Depends(get_current_user())):
     """
-    新增專案內人員(會確認新增者權限)
+    新增專案內人員(admin、manager、leader)
     """
     user = await checkUserProjectPermission(project_id, user, UserLevel.project_leader.value)
     if user is not None:
@@ -148,22 +148,21 @@ async def delete_workers(project_id: int, user_id: str, user: User = Depends(get
 
 @router.get("/search-project-devices", tags=["project"])
 async def search_project_devices(project_name: str):
+    """
+    搜尋專案擁有的devices
+    """
     if project_name == "":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"please input project"
         )            
-    """
-    搜尋專案擁有的devices
-    """
     return await SearchProjectDevices(project_name)
 
 @router.post("/add-project-events", status_code=200, tags=["project"])
 async def add_project_and_events(dto: List[NewProjectDto], start_date: date = None ,user: User = Depends(get_current_user())):
     """
-    搜尋專案內的所有事件(會確認新增者權限 = admin)
+    搜尋專案內的所有事件(新增者權限 = admin、manager)
     """
-    # add new project
-    user = await checkAdminPermission(user)
+    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_manager.value)
 
     if len(dto) == 0:
         raise HTTPException(
@@ -176,8 +175,7 @@ async def add_project_and_events(dto: List[NewProjectDto], start_date: date = No
             raise HTTPException(400,"can not find 'preprocess_days' env settings")
         preprocess_days = int(checkEnv.value)
         start_date = date.today() - timedelta(days = preprocess_days)
-    
-    if user is not None:
+    if len(project_id_list) != 0:
         project = await AddNewProjectEvents(dto,start_date)
         if project is not None:
             await AuditLogHeader.objects.create(
@@ -396,7 +394,7 @@ async def get_foxlink_tables(user: User = Depends(get_current_user())):
 @router.post("/project", tags=["project"])
 async def add_project(projects: List[str], user: User = Depends(get_current_user())):
     """
-    新增專案名稱 
+    新增專案名稱 (新增者權限 = admin)
     """
     # add new project
     user = await checkAdminPermission(user)
@@ -416,7 +414,7 @@ async def add_project(projects: List[str], user: User = Depends(get_current_user
 @router.delete("/project", tags=["project"])
 async def delete_projects(projects: List[str], user: User = Depends(get_current_user())):
     """
-    刪除專案名稱
+    刪除專案名稱(刪除者權限 = admin)
     """
     user = await checkAdminPermission(user)
     if len(projects) == 0:
@@ -433,15 +431,17 @@ async def delete_projects(projects: List[str], user: User = Depends(get_current_
     return
 
 @router.get("/task", tags=["project"])
-async def add_project_task(user: User = Depends(get_current_user())):
-    user = await checkAdminPermission(user)
-    if user is not None:
+async def check_project_task(user: User = Depends(get_current_user())):
+    """
+    確認專案機台新增進度
+    """
+    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_worker.value)
+    if len(project_id_list) != 0:
         formatData = []
-        project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_worker.value)
         for project_id in project_id_list:
-            data = await Project.objects.select_related(["tasks"]).filter(id = project_id).order_by('-created_date').get_or_none()
+            data = await Project.objects.select_related(["tasks"]).filter(id = project_id).order_by('-id').get_or_none()
             if data is not None:
-                tasks = await data.tasks.order_by('-created_date').all()
+                tasks = await data.tasks.order_by('-id').all()
                 for i in tasks:
                     project_name = data.name
                     action = i.action
@@ -455,66 +455,58 @@ async def add_project_task(user: User = Depends(get_current_user())):
                         temp['updated_date'] = i.updated_date
                         formatData.append(temp)
     return formatData
-    #     for project_id in project_id_list:
-    #         data = await Project.objects.select_related(["tasks"]).filter(id = project_id).get_or_none()
-    #         if data is not None:
-    #             for i in data.tasks:
-    #                 temp = {}
-    #                 temp['project_name'] = data.name
-    #                 temp['action'] = i.action
-    #                 temp['status'] = i.status
-    #                 temp['created_date'] = i.created_date
-    #                 temp['updated_date'] = i.updated_date
-    #                 formatData.append(temp)
-    # return formatData
+
 
 @router.get("/user-projects", tags=["project"])
 async def get_all_project(user_id: str, user: User = Depends(get_current_user())):
     """
     取得人員對應的所有專案(當前使用者權限內的專案)
     """
-    user = await checkAdminPermission(user) # 不確定權限要給哪一層級
-    try:
-        projects = await ProjectUser.objects.select_related(['project']).filter(user=user_id).all()
-        format_data = []
-        for i in projects:
-            format_data.append({
-                'badge': user_id,
-                'project_id': i.project.id,
-                'project':i.project.name,
-                'permission': i.permission
-            })
-        return format_data
+    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_leader.value)
+    if len(project_id_list) != 0:
+        try:
+            projects = await ProjectUser.objects.select_related(['project']).filter(user=user_id).all()
+            format_data = []
+            for i in projects:
+                if i.project.id in project_id_list:
+                    format_data.append({
+                        'badge': user_id,
+                        'project_id': i.project.id,
+                        'project':i.project.name,
+                        'permission': i.permission
+                    })
+    
 
-    except Exception as e:
-        print(f"An error occurred: {e}")  
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal Server Error"
-        )
+        except Exception as e:
+            print(f"An error occurred: {e}")  
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal Server Error"
+            )
+    return format_data
     
 @router.delete("/user-projects", tags=["project"])
 async def delete_worker_projects(project_id:List[int], user_id: str, user: User = Depends(get_current_user())):
     """
     依照人員刪除參與專案的人員
     """
-    user = await checkAdminPermission(user) # 不確定權限要給哪一層級
-    output = []
-    try:
-        projects = await ProjectUser.objects.select_related(['project']).filter(user=user_id).all()
-        for pjt in projects:
-            if pjt.project.id in project_id:
-                await pjt.delete()
-                output.append({
-                        "project_name": pjt.project.name.upper()
-                        })
-                project_id.remove(pjt.project.id)
-                if not project_id:
-                    break
-            
-        return output
+    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_leader.value)
+    if len(project_id_list) != 0:
+        output = []
+        try:
+            projects = await ProjectUser.objects.select_related(['project']).filter(user=user_id).all()
+            for pjt in projects:
+                if pjt.project.id in project_id:
+                    await pjt.delete()
+                    output.append({
+                            "project_name": pjt.project.name.upper()
+                            })
+                    project_id.remove(pjt.project.id)
+                    if not project_id:
+                        break
 
-    except Exception as e:
-        print(f"An error occurred: {e}")  
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal Server Error"
-        )
+        except Exception as e:
+            print(f"An error occurred: {e}")  
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal Server Error"
+            )
+    return output
