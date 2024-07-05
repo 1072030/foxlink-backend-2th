@@ -403,7 +403,7 @@ async def add_project(projects: List[str], user: User = Depends(get_current_user
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"please select project"
         ) 
     if user is not None:
-        projects = await AddNewProjects(projects)
+        projects = await AddNewProjects(projects,user)
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.ADD_NEW_PROJECT.value,
             user=user.badge,

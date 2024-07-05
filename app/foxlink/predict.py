@@ -256,11 +256,19 @@ class FoxlinkPredict:
                 map_col.remove('count')
                 input_data = target_feature[map_col]
                 
-                if dvs.name not in input_data_dict:
-                    input_data_dict[dvs.name] = {}
-                    infos[dvs.name] = {}
-                input_data_dict[dvs.name][row.name] = input_data
-                infos[dvs.name][row.name] = trained_info[['device', 'event', 'created_date', 'actual_cutpoint', 'threshold']]
+                # if dvs.name not in input_data_dict:
+                #     input_data_dict[dvs.name] = {}
+                #     infos[dvs.name] = {}
+                if dvs.line not in input_data_dict:
+                    input_data_dict[dvs.line] = {}
+                    infos[dvs.line] = {}
+
+                if dvs.name not in input_data_dict[dvs.line]:
+                    input_data_dict[dvs.line][dvs.name] = {}
+                    infos[dvs.line][dvs.name] = {}
+
+                input_data_dict[dvs.line][dvs.name][row.name] = input_data
+                infos[dvs.line][dvs.name][row.name] = trained_info[['device', 'event', 'created_date', 'actual_cutpoint', 'threshold']]
         return input_data_dict, infos
     
     def fit_model_data_preprocessing(self, df, scaler=True):

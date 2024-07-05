@@ -293,6 +293,7 @@ class User(ormar.Model):
     badge: str = ormar.String(primary_key=True, max_length=100, index=True)
     username: str = ormar.String(max_length=50, nullable=False)
     level: int = ormar.SmallInteger(choices=list(UserLevel), nullable=False)
+    email: str = ormar.String(max_length=50,nullable = True)
     password_hash: str = ormar.String(max_length=100, nullable=True)
     current_UUID: str = ormar.String(max_length=100, nullable=True)
     ####################

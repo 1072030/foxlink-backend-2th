@@ -239,6 +239,9 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
         try:
             foxlink = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
             
+            if not foxlink:  
+                raise HTTPException(status_code=400, detail=f'The event data table of line {selected.line}-{selected.device} is empty.')
+
             check_category_duplicate = []
             for i in foxlink:
                 # remove dumplicate name with same category
@@ -253,6 +256,8 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
                 else:
                     event_data[name].append(
                         {"message": i.Message, "category": i.Category})
+        except HTTPException as e:
+            raise e
         except:
             raise HTTPException(
                 status_code=400, detail="can not connect foxlink database or sql parameter is wrong")
@@ -352,11 +357,13 @@ async def PreprocessingData(project_id: int):
                     # get keys
                     # print(first_data_date._fields)
                     first_data_date = first_data_date['Code3']
-
-                    dr = pd.date_range(
-                        first_data_date, datetime.datetime.now().date(), freq='2M').astype(str)
-                    print(
-                        f"{get_ntz_now()} : starting query {dvs.name} {measure.name} {first_data_date} to {dr[0]}")
+                    try:
+                        dr = pd.date_range(
+                            first_data_date, datetime.datetime.now().date(), freq='2M').astype(str)
+                        print(
+                            f"{get_ntz_now()} : starting query {dvs.name} {measure.name} {first_data_date} to {dr[0]}")
+                    except:
+                        raise HTTPException(status_code=400, detail="Not enough data.")
                     sql = f"""
                             SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
                             WHERE 
@@ -497,8 +504,8 @@ async def PreprocessingData(project_id: int):
                             dpcs, 25) - 1.5*(np.percentile(dpcs, 75)-np.percentile(dpcs, 25))  # 25%-1.5IQR
                         n_pcslower = np.percentile(
                             npcs, 25) - 1.5*(np.percentile(npcs, 75)-np.percentile(npcs, 25))  # 25%-1.5IQR
-                    except Exception as e:
-                        raise HTTPException(status_code=400, detail=e)
+                    except:
+                        raise HTTPException(status_code=400, detail="Not enough data.")
 
                     dvs_operation_day = (
                         set(dn_mf[(dn_mf['shift'] == 'D') & (
@@ -749,6 +756,10 @@ async def PreprocessingData(project_id: int):
                 if temp is not None:
                     temp.flag=1
                     await temp.update()
+
+        except HTTPException as e:
+            raise e
+        
         except Exception as e:    
             trans.rollback()
             raise HTTPException(
@@ -1335,52 +1346,53 @@ async def PredictData(project_id: int, select_type: str,user:str):
         trans = conn.begin()
         try:
             input_data_dict, infos = await foxlink_predict.data_preprocessing_from_sql(project_id=project_id,select_type=select_type)
-            for dv in input_data_dict:
-  
-                for events in tqdm(input_data_dict[dv]):
-                        device_id = int(str(infos[dv][events]['device']).split()[1])
+            for line in input_data_dict:
+                for dv in input_data_dict[line]:
+    
+                    for events in tqdm(input_data_dict[line][dv]):
+                            device_id = int(str(infos[line][dv][events]['device']).split()[1])
 
-                        df = input_data_dict[dv][events]
-                        if select_type == 'week':
-                            try:
-                                df['date1'] = pd.to_datetime(df['date'].iloc[:, 0])
-                            except:
-                                df['date1'] = pd.to_datetime(df['date'])
-                            df.set_index('date1', inplace=True)
-                            # df = df.resample('W').sum()
-                            df.drop(['date'], axis=1, inplace=True)
-                            df = df.resample('W').agg(
-                                {col: foxlink_predict.choose_agg_func(col) for col in df.columns})
-                            df['date'] = df.index
+                            df = input_data_dict[line][dv][events]
+                            if select_type == 'week':
+                                try:
+                                    df['date1'] = pd.to_datetime(df['date'].iloc[:, 0])
+                                except:
+                                    df['date1'] = pd.to_datetime(df['date'])
+                                df.set_index('date1', inplace=True)
+                                # df = df.resample('W').sum()
+                                df.drop(['date'], axis=1, inplace=True)
+                                df = df.resample('W').agg(
+                                    {col: foxlink_predict.choose_agg_func(col) for col in df.columns})
+                                df['date'] = df.index
 
-                        event = infos[dv][events]['event'].values[0]
+                            event = infos[line][dv][events]['event'].values[0]
 
-                        time = pd.to_datetime(
-                            infos[dv][events]['created_date'].values[0]).strftime('%Y%m%d%H%M')
-                        X = foxlink_predict.fit_model_data_preprocessing(df)
-                        model = foxlink_predict.map_model(
-                            dv, device_id, event, time, select_type)
-                        pred = model.predict(X)
+                            time = pd.to_datetime(
+                                infos[line][dv][events]['created_date'].values[0]).strftime('%Y%m%d%H%M')
+                            X = foxlink_predict.fit_model_data_preprocessing(df)
+                            model = foxlink_predict.map_model(
+                                dv, device_id, event, time, select_type)
+                            pred = model.predict(X)
 
-                        df = df.T.drop_duplicates().T
-                        df['pred'] = pred
-                        df['device'] = device_id
-                        df['event'] = event
-                        if select_type == 'week':
-                            df['pred_date'] = df.date.apply(
-                                lambda x: x + pd.Timedelta(days=6))
-                            df.reset_index(inplace=True, drop=True)
-                            df['pred_type'] = 1
-                        else:
-                            df['pred_date'] = df.date.apply(
-                                lambda x: x + pd.Timedelta(days=1))
-                            df['pred_type'] = 0
+                            df = df.T.drop_duplicates().T
+                            df['pred'] = pred
+                            df['device'] = device_id
+                            df['event'] = event
+                            if select_type == 'week':
+                                df['pred_date'] = df.date.apply(
+                                    lambda x: x + pd.Timedelta(days=6))
+                                df.reset_index(inplace=True, drop=True)
+                                df['pred_type'] = 1
+                            else:
+                                df['pred_date'] = df.date.apply(
+                                    lambda x: x + pd.Timedelta(days=1))
+                                df['pred_type'] = 0
 
-                        df.rename(columns={'date': 'ori_date'}, inplace=True)
-                        df = df[['device', 'event',
-                                'ori_date', 'pred_date', 'pred', 'pred_type']]
-                        df.to_sql('predict_results', con=conn,
-                                if_exists='append', index=False)
+                            df.rename(columns={'date': 'ori_date'}, inplace=True)
+                            df = df[['device', 'event',
+                                    'ori_date', 'pred_date', 'pred', 'pred_type']]
+                            df.to_sql('predict_results', con=conn,
+                                    if_exists='append', index=False)
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.PREDICT_SUCCEEDED.value,
                 user=user,
@@ -1426,7 +1438,7 @@ async def GetFoxlinkTables():
     # return tables
 
 @transaction()
-async def AddNewProjects(projects: List[str]):
+async def AddNewProjects(projects: List[str],user:str):
     pjt = []
     for project in projects:
         pjt.append(project.upper())
@@ -1436,8 +1448,8 @@ async def AddNewProjects(projects: List[str]):
         project_create = await Project.objects.filter(name=project).get_or_none()
         if project_create is None:
             project_create = await Project.objects.create(name=project)
-            admin = await User.objects.filter(badge='admin').get_or_none() 
-            await ProjectUser.objects.create(project=project_create.id, user=admin.badge, permission=4)
+            # admin = await User.objects.filter(badge=user.badge).get_or_none() 
+            await ProjectUser.objects.create(project=project_create.id, user=user.badge, permission=4)
     return pjt
 
 @transaction()

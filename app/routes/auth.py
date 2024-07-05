@@ -47,95 +47,61 @@ async def login_for_permission(user_id:str = None,user: User = Depends(get_curre
     level = user.level
     return level
 
-# 打開
-# transaction的用意是在交付一致性
-# 全有全無律
-@transaction(callback=True)
-async def login_routine(form_data, handler=[], checkFoxlink:bool = True):
-    
-    
-    foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16")
-    user = await authenticate_user(form_data.username)
-    print(user)
-    print(foxlink)
-    if foxlink['data']['code'] == 1:
-
-        if user is None:
-            await User.objects.create(
-                badge=foxlink['data']['data']['user_id'],
-                username=foxlink['data']['data']['user_name'],
-                current_UUID=form_data.client_id,
-                flag=1,
-                level = 1
-            )
-            user = await authenticate_user(form_data.username)
-            print(user)
-
-            await AuditLogHeader.objects.create(
-                action=AuditActionEnum.USER_LOGIN.value,
-                user=user.badge
-            )
-
-        else:
-            changes = BenignObj()
-            emitter = AsyncEmitter()
-
-            changes.current_UUID = form_data.client_id
-            changes.login_date = get_ntz_now()
-
-            emitter.add(
-                AuditLogHeader.objects.create(
-                    action=AuditActionEnum.USER_LOGIN.value,
-                    user=user.badge,
-                )
-            )
-
-            emitter.add(
-                user.update(
-                    **changes.query()
-                )
-            )
-
-            await emitter.emit()
-    else:
-       raise HTTPException(
-            status_code=400, detail="user doesnt exist in foxlink dbs."
-        )
-
-    access_token = create_access_token(
-        data={
-            "sub": user.badge,
-            "UUID": form_data.client_id
-        },
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-
-    return {"access_token": access_token, "permission":user.level ,"token_type": "bearer"}
-
+# # 打開
+# # transaction的用意是在交付一致性
+# # 全有全無律
 # @transaction(callback=True)
 # async def login_routine(form_data, handler=[], checkFoxlink:bool = True):
+    
+    
+#     foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16")
 #     user = await authenticate_user(form_data.username)
+#     print(user)
+#     print(foxlink)
+#     if foxlink['data']['code'] == 1:
 
-#     # if checkFoxlink and user is None:
-#     #     foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16",checkSSH=True)
-#     # elif(user is None):
-#     #     raise HTTPException(
-#     #         status_code=400, detail="user badge doesnt exist."
-#     #     )
-#     # elif checkFoxlink and user:
-#     #     foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16")
+#         if user is None:
+#             await User.objects.create(
+#                 badge=foxlink['data']['data']['user_id'],
+#                 username=foxlink['data']['data']['user_name'],
+#                 email = foxlink['data']['data']['email'],
+#                 current_UUID=form_data.client_id,
+#                 flag=1,
+#                 level = 1
+#             )
+#             user = await authenticate_user(form_data.username)
+#             print(user)
 
-#     # if foxlink['data']['code'] == 1:
-#     #     await User.objects.create(
-#     #         badge=foxlink['data']['data']['user_id'],
-#     #         username=foxlink['data']['data']['user_name'],
-#     #         current_UUID=0,
-#     #         flag=1
-#     #     )
-#     # else:
-#     #     raise HTTPException(
-#     #         status_code=400, detail="user doesnt exist in foxlink dbs."
-#     #     )
+#             await AuditLogHeader.objects.create(
+#                 action=AuditActionEnum.USER_LOGIN.value,
+#                 user=user.badge
+#             )
+
+#         else:
+#             changes = BenignObj()
+#             emitter = AsyncEmitter()
+
+#             changes.current_UUID = form_data.client_id
+#             changes.login_date = get_ntz_now()
+
+#             emitter.add(
+#                 AuditLogHeader.objects.create(
+#                     action=AuditActionEnum.USER_LOGIN.value,
+#                     user=user.badge,
+#                 )
+#             )
+
+#             emitter.add(
+#                 user.update(
+#                     **changes.query()
+#                 )
+#             )
+
+#             await emitter.emit()
+#     else:
+#        raise HTTPException(
+#             status_code=400, detail="user doesnt exist in foxlink dbs."
+#         )
 
 #     access_token = create_access_token(
 #         data={
@@ -145,27 +111,62 @@ async def login_routine(form_data, handler=[], checkFoxlink:bool = True):
 #         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 #     )
 
-#     changes = BenignObj()
-#     emitter = AsyncEmitter()
-
-#     changes.current_UUID = form_data.client_id
-#     changes.login_date = get_ntz_now()
-
-#     emitter.add(
-#         AuditLogHeader.objects.create(
-#             action=AuditActionEnum.USER_LOGIN.value,
-#             user=user.badge,
-#         )
-#     )
-
-#     emitter.add(
-#         user.update(
-#             **changes.query()
-#         )
-#     )
-
-#     await emitter.emit()
-
 #     return {"access_token": access_token, "permission":user.level ,"token_type": "bearer"}
+
+@transaction(callback=True)
+async def login_routine(form_data, handler=[], checkFoxlink:bool = True):
+    user = await authenticate_user(form_data.username)
+
+    # if checkFoxlink and user is None:
+    #     foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16",checkSSH=True)
+    # elif(user is None):
+    #     raise HTTPException(
+    #         status_code=400, detail="user badge doesnt exist."
+    #     )
+    # elif checkFoxlink and user:
+    #     foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16")
+
+    # if foxlink['data']['code'] == 1:
+    #     await User.objects.create(
+    #         badge=foxlink['data']['data']['user_id'],
+    #         username=foxlink['data']['data']['user_name'],
+    #         current_UUID=0,
+    #         flag=1
+    #     )
+    # else:
+    #     raise HTTPException(
+    #         status_code=400, detail="user doesnt exist in foxlink dbs."
+    #     )
+
+    access_token = create_access_token(
+        data={
+            "sub": user.badge,
+            "UUID": form_data.client_id
+        },
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+
+    changes = BenignObj()
+    emitter = AsyncEmitter()
+
+    changes.current_UUID = form_data.client_id
+    changes.login_date = get_ntz_now()
+
+    emitter.add(
+        AuditLogHeader.objects.create(
+            action=AuditActionEnum.USER_LOGIN.value,
+            user=user.badge,
+        )
+    )
+
+    emitter.add(
+        user.update(
+            **changes.query()
+        )
+    )
+
+    await emitter.emit()
+
+    return {"access_token": access_token, "permission":user.level ,"token_type": "bearer"}
 
 

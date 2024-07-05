@@ -2,11 +2,14 @@
 from fastapi import APIRouter
 from datetime import timedelta
 from app.core.database import (
+    Project,
     Task,
     TaskAction,
     TaskStatus,
     AuditLogHeader,
     AuditActionEnum,
+    User,
+    ProjectUser,
     get_ntz_now
 )
 from app.services.project import(
@@ -16,6 +19,9 @@ from app.services.project import(
 )
 from typing import List
 from fastapi.exceptions import HTTPException
+import smtplib
+from email.mime.text import MIMEText
+from email.header import Header
 router = APIRouter(prefix="/task")
 @router.get("/", tags=["task"])
 async def get_all_task():
@@ -90,8 +96,47 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
                     user='admin',
-                    description=f'{args} detail:{e.detail.detail}'
+                    description=f'{args} detail:{e.detail}'
                 )
+                project = await Project.objects.filter(id = args).get_or_none()
+                pjt_users = await ProjectUser.objects.filter(project=args,permission__gte=3).select_related(["user"]).all()
+                print(pjt_users)
+                recipients = []
+                for pjt_user in pjt_users:
+                    recipients.append(pjt_user.user.email)
+
+                if project:
+                    if e.detail == "Not enough data.":
+                        body = f'{project.name} :新增機台資料量過少，請重新選擇起始日期'
+                    elif e.detail == "aoi_measure does not start from the same date":
+                        body = f'{project.name} :新增機台之aoi_measure資料量不一致'
+                    else:
+                        body = f'{project.name} :新增機台失敗'
+                else:
+                    if e.detail == "Not enough data.":
+                        body = f'{args} :新增機台資料量過少，請重新選擇起始日期'
+                    elif e.detail == "aoi_measure does not start from the same date":
+                        body = f'{args} :新增機台之aoi_measure資料量不一致'
+                    else:
+                        body = f'{args} :新增機台失敗'
+
+                # 設置郵件內容
+                subject = "設備預知保養系統通知"
+                msg = MIMEText(body, 'plain', 'utf-8')
+                msg['Subject'] = Header(subject, 'utf-8')
+                msg['From'] = "Joey_Chen@cn.foxlink.com.tw"
+                # msg['To'] = ", ".join(recipients)
+
+                # 發送郵件
+                smtp_server = "192.168.64.249"  # SMTP 伺服器
+                smtp_port = 25  #  SMTP 端口
+
+                with smtplib.SMTP(smtp_server, smtp_port) as smtpObj:
+                    smtpObj.ehlo()
+                    smtpObj.sendmail(msg['From'], recipients, msg.as_string())
+                    smtpObj.quit()
+
+                print("郵件發送成功")
 
                 pending_task.status = TaskStatus.Failure.value
                 await pending_task.update()
