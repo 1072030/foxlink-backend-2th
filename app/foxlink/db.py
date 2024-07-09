@@ -129,7 +129,7 @@ class FoxlinkDatabasePool:
             }
         )
         # output ex: 172.168.1.231
-        return server_ip[0]
+        return f"{server_ip[0]}:{DATABASE_PORT}"
     # -- edit by mike 2024/7/9
     async def get_device_db(self,project_name,device_name):
         query = f"""
