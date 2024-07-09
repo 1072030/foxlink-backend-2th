@@ -117,7 +117,7 @@ class FoxlinkDatabasePool:
     # -- edit by mike 2024/7/9
     async def get_server_ip(self,project_name):
         query = f"""
-            select distinct fs.SERVER_IP  
+            select distinct fs.SUB_IP  
             from sfc.device_setting as dsl
             join sfc.facinfo as fs on fs.fac_code = dsl.FAC_CODE
             where dsl.Project = :project;
@@ -128,6 +128,12 @@ class FoxlinkDatabasePool:
                 "project":project_name
             }
         )
+        # ------- this settings is for debug. You need to delete it before deploy to server
+        if server_ip[0] == "172.168.1.231":
+            return FOXLINK_EVENT_DB_HOSTS[0]
+        elif server_ip[0] == "172.168.1.237":
+            return FOXLINK_EVENT_DB_HOSTS[1]
+        # ------- this settings is for debug. You need to delete it before deploy to server
         # output ex: 172.168.1.231
         return f"{server_ip[0]}:{DATABASE_PORT}"
     # -- edit by mike 2024/7/9
