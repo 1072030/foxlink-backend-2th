@@ -60,7 +60,8 @@ async def create_default_entries():
             badge='admin',
             username='admin',
             current_UUID=0,
-            flag=1
+            flag=1,
+            level=4
         )
         envs = [
             Env(
