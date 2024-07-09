@@ -44,12 +44,12 @@ class FoxlinkDatabasePool:
             min_size=3,
             max_size=5
         )
-        self.ntust_db = create_engine(
-            f'mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST+":"+str(DATABASE_PORT)}/{DATABASE_NAME}', pool_pre_ping=True
-        )
-        self.foxlink_db = create_engine(
-            f'mysql+pymysql://{FOXLINK_EVENT_DB_USER}:{FOXLINK_EVENT_DB_PWD}@{FOXLINK_EVENT_DB_HOSTS[0]}/{FOXLINK_EVENT_DB_NAME[0]}',pool_pre_ping=True
-        )
+        # self.ntust_db = create_engine(
+        #     f'mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST+":"+str(DATABASE_PORT)}/{DATABASE_NAME}', pool_pre_ping=True
+        # )
+        # self.foxlink_db = create_engine(
+        #     f'mysql+pymysql://{FOXLINK_EVENT_DB_USER}:{FOXLINK_EVENT_DB_PWD}@{FOXLINK_EVENT_DB_HOSTS[0]}/{FOXLINK_EVENT_DB_NAME[0]}',pool_pre_ping=True
+        # )
         self.databases = [
             f"{FOXLINK_EVENT_DB_HOSTS[0]}@{FOXLINK_EVENT_DB_NAME[0]}",
             f"{FOXLINK_EVENT_DB_HOSTS[1]}@{FOXLINK_EVENT_DB_NAME[0]}"
@@ -114,6 +114,48 @@ class FoxlinkDatabasePool:
             all_tables.extend(formatted_tables)
         return all_tables
 
+    async def get_server_ip(self,project_name):
+        query = f"""
+            select distinct fs.SERVER_IP  
+            from sfc.device_setting as dsl
+            join sfc.facinfo as fs on fs.fac_code = dsl.FAC_CODE
+            where Project = :project;
+        """
+        server_ip = await self.device_db.fetch_all(
+            query=query,
+            value = {
+                "project":project_name
+            }
+        )
+        return server_ip
+
+    async def get_device_db(self,project_name,device_name):
+        query = f"""
+            select dsl.Project , dsl.Category ,dsl.Device_Name , dsl.FAC_CODE
+            from sfc.device_setting dsl
+            where
+            dsl.Project = :project and
+            dsl.Device_Name = :device and
+            dsl.Category in ('AOI','HMI') and
+            dsl.Enable = 1 and
+            dsl.Read_Enabled = 1
+        """
+        query_db = await self.device_db.fetch_all(
+            query = query,
+            value = {
+                "project":project_name,
+                "device":device_name
+            }
+        )
+        return query_db
+    
+    async def choose_database(self, project_name,device_name):
+        server_ip = await self.get_server_ip(project_name)
+        device_db = await self.get_device_db(project_name,device_name)
+
+        return f"{server_ip[0].SERVER_IP}@{device_db[0].Category}"
+
+
     async def connect(self):
         db_connect_routines = [db.connect() for db in self.event_dbs.values()]
         await asyncio.gather(*db_connect_routines)
@@ -136,30 +178,15 @@ class FoxlinkDatabasePool:
         if self.device_db.is_connected:
             await self.device_db.disconnect()
 
-    async def choose_database(self, stmt):
-        # try:
-        #     FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
-        #     await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-        #     project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
-        #     if project is None:
-        #         FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
-        #         return FOXLINK_AOI_DATABASE
-        #     else: 
-        #         return FOXLINK_AOI_DATABASE
-            
-        # except Exception as e:
-        #     print("Error occurred:", e)
-        #     FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
-        #     return FOXLINK_AOI_DATABASE 
-        for db in self.databases:
-            try:
-                await foxlink_dbs[db].connect()
-                project = await foxlink_dbs[db].fetch_one(query=stmt)
-                await foxlink_dbs[db].disconnect()  # 确保断开连接
-                if project is not None:
-                    return db
-            except Exception as e:
-                print(f"Error occurred while connecting to {db}: {e}")
+        # for db in self.databases:
+        #     try:
+        #         await foxlink_dbs[db].connect()
+        #         project = await foxlink_dbs[db].fetch_one(query=stmt)
+        #         await foxlink_dbs[db].disconnect()  # 确保断开连接
+        #         if project is not None:
+        #             return db
+        #     except Exception as e:
+        #         print(f"Error occurred while connecting to {db}: {e}")
         
     async def foxlink_db_engine(self, FOXLINK_AOI_DATABASE):
         host = FOXLINK_AOI_DATABASE.split('@')[0]
