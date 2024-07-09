@@ -113,7 +113,8 @@ class FoxlinkDatabasePool:
             formatted_tables = [re.sub(r"[\'\(\),]", '', str(table)) for table in tables]
             all_tables.extend(formatted_tables)
         return all_tables
-
+    
+    # -- edit by mike 2024/7/9
     async def get_server_ip(self,project_name):
         query = f"""
             select distinct fs.SERVER_IP  
@@ -129,7 +130,7 @@ class FoxlinkDatabasePool:
         )
         # output ex: 172.168.1.231
         return server_ip[0]
-
+    # -- edit by mike 2024/7/9
     async def get_device_db(self,project_name,device_name):
         query = f"""
             select dsl.Category
@@ -150,7 +151,7 @@ class FoxlinkDatabasePool:
         )
         # output ex: AOI
         return query_db[0]
-    
+    # -- edit by mike 2024/7/9
     async def choose_database(self, project_name,device_name):
         server_ip = await self.get_server_ip(project_name)
         device_db = await self.get_device_db(project_name,device_name)

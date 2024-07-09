@@ -283,19 +283,19 @@ if __name__ == "__main__":
                 "timestamp":f'{get_ntz_now()+timedelta(hours=8)}'
             }
             json.dump(result,jsonfile)
-
-    async def choose_database(stmt):
-        try:
-            FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
-            # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-            project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
-            if project:
-                return FOXLINK_AOI_DATABASE
-        except:
-            # await foxlink_dbs[FOXLINK_AOI_DATABASE].disconnect()
-            FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
-            # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-            return FOXLINK_AOI_DATABASE
+    # -- edit by mike 2024/7/9
+    # async def choose_database(stmt):
+    #     try:
+    #         FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
+    #         # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+    #         project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
+    #         if project:
+    #             return FOXLINK_AOI_DATABASE
+    #     except:
+    #         # await foxlink_dbs[FOXLINK_AOI_DATABASE].disconnect()
+    #         FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
+    #         # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+    #         return FOXLINK_AOI_DATABASE
 
 
     async def sync_foxlink_event_happened(project,device,event):
@@ -319,9 +319,11 @@ if __name__ == "__main__":
             "ORDER BY Start_Time DESC "
             "LIMIT 1;"
         )
+        # -- edit by mike 2024/7/9
         # host = await foxlink_dbs.choose_database(stmt1)
-        host = await choose_database(stmt1)
+        host = await foxlink_dbs.choose_database(project.name,device.name)
         # print(host)
+        # -- 
         try:
             row = await foxlink_dbs[host].fetch_all(query=stmt)
             # print(row)

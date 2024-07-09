@@ -185,9 +185,11 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
     )
     try:
         # check query project
-        FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
+        # -- edit by mike
+        FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project_name,dto[0].device)
         await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
         device = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+        # -- 
     except:
         raise HTTPException(
             status_code=400, detail="cant query foxlink database")
@@ -348,10 +350,12 @@ async def PreprocessingData(project_id: int):
                     start_date = dvs.start_date
                     start_date = start_date.strftime("%Y-%m-%d")
                     sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` WHERE Code3 >= '{str(start_date)}' LIMIT 1;"
-                    FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(sql)
+                    # -- edit by mike
+                    FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
                     await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
                     first_data_date = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=sql)
                     foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
+                    # -- 
                     # [5] = Code3
 
                     # get keys
@@ -800,9 +804,11 @@ async def UpdatePreprocessingData(project_id: int,user:str):
             for dvs in project[0].devices:
                 for measure in dvs.aoimeasures:
                     sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;"
-                    FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(sql)
+                    # -- edit by mike 2024/7/9
+                    FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
                     await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
                     foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
+                    # -- 
                     sql = f"""
                         SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
                         WHERE 
