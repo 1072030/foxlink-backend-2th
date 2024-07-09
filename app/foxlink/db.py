@@ -44,12 +44,12 @@ class FoxlinkDatabasePool:
             min_size=3,
             max_size=5
         )
-        # self.ntust_db = create_engine(
-        #     f'mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST+":"+str(DATABASE_PORT)}/{DATABASE_NAME}', pool_pre_ping=True
-        # )
-        # self.foxlink_db = create_engine(
-        #     f'mysql+pymysql://{FOXLINK_EVENT_DB_USER}:{FOXLINK_EVENT_DB_PWD}@{FOXLINK_EVENT_DB_HOSTS[0]}/{FOXLINK_EVENT_DB_NAME[0]}',pool_pre_ping=True
-        # )
+        self.ntust_db = create_engine(
+            f'mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST+":"+str(DATABASE_PORT)}/{DATABASE_NAME}', pool_pre_ping=True
+        )
+        self.foxlink_db = create_engine(
+            f'mysql+pymysql://{FOXLINK_EVENT_DB_USER}:{FOXLINK_EVENT_DB_PWD}@{FOXLINK_EVENT_DB_HOSTS[0]}/{FOXLINK_EVENT_DB_NAME[0]}',pool_pre_ping=True
+        )
         self.databases = [
             f"{FOXLINK_EVENT_DB_HOSTS[0]}@{FOXLINK_EVENT_DB_NAME[0]}",
             f"{FOXLINK_EVENT_DB_HOSTS[1]}@{FOXLINK_EVENT_DB_NAME[0]}"
@@ -119,19 +119,20 @@ class FoxlinkDatabasePool:
             select distinct fs.SERVER_IP  
             from sfc.device_setting as dsl
             join sfc.facinfo as fs on fs.fac_code = dsl.FAC_CODE
-            where Project = :project;
+            where dsl.Project = :project;
         """
-        server_ip = await self.device_db.fetch_all(
+        server_ip = await self.device_db.fetch_one(
             query=query,
-            value = {
+            values = {
                 "project":project_name
             }
         )
-        return server_ip
+        # output ex: 172.168.1.231
+        return server_ip[0]
 
     async def get_device_db(self,project_name,device_name):
         query = f"""
-            select dsl.Project , dsl.Category ,dsl.Device_Name , dsl.FAC_CODE
+            select dsl.Category
             from sfc.device_setting dsl
             where
             dsl.Project = :project and
@@ -140,14 +141,15 @@ class FoxlinkDatabasePool:
             dsl.Enable = 1 and
             dsl.Read_Enabled = 1
         """
-        query_db = await self.device_db.fetch_all(
+        query_db = await self.device_db.fetch_one(
             query = query,
-            value = {
+            values = {
                 "project":project_name,
                 "device":device_name
             }
         )
-        return query_db
+        # output ex: AOI
+        return query_db[0]
     
     async def choose_database(self, project_name,device_name):
         server_ip = await self.get_server_ip(project_name)
