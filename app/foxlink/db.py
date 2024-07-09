@@ -155,7 +155,7 @@ class FoxlinkDatabasePool:
         server_ip = await self.get_server_ip(project_name)
         device_db = await self.get_device_db(project_name,device_name)
 
-        return f"{server_ip[0].SERVER_IP}@{device_db[0].Category}"
+        return f"{server_ip}@{str(device_db).lower()}"
 
 
     async def connect(self):
