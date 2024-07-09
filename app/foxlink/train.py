@@ -112,7 +112,7 @@ class FoxlinkTrain:
                     ORDER BY Workno_Order;
             """
             stmt = f"SELECT * FROM `{project[0].name}_event` LIMIT 1;"
-            # -- edit by mike
+            # -- edit by mike 2024/7/9
             # FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
             # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
             # foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
@@ -290,7 +290,7 @@ class FoxlinkTrain:
                     ORDER BY Workno_Order;
             """
             stmt = f"SELECT * FROM `{project[0].name}_event` LIMIT 1;"
-            # -- edit by mike
+            # -- edit by mike 2024/7/9
             # FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
             # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
             # foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)

@@ -185,7 +185,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
     )
     try:
         # check query project
-        # -- edit by mike
+        # -- edit by mike 2024/7/9
         FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project_name,dto[0].device)
         await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
         device = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
@@ -350,7 +350,7 @@ async def PreprocessingData(project_id: int):
                     start_date = dvs.start_date
                     start_date = start_date.strftime("%Y-%m-%d")
                     sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` WHERE Code3 >= '{str(start_date)}' LIMIT 1;"
-                    # -- edit by mike
+                    # -- edit by mike 2024/7/9
                     FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
                     await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
                     first_data_date = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=sql)
