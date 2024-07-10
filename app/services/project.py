@@ -185,17 +185,33 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
     )
     try:
         # check query project
-        # -- edit by mike 2024/7/9
-        FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project_name,dto[0].device)
-        await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-        device = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
-        # -- 
+        # -- edit by mike 2024/7/10
+        # FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project_name,dto[0].device)
+        # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+        # devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+        devices = []
+        server_ip = await foxlink_dbs.get_server_ip(project_name)
+        for i in range(len(FOXLINK_EVENT_DB_NAME)):
+            FOXLINK_AOI_DATABASE = f"{server_ip}@{FOXLINK_EVENT_DB_NAME[i]}"
+            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+
+            if FOXLINK_EVENT_DB_NAME[i] != "hmi":
+                stmt = (
+                    f"SELECT Device_Name , Measure_Workno FROM {FOXLINK_EVENT_DB_NAME[i]}.measure_info WHERE Project = '{project_name}'"
+                )
+            else:
+                stmt = (
+                    f"SELECT Measure_Workno FROM {FOXLINK_EVENT_DB_NAME[i]}.measure_info WHERE Project = '{project_name}'"
+                )                
+            temp = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+            devices = [*devices,*temp]
+        # --
     except:
         raise HTTPException(
             status_code=400, detail="cant query foxlink database")
 
     dvs_aoi = {}
-    for device, measure in device:
+    for device, measure in devices:
         if device not in dvs_aoi.keys():
             dvs_aoi[device] = dvs_aoi.get(device, [])
         dvs_aoi[device].append(measure.lower())
@@ -203,7 +219,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
     # check project in system duplicated
     # project_create = await Project.objects.select_related(["devices"]).get_or_none(name=project_name)
     project_create = await Project.objects.filter(name=project_name).select_related(["devices"]).get_or_none()
-    if len(device) != 0:
+    if len(devices) != 0:
         if project_create is None:
             project_create = await Project.objects.create(name=project_name)
             # add admin into project
