@@ -201,7 +201,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
                 )
             else:
                 stmt = (
-                    f"SELECT Measure_Workno FROM {FOXLINK_EVENT_DB_NAME[i]}.measure_info WHERE Project = '{project_name}'"
+                    f"SELECT Measure_Workno , Measure_Workno FROM {FOXLINK_EVENT_DB_NAME[i]}.measure_info WHERE Project = '{project_name}'"
                 )                
             temp = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
             devices = [*devices,*temp]
@@ -244,9 +244,12 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
 
     event_data = {}
     for selected in dto:
+        # -- edit by mike 2024/7/10
+        FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(selected.project,selected.device)
+        await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
         stmt = (
             f"""
-            SELECT DISTINCT Device_Name,Line ,Message,Category FROM aoi.`{project_name}_event`
+            SELECT DISTINCT Device_Name,Line ,Message,Category FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.`{project_name}_event`
             where 
                 Device_Name = '{selected.device}' and
                 Line = {selected.line} and
@@ -256,7 +259,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
         )
         try:
             foxlink = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
-            
+        # --
             if not foxlink:  
                 raise HTTPException(status_code=400, detail=f'The event data table of line {selected.line}-{selected.device} is empty.')
 
