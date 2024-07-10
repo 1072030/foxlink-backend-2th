@@ -601,8 +601,10 @@ async def PreprocessingData(project_id: int):
             df = pd.DataFrame()
             dvs_name = [dvs.name for dvs in project[0].devices]
             for dvs in project[0].devices:
+                FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+                foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
                 sql = f"""
-                    SELECT * FROM aoi.`{project[0].name}_event` 
+                    SELECT * FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.`{project[0].name}_event` 
                     WHERE 
                         Category < 200 AND 
                         (Start_Time < '{yesterday_workday_endtime}') AND 
