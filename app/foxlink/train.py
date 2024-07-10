@@ -103,9 +103,10 @@ class FoxlinkTrain:
             event = set([row.event.id for row in event])
             events = await ProjectEvent.objects.filter(id__in=event).all()
             # event = set([row.name for row in events])
-
+            FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
             sql = f"""
-                SELECT Measure_Workno FROM aoi.measure_info 
+                SELECT Measure_Workno FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.measure_info 
                 WHERE 
                     Device_Name='{dvs.name}' and
                     Project='{project[0].name}'
@@ -273,6 +274,8 @@ class FoxlinkTrain:
        
         start_datetime = datetime.combine(start_date, datetime.min.time())
         for dvs in devices:
+            FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
             print(f"{get_ntz_now()} : starting preprocessing {dvs.name}")
             event = await ErrorFeature.objects.filter(
                 device=dvs.id,
@@ -283,7 +286,7 @@ class FoxlinkTrain:
             # event = set([row.name for row in events])
 
             sql = f"""
-                SELECT Measure_Workno FROM aoi.measure_info 
+                SELECT Measure_Workno FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.measure_info 
                 WHERE 
                     Device_Name='{dvs.name}' and
                     Project='{project[0].name}'

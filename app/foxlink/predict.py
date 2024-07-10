@@ -78,6 +78,8 @@ class FoxlinkPredict:
         # 用來存每個device的每個error的輸入表
         input_data_dict = {}
         for dvs in project[0].devices:
+            FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
             print(f"{get_ntz_now()} : starting preprocessing {dvs.name}")
             device_events = await Device.objects.filter(id=dvs.id).select_related(["events"]).all()
             all_events = device_events[0].events
@@ -92,7 +94,7 @@ class FoxlinkPredict:
 
             # aoi measure日期改成1天
             sql = f"""
-                SELECT Measure_Workno FROM aoi.measure_info 
+                SELECT Measure_Workno FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.measure_info 
                 WHERE 
                     Device_Name='{dvs.name}' and
                     Project='{project[0].name}'

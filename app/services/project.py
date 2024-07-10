@@ -180,9 +180,9 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
             status_code=400, detail="please select devices")
 
     # foxlink db project select
-    stmt = (
-        f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
-    )
+    # stmt = (
+    #     f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
+    # )
     try:
         # check query project
         # -- edit by mike 2024/7/10
@@ -1021,8 +1021,10 @@ async def UpdatePreprocessingData(project_id: int,user:str):
             dvs_name = [dvs.name for dvs in project[0].devices]
             print(dvs_name)
             for dvs in project[0].devices:
+                FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+                await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
                 sql = f"""
-                SELECT * FROM aoi.`{project[0].name}_event` 
+                SELECT * FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.`{project[0].name}_event` 
                 WHERE 
                     Category < 200 AND 
                     (Start_Time >= '{update_workday_endtime}') AND
