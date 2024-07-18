@@ -212,12 +212,12 @@ async def checkFoxlinkAuth(type:str,user_id:str,user_password:str,system:str,che
         return response.json()
 
 
-async def getFoxlinkUser(trpe:str,user_id: str , system_id: int = 16, checkSSH: bool = False):
+async def getFoxlinkUser(user_id: str , system_id: int = 16, checkSSH: bool = False):
     if checkSSH:
         ip = "192.168.65.210"
         username = "ntust"
         password = "aa946809"
-        command = f'curl -X POST -d "user_id=130316&system_id=16&type=checkUserExist" "http://mms.foxlink.com.tw/scbg/addons/register/server/server.php"'
+        command = f'curl -X POST -d "user_id=8429&system_id=16&type=checkUserExist" "http://mms.foxlink.com.tw/scbg/addons/register/server/server.php"'
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         client.connect(ip, port=22, username=username,
@@ -225,12 +225,12 @@ async def getFoxlinkUser(trpe:str,user_id: str , system_id: int = 16, checkSSH: 
         stdin, stdout, stderr = client.exec_command(command)
         return json.loads(stdout.read().decode("utf-8"))
     else:
-        url = 'http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
+        url = "http://mms.foxlink.com.tw/scbg/addons/register/server/server.php"
         myobj = {
         #     "trpe":"checkUserExist",
-            "type":type,
+            "type":"checkUserExist",
             "user_id": user_id,
-            "system": system_id
+            "system_id": system_id
         }
         response = requests.post(url, data=myobj)
         return response.json()

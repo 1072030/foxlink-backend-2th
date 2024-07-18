@@ -29,10 +29,10 @@ async def get_foxlink_user(user_id: str, system_id: int = 16):
     """
     確認人員是否在User表中
     """
-    user = await check_users(user_id)
-    if user is None:
-        raise HTTPException(400,"User not found")
-    return user.username
+    # user = await check_users(user_id)
+    # if user is None:
+    #     raise HTTPException(400,"User not found")
+    # return user.username
     # 打開
-    # return await getFoxlinkUser(user_id, system_id)
+    return await getFoxlinkUser(user_id, system_id)
 
