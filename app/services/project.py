@@ -186,14 +186,14 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
     try:
         # check query project
         # -- edit by mike 2024/7/10
-        # FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project_name,dto[0].device)
-        # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-        # devices = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+        # FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project_name,dto[0].device)
+        # await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
+        # devices = await foxlink_dbs[FOXLINK_IP_DATABASE].fetch_all(query=stmt)
         devices = []
         server_ip = await foxlink_dbs.get_server_ip(project_name)
         for i in range(len(FOXLINK_EVENT_DB_NAME)):
-            FOXLINK_AOI_DATABASE = f"{server_ip}@{FOXLINK_EVENT_DB_NAME[i]}"
-            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+            FOXLINK_IP_DATABASE = f"{server_ip}@{FOXLINK_EVENT_DB_NAME[i]}"
+            await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
 
             if FOXLINK_EVENT_DB_NAME[i] != "hmi":
                 stmt = (
@@ -203,7 +203,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
                 stmt = (
                     f"SELECT Measure_Workno , Measure_Workno FROM {FOXLINK_EVENT_DB_NAME[i]}.measure_info WHERE Project = '{project_name}'"
                 )                
-            temp = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+            temp = await foxlink_dbs[FOXLINK_IP_DATABASE].fetch_all(query=stmt)
             devices = [*devices,*temp]
         # --
     except:
@@ -245,11 +245,11 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
     event_data = {}
     for selected in dto:
         # -- edit by mike 2024/7/10
-        FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(selected.project,selected.device)
-        await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+        FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(selected.project,selected.device)
+        await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
         stmt = (
             f"""
-            SELECT DISTINCT Device_Name,Line ,Message,Category FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.`{project_name}_event`
+            SELECT DISTINCT Device_Name,Line ,Message,Category FROM {FOXLINK_IP_DATABASE.split('@')[1]}.`{project_name}_event`
             where 
                 Device_Name = '{selected.device}' and
                 Line = {selected.line} and
@@ -258,7 +258,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
             """
         )
         try:
-            foxlink = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+            foxlink = await foxlink_dbs[FOXLINK_IP_DATABASE].fetch_all(query=stmt)
         # --
             if not foxlink:  
                 raise HTTPException(status_code=400, detail=f'The event data table of line {selected.line}-{selected.device} is empty.')
@@ -359,57 +359,78 @@ async def PreprocessingData(project_id: int):
     with ntust_engine.connect() as conn:
         trans = conn.begin()
         try:
+            # 針對每個device
             for dvs in project[0].devices:
                 # line = dvs.line
                 # device = dvs.name
+                # 針對每個device中的 measure
                 for measure in dvs.aoimeasures:
                     
                     aoi = pd.DataFrame()
-                    # 資料表第一筆資料
+                    # 找到project 和 device 正確的 IP位置和資料庫{IP@database} ex: 188.88.88.1@abc
+                    FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+                    FOXLINK_DATABASE = FOXLINK_IP_DATABASE.split('@')[1]
+                    # 確認成功連線
+                    await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
+                    foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
+                    # -- 以下設定以aoi為基準 用於將資料參數化
+                    if FOXLINK_DATABASE == "aoi":
+                        query_useful = 'Code2'
+                        query_date = 'Code3'
+                        query_time = 'Code4'
+                        query_block = 'Code6'
+                    else:
+                        query_useful = 'Code2'
+                        query_date = 'Code1'
+                        query_time = 'Code2'
+                        query_block = 'Code6'
+                    # -- 
+
+                    # start_date : 新增專案時取得正崴資料庫中的對應 _data表，有紀錄的日期
                     start_date = dvs.start_date
                     start_date = start_date.strftime("%Y-%m-%d")
-                    sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` WHERE Code3 >= '{str(start_date)}' LIMIT 1;"
-                    # -- edit by mike 2024/7/9
-                    FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
-                    await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-                    first_data_date = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=sql)
-                    foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
-                    # -- 
-                    # [5] = Code3
 
-                    # get keys
-                    # print(first_data_date._fields)
-                    first_data_date = first_data_date['Code3']
-                    try:
-                        dr = pd.date_range(
+                    # -- 重複確認正崴資料庫資料是否存在
+                    sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` WHERE {query_date} >= '{str(start_date)}' LIMIT 1;"
+                    first_data = await foxlink_dbs[FOXLINK_IP_DATABASE].fetch_one(query=sql)
+                    # --
+
+                    # 取得正崴資料庫中第一筆資料之日期
+                    first_data_date = first_data[query_date]
+                    # 將資料進行切割 每兩個月一個區間
+                    dr = pd.date_range(
                             first_data_date, datetime.datetime.now().date(), freq='2M').astype(str)
-                        print(
-                            f"{get_ntz_now()} : starting query {dvs.name} {measure.name} {first_data_date} to {dr[0]}")
-                    except:
-                        raise HTTPException(status_code=400, detail="Not enough data.")
-                    sql = f"""
-                            SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
-                            WHERE 
-                                (Code3 = '{str(first_data_date)}' AND Code4 >= '07:40:00') OR
-                                (Code3 > '{str(first_data_date)}' AND Code3 < '{dr[0]}') OR
-                                (Code3 = '{dr[0]}' AND Code4 <= '07:40:00')
-                                AND Code2 < 3 ;
-                            """
-                    # tmp_data = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=sql)
-                    # tmp_data = foxlink_dbs.FormatDataFrame(tmp_data._fields, tmp_data)
-                    tmp_data = pd.read_sql(sql, foxlink_engine)
-                    aoi = aoi.append(tmp_data)
+                    # try:
+                    #     # 將資料量進行切割 先執行兩個月的內容
 
-                    # 先測試三個月的 之後再進行到1年
+                    #     print(
+                    #         f"{get_ntz_now()} : starting query {dvs.name} {measure.name} {first_data_date} to {dr[0]}")
+                    # except:
+                    #     raise HTTPException(status_code=400, detail="Not enough data.")
+                    
+                    # # 從 {專案}_{measure}_data 表中提取資料內容
+                    # sql = f"""
+                    #         SELECT ID,{query_useful},{query_date},{query_time},{query_block} FROM `{project[0].name}_{measure.name}_data`
+                    #         WHERE 
+                    #             ({query_date} = '{str(first_data_date)}' AND {query_time} >= '07:40:00') OR
+                    #             ({query_date} > '{str(first_data_date)}' AND {query_date} < '{dr[0]}') OR
+                    #             ({query_date} = '{dr[0]}' AND {query_time} <= '07:40:00')
+                    #             AND {query_useful} < 3 ;
+                    #         """
+                    # tmp_data = pd.read_sql(sql, foxlink_engine)
+                    # # 資料彙整
+                    # aoi = aoi.append(tmp_data)
+
+                    # 重複查詢{專案}_{measure}_data表 先測試三個月的 之後再進行到1年
                     try:
                         for index in range(1, len(dr)):
                             sql = f"""
-                                SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
+                                SELECT ID,{query_useful},{query_date},{query_time},{query_block} FROM `{project[0].name}_{measure.name}_data`
                                 WHERE 
-                                    (Code3 = '{dr[index-1]}' AND Code4 >= '07:40:00') OR
-                                    (Code3 > '{dr[index-1]}' AND Code3 < '{dr[index]}') OR
-                                    (Code3 = '{dr[index]}' AND Code4 <= '07:40:00')
-                                    AND Code2 < 3 ;
+                                    ({query_date} = '{dr[index-1]}' AND {query_time} >= '07:40:00') OR
+                                    ({query_date} > '{dr[index-1]}' AND {query_date} < '{dr[index]}') OR
+                                    ({query_date} = '{dr[index]}' AND {query_time} <= '07:40:00')
+                                    AND {query_useful} < 3 ;
                                 """
                             print(
                                 f"{get_ntz_now()} : starting query {index} {dvs.name} {measure.name} {dr[index - 1]} to {dr[index]}")
@@ -418,10 +439,10 @@ async def PreprocessingData(project_id: int):
                                 aoi = aoi.append(tmp_data)
                     except:
                         raise HTTPException(status_code=400, detail="Insufficient memory.")
+                    # ----- 以下開始進行前處理重要事項:生成三個表存入資料庫中，dn_mf,hourly_mf,aoi_feature
+                    aoi = aoi[(aoi[query_useful] < 3)]
 
-                    aoi = aoi[(aoi['Code2'] < 3)]
-
-                    aoi['MF_Time'] = pd.to_datetime(aoi['Code3']) + aoi['Code4']
+                    aoi['MF_Time'] = pd.to_datetime(aoi[query_date]) + aoi[query_time]
                     print(aoi.head())
                     aoi["Time_shift"] = aoi["MF_Time"] - \
                         pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
@@ -444,7 +465,7 @@ async def PreprocessingData(project_id: int):
 
                     hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.groupby(['date', 'hour']).ID.count(
                     ).reset_index().rename(columns={'ID': 'pcs'}), on=['date', 'hour'], how='outer')  # 生產量
-                    hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi['Code2'] == 0].groupby(['date', 'hour']).ID.count(
+                    hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi[query_useful] == 0].groupby(['date', 'hour']).ID.count(
                     ).reset_index().rename(columns={'ID': 'ng_num'}), on=['date', 'hour'], how='outer')  # 不良品量
                     hourly_dvs_mf['pcs'].fillna(0, inplace=True)
                     hourly_dvs_mf['ng_num'].fillna(0, inplace=True)
@@ -551,10 +572,11 @@ async def PreprocessingData(project_id: int):
 
                     aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).ID.count(
                     ).reset_index().rename(columns={'ID': 'pcs'}), on='date', how='outer')
-                    aoi_fea = pd.merge(aoi_fea, aoi[aoi['Code2'] == 0].groupby(['date']).ID.count(
+                    aoi_fea = pd.merge(aoi_fea, aoi[aoi[query_useful] == 0].groupby(['date']).ID.count(
                     ).reset_index().rename(columns={'ID': 'ng_num'}), on='date', how='outer')
                     aoi_fea['ng_rate'] = aoi_fea['ng_num'] / aoi_fea['pcs'] * 100
 
+                    #---- Code6 重新設計
                     aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.max().reset_index(
                     ).rename(columns={'Code6': 'ct_max'}), on='date', how='outer')
                     aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.mean().reset_index(
@@ -562,7 +584,7 @@ async def PreprocessingData(project_id: int):
                     aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.min().reset_index(
                     ).rename(columns={'Code6': 'ct_min'}), on='date', how='outer')
                     aoi_fea.fillna(0, inplace=True)
-
+                    #---- Code6 重新設計
                     aoi_fea['pcs'] = aoi_fea['pcs'].astype(int)
                     aoi_fea['ng_num'] = aoi_fea['ng_num'].astype(int)
                     aoi_fea['operation_day'] = aoi_fea['operation_day'].astype(int)
@@ -601,10 +623,10 @@ async def PreprocessingData(project_id: int):
             df = pd.DataFrame()
             dvs_name = [dvs.name for dvs in project[0].devices]
             for dvs in project[0].devices:
-                FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
-                foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
+                FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+                foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
                 sql = f"""
-                    SELECT * FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.`{project[0].name}_event` 
+                    SELECT * FROM {FOXLINK_IP_DATABASE.split('@')[1]}.`{project[0].name}_event` 
                     WHERE 
                         Category < 200 AND 
                         (Start_Time < '{yesterday_workday_endtime}') AND 
@@ -824,18 +846,29 @@ async def UpdatePreprocessingData(project_id: int,user:str):
             trans = conn.begin()
             for dvs in project[0].devices:
                 for measure in dvs.aoimeasures:
-                    sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;"
+                    # sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;"
                     # -- edit by mike 2024/7/9
-                    FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
-                    await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-                    foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
+                    FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+                    FOXLINK_DATABASE = FOXLINK_IP_DATABASE.split('@')[1]
+                    await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
+                    foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
+                    if FOXLINK_DATABASE == "aoi":
+                        query_useful = 'Code2'
+                        query_date = 'Code3'
+                        query_time = 'Code4'
+                        query_block = 'Code6'
+                    else:
+                        query_useful = 'Code3'
+                        query_date = 'Code1'
+                        query_time = 'Code2'
+                        query_block = 'Code6'
                     # -- 
                     sql = f"""
-                        SELECT ID,Code1,Code2,Code3,Code4,Code6 FROM `{project[0].name}_{measure.name}_data`
+                        SELECT ID,{query_useful},{query_date},{query_time},{query_block} FROM `{project[0].name}_{measure.name}_data`
                         WHERE 
-                            (Code3 = '{update_workday}' AND Code4 >= '07:40:00') OR
-                            (Code3 = '{update_workday+pd.Timedelta(days=1)}' AND Code4 < '07:40:00')
-                            AND Code2 < 3 ;
+                            ({query_date} = '{update_workday}' AND {query_time} >= '07:40:00') OR
+                            ({query_date} = '{update_workday+pd.Timedelta(days=1)}' AND {query_time} < '07:40:00')
+                            AND {query_useful} < 3 ;
                         """
                     aoi = pd.read_sql(sql, foxlink_engine)
 
@@ -881,7 +914,7 @@ async def UpdatePreprocessingData(project_id: int,user:str):
                         aoi_feature = aoi_feature.append(aoi_fea)
 
                     else:
-                        aoi['MF_Time'] = pd.to_datetime(aoi['Code3']) + aoi['Code4']
+                        aoi['MF_Time'] = pd.to_datetime(aoi[query_date]) + aoi[query_time]
                         aoi["Time_shift"] = aoi["MF_Time"] - \
                             pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
                         # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
@@ -903,7 +936,7 @@ async def UpdatePreprocessingData(project_id: int,user:str):
 
                         hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.groupby(['date', 'hour']).ID.count(
                         ).reset_index().rename(columns={'ID': 'pcs'}), on=['date', 'hour'], how='outer')  # 生產量
-                        hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi['Code2'] == 0].groupby(['date', 'hour']).ID.count(
+                        hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi[query_useful] == 0].groupby(['date', 'hour']).ID.count(
                         ).reset_index().rename(columns={'ID': 'ng_num'}), on=['date', 'hour'], how='outer')  # 不良品量
                         hourly_dvs_mf['pcs'].fillna(0, inplace=True)
                         hourly_dvs_mf['ng_num'].fillna(0, inplace=True)
@@ -979,11 +1012,12 @@ async def UpdatePreprocessingData(project_id: int,user:str):
 
                         aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).ID.count(
                         ).reset_index().rename(columns={'ID': 'pcs'}), on='date', how='outer')
-                        aoi_fea = pd.merge(aoi_fea, aoi[aoi['Code2'] == 0].groupby(['date']).ID.count(
+                        aoi_fea = pd.merge(aoi_fea, aoi[aoi[query_useful] == 0].groupby(['date']).ID.count(
                         ).reset_index().rename(columns={'ID': 'ng_num'}), on='date', how='outer')
                         aoi_fea['ng_rate'] = aoi_fea['ng_num'] / \
                             aoi_fea['pcs'] * 100
 
+                        # ---- Code6 需重製 還沒重寫 7/22
                         aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.max().reset_index(
                         ).rename(columns={'Code6': 'ct_max'}), on='date', how='outer')
                         aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.mean().reset_index(
@@ -991,7 +1025,7 @@ async def UpdatePreprocessingData(project_id: int,user:str):
                         aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).Code6.min().reset_index(
                         ).rename(columns={'Code6': 'ct_min'}), on='date', how='outer')
                         aoi_fea.fillna(0, inplace=True)
-
+                        # ---- Code6 需重製
                         aoi_fea['pcs'] = aoi_fea['pcs'].astype(int)
                         aoi_fea['ng_num'] = aoi_fea['ng_num'].astype(int)
                         aoi_fea['operation_day'] = aoi_fea['operation_day'].astype(int)
@@ -1021,10 +1055,10 @@ async def UpdatePreprocessingData(project_id: int,user:str):
             dvs_name = [dvs.name for dvs in project[0].devices]
             print(dvs_name)
             for dvs in project[0].devices:
-                FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
-                await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+                FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+                await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
                 sql = f"""
-                SELECT * FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.`{project[0].name}_event` 
+                SELECT * FROM {FOXLINK_IP_DATABASE.split('@')[1]}.`{project[0].name}_event` 
                 WHERE 
                     Category < 200 AND 
                     (Start_Time >= '{update_workday_endtime}') AND
@@ -1541,7 +1575,7 @@ async def DeleteProjects(projects: List[str]):
 #                             (Start_Time > '{data.pred_date}' AND Start_Time < '{data.pred_date + timedelta(days=1)}')
 #                             ORDER BY Start_Time DESC;
 #                         """
-#                         existed = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+#                         existed = await foxlink_dbs[FOXLINK_IP_DATABASE].fetch_all(query=stmt)
 #                         if len(existed) >= 1:
 #                             data.last_happened = datetime(
 #                                 existed[0]["Start_Time"])
@@ -1572,7 +1606,7 @@ async def DeleteProjects(projects: List[str]):
 #                             (Start_Time > '{data.pred_date}' AND Start_Time < '{data.pred_date + timedelta(days=7)}')
 #                             ORDER BY Start_Time DESC;
 #                         """
-#                     existed = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_all(query=stmt)
+#                     existed = await foxlink_dbs[FOXLINK_IP_DATABASE].fetch_all(query=stmt)
 #                     if len(existed) >= 1:
 #                         data.last_happened = datetime(existed[0]["Start_Time"])
 
