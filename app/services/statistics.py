@@ -4,6 +4,7 @@ from app.core.database import (
     User,
     Device,
     Project,
+    ProjectEvent,
     PredictResult,
     ErrorFeature,
     TrainPerformance,
@@ -58,14 +59,14 @@ async def GetPredictResult(project_name: Optional[str] = None, line:Optional[int
             if checkPredEvent is None:
                 continue
 
-            firstResultData_week = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=1,event__trainperformances__freq="week").select_related(['event','event__trainperformances']).order_by('-pred_date').limit(1).get_or_none()
-            firstResultData_day = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=0,event__trainperformances__freq="day").select_related(['event','event__trainperformances']).order_by('-pred_date').limit(1).get_or_none()
-            # print(firstResultData_week.event.trainperformances[0].arf)
-            # print(firstResultData_day.event.trainperformances[0].arf)
-            # arf_day = firstResultData_week.event.trainperformances
-            # arf_week = 
-
-            if firstResultData_week.event.trainperformances[0].arf > firstResultData_day.event.trainperformances[0].arf:
+            firstResultData_week = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=1).order_by('-pred_date').limit(1).get_or_none()
+            firstResultData_day = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=0).order_by('-pred_date').limit(1).get_or_none()
+            # firstResultData_week = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=1,event__trainperformances__freq="week").select_related(['event','event__trainperformances']).order_by('-pred_date').limit(1).get_or_none()
+            # firstResultData_day = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=0,event__trainperformances__freq="day").select_related(['event','event__trainperformances']).order_by('-pred_date').limit(1).get_or_none()
+            firstResultData_week_trainperformances = await TrainPerformance.objects.filter(device=dvs.id, event=event.id, freq="week").order_by('-pred_date').limit(1).get_or_none()
+            firstResultData_day_trainperformances = await TrainPerformance.objects.filter(device=dvs.id, event=event.id, freq="day").order_by('-pred_date').limit(1).get_or_none()
+            
+            if firstResultData_week_trainperformances.arf > firstResultData_day_trainperformances.arf:
                 getAllFirstResultData.append(firstResultData_week)
             else:
                 getAllFirstResultData.append(firstResultData_day)
@@ -82,7 +83,7 @@ async def GetPredictResult(project_name: Optional[str] = None, line:Optional[int
         if result is None:
             continue
         for i in devices:
-            if result.device.id == i.id:
+            if result.device == i.id:
                 # project name
                 dvs_project_name = " ".join(
                     (i.project.name).split(" ")).upper()
@@ -101,7 +102,7 @@ async def GetPredictResult(project_name: Optional[str] = None, line:Optional[int
                 pred_type = "週預測" if result.pred_type == 1 else "日預測"
 
                 try:
-                    happened = next((i for i in happened_ori_data["data"] if i["event_id"] == result.event.id),None)
+                    happened = next((i for i in happened_ori_data["data"] if i["event_id"] == result.event),None)
                 except:
                     # happened["recently"] = "can not find recently data"
                     # happened["happened"] = 0
@@ -110,10 +111,15 @@ async def GetPredictResult(project_name: Optional[str] = None, line:Optional[int
                         "happened": 0
                     }
 
+                # check arf value 
+                freq = "week" if result.pred_type == 1 else "day"
+                trainperformances = await TrainPerformance.objects.filter(device=result.device, event=result.event, freq=freq).order_by('-pred_date').limit(1).get_or_none()
+                event_data = await ProjectEvent.objects.filter(id=result.event).get_or_none()
+
                 formatData[dvs_project_name][dvs_name].append({
                     'id': result.id,
-                    'name': result.event.name,
-                    'category':result.event.category,
+                    'name': event_data.name,
+                    'category':event_data.category,
                     'steady': int(result.pred), # steady  
                     'ori_date': result.ori_date.date().strftime("%m-%d"),
                     'pred_date':result.pred_date.date().strftime("%m-%d"),
@@ -121,7 +127,7 @@ async def GetPredictResult(project_name: Optional[str] = None, line:Optional[int
                     'happenLastTime': happened["recently"],
                     'happened_times':happened["happened"],
                     'line':dvs_line,
-                    'faithful': True if result.event.trainperformances[0].arf > float(threshold.value) else False
+                    'faithful': True if trainperformances.arf > float(threshold.value) else False
                 })
     return formatData
 
