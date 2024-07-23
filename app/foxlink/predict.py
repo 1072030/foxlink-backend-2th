@@ -69,17 +69,18 @@ class FoxlinkPredict:
         if project is None:
             raise HTTPException(
                     status_code=400, detail="this project doesnt existed.")
-        stmt = f"SELECT * FROM `{project[0].name}_event` LIMIT 1;"
+        # stmt = f"SELECT * FROM `{project[0].name}_event` LIMIT 1;"
         # -- edit by mike 2024/7/9
-        # FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
-        # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-        # foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
+        # FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(stmt)
+        # await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
+        # foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
         # --
         # 用來存每個device的每個error的輸入表
         input_data_dict = {}
         for dvs in project[0].devices:
-            FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
-            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+            FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+            FOXLINK_DATABASE = FOXLINK_IP_DATABASE.split('@')[1]
+            await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
             print(f"{get_ntz_now()} : starting preprocessing {dvs.name}")
             device_events = await Device.objects.filter(id=dvs.id).select_related(["events"]).all()
             all_events = device_events[0].events
@@ -94,16 +95,14 @@ class FoxlinkPredict:
 
             # aoi measure日期改成1天
             sql = f"""
-                SELECT Measure_Workno FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.measure_info 
+                SELECT Measure_Workno FROM {FOXLINK_DATABASE}.measure_info 
                 WHERE 
-                    Device_Name='{dvs.name}' and
+                    Measure_Workno = '{dvs.name}' and
                     Project='{project[0].name}'
                     ORDER BY Workno_Order;
             """
             # -- edit by mike 2024/7/9
-            FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
-            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-            foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
+            foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
             # --
             dvs_aoi_measure = pd.read_sql(sql, foxlink_engine)['Measure_Workno']
             first_aoi_measure = dvs_aoi_measure[0].lower()

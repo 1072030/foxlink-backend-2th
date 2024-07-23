@@ -383,7 +383,7 @@ async def PreprocessingData(project_id: int):
                         query_useful = 'Code3'
                         query_date = 'Code1'
                         query_time = 'Code2'
-                        query_block = 'Code10'
+                        query_block = 'Code6'
                     # -- 
 
                     # start_date : 新增專案時取得正崴資料庫中的對應 _data表，有紀錄的日期
@@ -453,9 +453,8 @@ async def PreprocessingData(project_id: int):
                         aoi = aoi[(aoi[query_useful] < 3)]
                     else:
                         aoi[query_useful] = 1
-                        print(aoi[query_useful])
 
-                    aoi['MF_Time'] = pd.to_datetime(aoi[query_date]) + aoi[query_time]
+                    aoi['MF_Time'] = pd.to_datetime(aoi[query_date]) + pd.to_timedelta(aoi[query_time])
                     print(aoi.head())
                     aoi["Time_shift"] = aoi["MF_Time"] - \
                         pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00

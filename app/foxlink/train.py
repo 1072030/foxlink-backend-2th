@@ -103,23 +103,30 @@ class FoxlinkTrain:
             event = set([row.event.id for row in event])
             events = await ProjectEvent.objects.filter(id__in=event).all()
             # event = set([row.name for row in events])
-            FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
-            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-            sql = f"""
-                SELECT Measure_Workno FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.measure_info 
-                WHERE 
-                    Device_Name='{dvs.name}' and
-                    Project='{project[0].name}'
-                    ORDER BY Workno_Order;
-            """
-            stmt = f"SELECT * FROM `{project[0].name}_event` LIMIT 1;"
+            FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+            FOXLINK_DATABASE = FOXLINK_IP_DATABASE.split("@")[1]
+            await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
+            if FOXLINK_DATABASE == "aoi":
+                sql = f"""
+                    SELECT Measure_Workno FROM {FOXLINK_DATABASE}.measure_info 
+                    WHERE 
+                        Device_Name='{dvs.name}' and
+                        Project='{project[0].name}'
+                        ORDER BY Workno_Order;
+                """
+            else:
+                sql = f"""
+                    SELECT Measure_Workno FROM {FOXLINK_DATABASE}.measure_info 
+                    WHERE 
+                        Measure_Workno = '{dvs.name}' and
+                        Project='{project[0].name}'
+                        ORDER BY Workno_Order;
+                """
             # -- edit by mike 2024/7/9
-            # FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
-            # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-            # foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
-            FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
-            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-            foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
+            # FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(stmt)
+            # await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
+            # foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
+            foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
             # --
             dvs_aoi_measure = pd.read_sql(sql, foxlink_engine)['Measure_Workno']
             first_aoi_measure = dvs_aoi_measure[0].lower()
@@ -274,8 +281,8 @@ class FoxlinkTrain:
        
         start_datetime = datetime.combine(start_date, datetime.min.time())
         for dvs in devices:
-            FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
-            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+            FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+            await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
             print(f"{get_ntz_now()} : starting preprocessing {dvs.name}")
             event = await ErrorFeature.objects.filter(
                 device=dvs.id,
@@ -286,7 +293,7 @@ class FoxlinkTrain:
             # event = set([row.name for row in events])
 
             sql = f"""
-                SELECT Measure_Workno FROM {FOXLINK_AOI_DATABASE.split('@')[1]}.measure_info 
+                SELECT Measure_Workno FROM {FOXLINK_IP_DATABASE.split('@')[1]}.measure_info 
                 WHERE 
                     Device_Name='{dvs.name}' and
                     Project='{project[0].name}'
@@ -294,12 +301,12 @@ class FoxlinkTrain:
             """
             stmt = f"SELECT * FROM `{project[0].name}_event` LIMIT 1;"
             # -- edit by mike 2024/7/9
-            # FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(stmt)
-            # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-            # foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
-            FOXLINK_AOI_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
-            await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-            foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_AOI_DATABASE)
+            # FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(stmt)
+            # await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
+            # foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
+            FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+            await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
+            foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
             # --
             dvs_aoi_measure = pd.read_sql(sql, foxlink_engine)['Measure_Workno']
             first_aoi_measure = dvs_aoi_measure[0].lower()
