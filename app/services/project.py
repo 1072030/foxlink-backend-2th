@@ -478,7 +478,7 @@ async def PreprocessingData(project_id: int):
                     hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.groupby(['date', 'hour']).ID.count(
                     ).reset_index().rename(columns={'ID': 'pcs'}), on=['date', 'hour'], how='outer')  # 生產量
 
-                    hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi["Code2"] == 0].groupby(['date', 'hour']).ID.count(
+                    hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi[query_useful] == 0].groupby(['date', 'hour']).ID.count(
                     ).reset_index().rename(columns={'ID': 'ng_num'}), on=['date', 'hour'], how='outer')  # 不良品量
 
                     hourly_dvs_mf['pcs'].fillna(0, inplace=True)
@@ -877,13 +877,21 @@ async def UpdatePreprocessingData(project_id: int,user:str):
                         query_time = 'Code2'
                         query_block = 'Code6'
                     # -- 
-                    sql = f"""
-                        SELECT ID,{query_useful},{query_date},{query_time},{query_block} FROM `{project[0].name}_{measure.name}_data`
-                        WHERE 
-                            ({query_date} = '{update_workday}' AND {query_time} >= '07:40:00') OR
-                            ({query_date} = '{update_workday+pd.Timedelta(days=1)}' AND {query_time} < '07:40:00')
-                            AND {query_useful} < 3 ;
-                        """
+                    if FOXLINK_DATABASE == "aoi":
+                        sql = f"""
+                            SELECT ID,{query_useful},{query_date},{query_time},{query_block} FROM `{project[0].name}_{measure.name}_data`
+                            WHERE 
+                                ({query_date} = '{update_workday}' AND {query_time} >= '07:40:00') OR
+                                ({query_date} = '{update_workday+pd.Timedelta(days=1)}' AND {query_time} < '07:40:00')
+                                AND {query_useful} < 3 ;
+                            """
+                    else:
+                        sql = f"""
+                            SELECT ID,{query_useful},{query_date},{query_time},{query_block} FROM `{project[0].name}_{measure.name}_data`
+                            WHERE 
+                                ({query_date} = '{update_workday}' AND {query_time} >= '07:40:00') OR
+                                ({query_date} = '{update_workday+pd.Timedelta(days=1)}' AND {query_time} < '07:40:00');
+                            """
                     aoi = pd.read_sql(sql, foxlink_engine)
 
                     if aoi.empty:  # 沒有新的資料
@@ -928,7 +936,7 @@ async def UpdatePreprocessingData(project_id: int,user:str):
                         aoi_feature = aoi_feature.append(aoi_fea)
 
                     else:
-                        aoi['MF_Time'] = pd.to_datetime(aoi[query_date]) + aoi[query_time]
+                        aoi['MF_Time'] = pd.to_datetime(aoi[query_date]) + pd.to_timedelta(aoi[query_time])
                         aoi["Time_shift"] = aoi["MF_Time"] - \
                             pd.Timedelta(hours=7, minutes=40)  # 將早班開始時間(7:40)平移置0:00
                         # 以班別為基礎的工作日期 如2022-01-02 為 2022-01-02 7:40(早班開始) 到 2023-01-03 7:40(晚班結束)
