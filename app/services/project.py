@@ -380,10 +380,10 @@ async def PreprocessingData(project_id: int):
                         query_time = 'Code4'
                         query_block = 'Code6'
                     else:
-                        query_useful = 'Code2'
+                        query_useful = 'Code3'
                         query_date = 'Code1'
                         query_time = 'Code2'
-                        query_block = 'Code6'
+                        query_block = 'Code10'
                     # -- 
 
                     # start_date : 新增專案時取得正崴資料庫中的對應 _data表，有紀錄的日期
@@ -424,13 +424,22 @@ async def PreprocessingData(project_id: int):
                     # 重複查詢{專案}_{measure}_data表 先測試三個月的 之後再進行到1年
                     try:
                         for index in range(1, len(dr)):
-                            sql = f"""
-                                SELECT ID,{query_useful},{query_date},{query_time},{query_block} FROM `{project[0].name}_{measure.name}_data`
-                                WHERE 
-                                    ({query_date} = '{dr[index-1]}' AND {query_time} >= '07:40:00') OR
-                                    ({query_date} > '{dr[index-1]}' AND {query_date} < '{dr[index]}') OR
-                                    ({query_date} = '{dr[index]}' AND {query_time} <= '07:40:00')
-                                    AND {query_useful} < 3 ;
+                            if FOXLINK_DATABASE == "aoi":
+                                sql = f"""
+                                    SELECT ID,{query_useful},{query_date},{query_time},{query_block} FROM `{project[0].name}_{measure.name}_data`
+                                    WHERE 
+                                        ({query_date} = '{dr[index-1]}' AND {query_time} >= '07:40:00') OR
+                                        ({query_date} > '{dr[index-1]}' AND {query_date} < '{dr[index]}') OR
+                                        ({query_date} = '{dr[index]}' AND {query_time} <= '07:40:00')
+                                        AND {query_useful} < 3 ;
+                                """
+                            else:
+                                sql = f"""
+                                    SELECT ID,{query_date},{query_time},{query_block} FROM `{project[0].name}_{measure.name}_data`
+                                    WHERE 
+                                        ({query_date} = '{dr[index-1]}' AND {query_time} >= '07:40:00') OR
+                                        ({query_date} > '{dr[index-1]}' AND {query_date} < '{dr[index]}') OR
+                                        ({query_date} = '{dr[index]}' AND {query_time} <= '07:40:00')
                                 """
                             print(
                                 f"{get_ntz_now()} : starting query {index} {dvs.name} {measure.name} {dr[index - 1]} to {dr[index]}")
@@ -440,7 +449,11 @@ async def PreprocessingData(project_id: int):
                     except:
                         raise HTTPException(status_code=400, detail="Insufficient memory.")
                     # ----- 以下開始進行前處理重要事項:生成三個表存入資料庫中，dn_mf,hourly_mf,aoi_feature
-                    aoi = aoi[(aoi[query_useful] < 3)]
+                    if FOXLINK_DATABASE == "aoi":
+                        aoi = aoi[(aoi[query_useful] < 3)]
+                    else:
+                        aoi[query_useful] = 1
+                        print(aoi[query_useful])
 
                     aoi['MF_Time'] = pd.to_datetime(aoi[query_date]) + aoi[query_time]
                     print(aoi.head())
@@ -465,8 +478,10 @@ async def PreprocessingData(project_id: int):
 
                     hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi.groupby(['date', 'hour']).ID.count(
                     ).reset_index().rename(columns={'ID': 'pcs'}), on=['date', 'hour'], how='outer')  # 生產量
-                    hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi[query_useful] == 0].groupby(['date', 'hour']).ID.count(
+
+                    hourly_dvs_mf = pd.merge(hourly_dvs_mf, aoi[aoi["Code2"] == 0].groupby(['date', 'hour']).ID.count(
                     ).reset_index().rename(columns={'ID': 'ng_num'}), on=['date', 'hour'], how='outer')  # 不良品量
+
                     hourly_dvs_mf['pcs'].fillna(0, inplace=True)
                     hourly_dvs_mf['ng_num'].fillna(0, inplace=True)
                     hourly_dvs_mf['ng_rate'] = hourly_dvs_mf['ng_num'] / \
