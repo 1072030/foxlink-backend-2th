@@ -400,13 +400,13 @@ async def PreprocessingData(project_id: int):
                     # 將資料進行切割 每兩個月一個區間
                     dr = pd.date_range(
                             first_data_date, datetime.datetime.now().date(), freq='2M').astype(str)
-                    # try:
-                    #     # 將資料量進行切割 先執行兩個月的內容
+                    try:
+                        # 將資料量進行切割 先執行兩個月的內容
 
-                    #     print(
-                    #         f"{get_ntz_now()} : starting query {dvs.name} {measure.name} {first_data_date} to {dr[0]}")
-                    # except:
-                    #     raise HTTPException(status_code=400, detail="Not enough data.")
+                        print(
+                            f"{get_ntz_now()} : starting query {dvs.name} {measure.name} {first_data_date} to {dr[0]}")
+                    except:
+                        raise HTTPException(status_code=400, detail="Not enough data.")
                     
                     # # 從 {專案}_{measure}_data 表中提取資料內容
                     # sql = f"""
@@ -452,6 +452,7 @@ async def PreprocessingData(project_id: int):
                     if FOXLINK_DATABASE == "aoi":
                         aoi = aoi[(aoi[query_useful] < 3)]
                     else:
+                        # hmi 資料庫中沒有measure 所以新增此欄位
                         aoi[query_useful] = 1
 
                     aoi['MF_Time'] = pd.to_datetime(aoi[query_date]) + pd.to_timedelta(aoi[query_time])
