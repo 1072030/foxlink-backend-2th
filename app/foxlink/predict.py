@@ -94,13 +94,22 @@ class FoxlinkPredict:
             events = await ProjectEvent.objects.filter(id__in=event).all()
 
             # aoi measure日期改成1天
-            sql = f"""
-                SELECT Measure_Workno FROM {FOXLINK_DATABASE}.measure_info 
-                WHERE 
-                    Measure_Workno = '{dvs.name}' and
-                    Project='{project[0].name}'
-                    ORDER BY Workno_Order;
-            """
+            if FOXLINK_DATABASE == "aoi":
+                sql = f"""
+                        SELECT Measure_Workno FROM {FOXLINK_DATABASE}.measure_info 
+                        WHERE 
+                            Device_Name = '{dvs.name}' and
+                            Project='{project[0].name}'
+                            ORDER BY Workno_Order;
+                """
+            else:
+                sql = f"""
+                        SELECT Measure_Workno FROM {FOXLINK_DATABASE}.measure_info 
+                        WHERE 
+                            Measure_Workno = '{dvs.name}' and
+                            Project='{project[0].name}'
+                            ORDER BY Workno_Order;
+                """
             # -- edit by mike 2024/7/9
             foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
             # --

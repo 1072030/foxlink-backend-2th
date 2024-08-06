@@ -28,19 +28,17 @@ async def GetPredictResult(project_name: Optional[str] = None, line:Optional[int
         except:
             print('not single')
 
+    # 多個專案同時query
     if len(project_id_list) >= 2:
         data = await Project.objects.filter(id__in=project_id_list).select_related(['devices', 'devices__events']).all()
+    # 單一專案查詢
     else:
-        if single is None:
-            if line is None:
-                data = await Project.objects.filter(name=project_name).select_related(['devices', 'devices__events']).all()
-            elif device_name is None:
-                data = await Project.objects.filter(name=project_name).select_related(['devices', 'devices__events']).filter(devices__line=line).all()
-            else:
-                data = await Project.objects.filter(name = project_name,devices__line = line,devices__name=device_name).select_related(['devices', 'devices__events']).all()
+        if device_name is not None:
+            data = await Project.objects.filter(id=single,devices__line = line,devices__name=device_name).select_related(['devices', 'devices__events']).all()
+        elif line is not None:
+            data = await Project.objects.filter(id=single,devices__line = line).select_related(['devices', 'devices__events']).all()
         else:
             data = await Project.objects.filter(id=single).select_related(['devices', 'devices__events']).all()
-
     # devices = data[0].devices
     project_device = [project.devices for project in data]
     devices = []

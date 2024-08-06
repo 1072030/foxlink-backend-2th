@@ -52,9 +52,12 @@ async def get_predict_result(project_name: Optional[str] = None, line:Optional[i
         project = project_name.split('+')
     else:
         project_name = ','.join([f'{dvs}' for dvs in project_id_list])
-    if len(project) >= 2:
-        project_name = ' '.join(project)
     try:
+        if len(project) == 1:
+            for idx,x in enumerate(project_name_list):
+                if x == project[0]:
+                    project_name = f"{project_id_list[idx]}"
+        print(project_name)
         return await GetPredictResult(project_name, line, device_name)
     except Exception as e:
         # await AuditLogHeader.objects.create(
@@ -64,6 +67,7 @@ async def get_predict_result(project_name: Optional[str] = None, line:Optional[i
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=repr(e)
         )
+
 
 
 @router.get("/predict-compare-list", tags=["statistics"])

@@ -50,10 +50,10 @@ class FoxlinkDatabasePool:
         self.foxlink_db = create_engine(
             f'mysql+pymysql://{FOXLINK_EVENT_DB_USER}:{FOXLINK_EVENT_DB_PWD}@{FOXLINK_EVENT_DB_HOSTS[0]}/{FOXLINK_EVENT_DB_NAME[0]}',pool_pre_ping=True
         )
-        self.databases = [
-            f"{FOXLINK_EVENT_DB_HOSTS[0]}@{FOXLINK_EVENT_DB_NAME[0]}",
-            f"{FOXLINK_EVENT_DB_HOSTS[1]}@{FOXLINK_EVENT_DB_NAME[0]}"
-        ]
+        # self.databases = [
+        #     f"{FOXLINK_EVENT_DB_HOSTS[0]}@{FOXLINK_EVENT_DB_NAME[0]}",
+        #     f"{FOXLINK_EVENT_DB_HOSTS[1]}@{FOXLINK_EVENT_DB_NAME[0]}"
+        # ]
 
     def __getitem__(self, key):
         return self.event_dbs[key]

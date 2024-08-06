@@ -170,6 +170,13 @@ async def checkAdminPermission(user: User):
             status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
         )
 
+async def checkNewProjectPermission(user: User):
+    if user.level >= 3:
+        return user
+    else:
+        raise HTTPException(
+            status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
+        )
 
 async def checkUserSearchProjectPermission(user: User, permission: int):
     user_in_project = await ProjectUser.objects.select_related("project").filter(user=user.badge).all()

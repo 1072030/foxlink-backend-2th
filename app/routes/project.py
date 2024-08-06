@@ -39,6 +39,7 @@ from app.services.auth import (
     get_current_user,
     checkUserProjectPermission,
     checkUserSearchProjectPermission,
+    checkNewProjectPermission,
     checkAdminPermission,
     checkFoxlinkAuth,
 )
@@ -162,7 +163,8 @@ async def add_project_and_events(dto: List[NewProjectDto], start_date: date = No
     """
     搜尋專案內的所有事件(新增者權限 = admin、manager)
     """
-    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_manager.value)
+    # project_id_list, project_name_list = await checkAdminPermission(user, UserLevel.project_manager.value)
+    createProjectUser = await checkNewProjectPermission(user)
 
     if len(dto) == 0:
         raise HTTPException(
@@ -175,14 +177,14 @@ async def add_project_and_events(dto: List[NewProjectDto], start_date: date = No
             raise HTTPException(400,"can not find 'preprocess_days' env settings")
         preprocess_days = int(checkEnv.value)
         start_date = date.today() - timedelta(days = preprocess_days)
-    if len(project_id_list) != 0:
-        project = await AddNewProjectEvents(dto,start_date)
-        if project is not None:
-            await AuditLogHeader.objects.create(
-                action=AuditActionEnum.ADD_NEW_PROJECT.value,
-                user=user.badge,
-                description=project.id
-            )
+
+    project = await AddNewProjectEvents(dto,start_date)
+    if project is not None:
+        await AuditLogHeader.objects.create(
+            action=AuditActionEnum.ADD_NEW_PROJECT.value,
+            user=user.badge,
+            description=project.id
+        )
 
     # await AuditLogHeader.objects.create(
     #     action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
@@ -190,34 +192,34 @@ async def add_project_and_events(dto: List[NewProjectDto], start_date: date = No
     #     description=project.id
     # )
 
-            tasks = [
-                Task(
-                    action=TaskAction.DATA_PREPROCESSING.value,
-                    status=TaskStatus.Pending.value,
-                    project=project.id
-                ),
-                Task(
-                    action=TaskAction.TRAINING_DAY.value,
-                    status=TaskStatus.Pending.value,
-                    project=project.id
-                ),
-                Task(
-                    action=TaskAction.TRAINING_WEEK.value,
-                    status=TaskStatus.Pending.value,
-                    project=project.id
-                ),
-                Task(
-                    action=TaskAction.PREDICT_DAY.value,
-                    status=TaskStatus.Pending.value,
-                    project=project.id
-                ),
-                Task(
-                    action=TaskAction.PREDICT_WEEK.value,
-                    status=TaskStatus.Pending.value,
-                    project=project.id
-                )
-            ]
-            await Task.objects.bulk_create(tasks)
+    tasks = [
+            Task(
+                action=TaskAction.DATA_PREPROCESSING.value,
+                status=TaskStatus.Pending.value,
+                project=project.id
+            ),
+            Task(
+                action=TaskAction.TRAINING_DAY.value,
+                status=TaskStatus.Pending.value,
+                project=project.id
+            ),
+            Task(
+                action=TaskAction.TRAINING_WEEK.value,
+                status=TaskStatus.Pending.value,
+                project=project.id
+            ),
+            Task(
+                action=TaskAction.PREDICT_DAY.value,
+                status=TaskStatus.Pending.value,
+                project=project.id
+            ),
+            Task(
+                action=TaskAction.PREDICT_WEEK.value,
+                status=TaskStatus.Pending.value,
+                project=project.id
+            )
+    ]
+    await Task.objects.bulk_create(tasks)
     return
 
 @router.get("/preprocessing-data", tags=["project"])
