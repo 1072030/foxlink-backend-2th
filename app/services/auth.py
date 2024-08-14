@@ -197,7 +197,7 @@ async def checkFoxlinkAuth(type:str,user_id:str,user_password:str,system:str,che
         return 
 
     else:
-        url = 'http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
+        url = 'http://172.168.1.242/auth_test/server/server.php'
         myobj = {
             "type": type,
             "user_id": user_id,
@@ -216,7 +216,7 @@ async def getFoxlinkUser(user_id: str , system_id: int = 16, checkSSH: bool = Fa
         print("aborted")
         return 
     else:
-        url = "http://mms.foxlink.com.tw/scbg/addons/register/server/server.php"
+        url = "http://172.168.1.242/auth_test/server/server.php"
         myobj = {
         #     "trpe":"checkUserExist",
             "type":"checkUserExist",
@@ -231,7 +231,7 @@ async def getUserGroup(user_id: str , system_id: int = 16, checkSSH: bool = Fals
         print("aborted")
         return 
     else:
-        url = 'http://mms.foxlink.com.tw/scbg/addons/register/server/server.php'
+        url = 'http://172.168.1.242/auth_test/server/server.php'
         myobj = {
             "trpe":"getUserGroupList",
             "user_id": user_id,

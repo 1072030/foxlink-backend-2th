@@ -13,6 +13,7 @@ from app.core.database import (
     Project,
     ProjectUser,
     ProjectEvent,
+    PredTarget,
     UserLevel,
     Device,
     AoiMeasure,
@@ -836,6 +837,7 @@ async def UpdatePreprocessingData(project_id: int,user:str):
     await AuditLogHeader.objects.create(
         action=AuditActionEnum.DAILY_PREPROCESSING_STARTED.value,
         user=user,
+        project=project_id,
         description=project_id
     )
     now = get_ntz_now()  # 更新資料時間
@@ -1208,12 +1210,14 @@ async def UpdatePreprocessingData(project_id: int,user:str):
             await AuditLogHeader.objects.create(
                     action=AuditActionEnum.DAILY_PREPROCESSING_SUCCEEDED.value,
                     user=user,
+                    project=project_id,
                     description=project_id
             )
     except Exception as e:
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DAILY_PREPROCESSING_FAILED.value,
             user=user,
+            project=project_id,
             description=project_id
         )
         print(f"{repr(e)}")
@@ -1269,6 +1273,9 @@ async def TrainingData(project_id: int, select_type: str):
                             used_col.remove('light')
                             # 訓練模型前的最後資料前處理
                             foxlink_train.training_data_preprocessing(df)
+                            # 此event屬於特殊狀況無法訓練時
+                            # if not preprocessing_check:
+                            #     continue
                             # 挑選了哪些模型
                             es = foxlink_train.select_model()
                             # 訓練模型
@@ -1295,20 +1302,24 @@ async def TrainingData(project_id: int, select_type: str):
                                                                         'created_date': timenow}
                         except:
                             print('無法訓練')
-                    # 找最佳ARF的Threshold
-                    best_t = sorted(temp, key=lambda x: (x[1]), reverse=True)[0][0]
-                    best_model = every_error_performance[dv][events][best_t]['model']
-                    # 儲存模型
-                    if select_type == 'week':
-                        joblib.dump(
-                            best_model, f'/app/model_week/{dv}_{ca}_{timenow}.pkl')
-                    else:
-                        joblib.dump(best_model, f'/app/model/{dv}_{ca}_{timenow}.pkl')
+                    try:
+                        # 找最佳ARF的Threshold
+                        best_t = sorted(temp, key=lambda x: (x[1]), reverse=True)[0][0]
+                        best_model = every_error_performance[dv][events][best_t]['model']
+                        # 儲存模型
+                        if select_type == 'week':
+                            joblib.dump(
+                                best_model, f'/app/model_week/{dv}_{ca}_{timenow}.pkl')
+                        else:
+                            joblib.dump(best_model, f'/app/model/{dv}_{ca}_{timenow}.pkl')
 
-                    every_error_performance[dv][events][best_t]['freq'] = select_type
-                    # 寫入資料庫      
-                    pd.DataFrame(every_error_performance[dv][events][best_t], index=[0]).drop(
-                        columns='model').to_sql('train_performances', con=conn, if_exists='append', index=False)
+                        every_error_performance[dv][events][best_t]['freq'] = select_type
+                        # 寫入資料庫      
+                        pd.DataFrame(every_error_performance[dv][events][best_t], index=[0]).drop(
+                            columns='model').to_sql('train_performances', con=conn, if_exists='append', index=False)
+
+                    except:
+                        await PredTarget.objects.filter(device=device_id, event=event.id).update(target=2)
             trans.commit()
         except Exception as e:
             trans.rollback()
@@ -1388,35 +1399,37 @@ async def auto_TrainingData(project_id: int, select_type: str, start_date: date)
                                                                         'created_date': timenow}
                         except:
                             print('無法訓練')
-                  
-                    # 找最佳ARF的Threshold
-                    best_t = sorted(temp, key=lambda x: (x[1]), reverse=True)[0][0]
-                    best_model = every_error_performance[dv][events][best_t]['model']
-                    # 儲存模型
-                    if select_type == 'week':
-                        joblib.dump(
-                            best_model, f'/app/model_week/{dv}_{ca}_{timenow}.pkl')
-                    else:
-                        joblib.dump(best_model, f'/app/model/{dv}_{ca}_{timenow}.pkl')
+                    try:
+                        # 找最佳ARF的Threshold
+                        best_t = sorted(temp, key=lambda x: (x[1]), reverse=True)[0][0]
+                        best_model = every_error_performance[dv][events][best_t]['model']
+                        # 儲存模型
+                        if select_type == 'week':
+                            joblib.dump(
+                                best_model, f'/app/model_week/{dv}_{ca}_{timenow}.pkl')
+                        else:
+                            joblib.dump(best_model, f'/app/model/{dv}_{ca}_{timenow}.pkl')
 
-                    # every_error_performance[dv][events][best_t]['freq'] = select_type
-                    # retrain_result =  pd.DataFrame(every_error_performance[dv][events][best_t], index=[0]).drop(
-                    #     columns='model')
-                    retrain_result =  every_error_performance[dv][events][best_t]
-                    # retrain_result : List[TrainPerformance] = []
-                    # retrain_result.append(error_performance)
-                    # 寫入資料庫      
-                    await TrainPerformance.objects.filter(device=device_id, event=event.id, freq=select_type).update(
-                        threshold=best_t,
-                        actual_cutpoint= int(retrain_result['actual_cutpoint']),
-                        arf=retrain_result['arf'],
-                        acc=retrain_result['acc'],
-                        red_recall=retrain_result['red_recall'],
-                        red_f1score=retrain_result['red_f1score'],
-                        used_col=retrain_result['used_col'],
-                        created_date=retrain_result['created_date']
-                    )
+                        # every_error_performance[dv][events][best_t]['freq'] = select_type
+                        # retrain_result =  pd.DataFrame(every_error_performance[dv][events][best_t], index=[0]).drop(
+                        #     columns='model')
+                        retrain_result =  every_error_performance[dv][events][best_t]
+                        # retrain_result : List[TrainPerformance] = []
+                        # retrain_result.append(error_performance)
+                        # 寫入資料庫      
+                        await TrainPerformance.objects.filter(device=device_id, event=event.id, freq=select_type).update(
+                            threshold=best_t,
+                            actual_cutpoint= int(retrain_result['actual_cutpoint']),
+                            arf=retrain_result['arf'],
+                            acc=retrain_result['acc'],
+                            red_recall=retrain_result['red_recall'],
+                            red_f1score=retrain_result['red_f1score'],
+                            used_col=retrain_result['used_col'],
+                            created_date=retrain_result['created_date']
+                        )
 
+                    except:
+                        await PredTarget.objects.filter(device=device_id, event=event.id).update(target=2)
             trans.commit() 
         except Exception as e:
             trans.rollback()
@@ -1482,6 +1495,7 @@ async def PredictData(project_id: int, select_type: str,user:str):
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.PREDICT_SUCCEEDED.value,
                 user=user,
+                project=project_id,
                 description=project_id
             )
             trans.commit()
@@ -1490,6 +1504,7 @@ async def PredictData(project_id: int, select_type: str,user:str):
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.PREDICT_FAILED.value,
                 user=user,
+                project=project_id,
                 description=project_id
             )
             raise e

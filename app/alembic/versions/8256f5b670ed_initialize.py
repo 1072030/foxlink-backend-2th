@@ -1,8 +1,8 @@
 """initialize
 
-Revision ID: 5e0952bd163e
+Revision ID: 8256f5b670ed
 Revises: 
-Create Date: 2024-04-10 11:22:26.174065
+Create Date: 2024-08-06 03:24:39.298330
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '5e0952bd163e'
+revision = '8256f5b670ed'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -33,6 +33,8 @@ def upgrade() -> None:
     op.create_table('users',
     sa.Column('badge', sa.String(length=100), nullable=False),
     sa.Column('username', sa.String(length=50), nullable=False),
+    sa.Column('level', sa.SmallInteger(), nullable=False),
+    sa.Column('email', sa.String(length=50), nullable=True),
     sa.Column('password_hash', sa.String(length=100), nullable=True),
     sa.Column('current_UUID', sa.String(length=100), nullable=True),
     sa.Column('flag', sa.Boolean(), nullable=True),
@@ -61,6 +63,8 @@ def upgrade() -> None:
     sa.Column('cname', sa.String(length=100), nullable=False),
     sa.Column('project', sa.Integer(), nullable=False),
     sa.Column('flag', sa.Boolean(), nullable=True),
+    sa.Column('start_date', sa.Date(), nullable=True),
+    sa.Column('retrain', sa.Boolean(), nullable=True),
     sa.Column('created_date', sa.DateTime(timezone=True), nullable=True),
     sa.ForeignKeyConstraint(['project'], ['projects.id'], name='fk_devices_projects_id_project', ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')

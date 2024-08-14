@@ -442,6 +442,7 @@ class FoxlinkTrain:
 
     
     def light_labeling(self, df, events, Threshold):
+        df = df.copy()
         df.rename(columns = {events:'count'}, inplace = True)
         cutting_point = np.quantile(df['count'], Threshold)
         # 轉換燈號
@@ -471,6 +472,8 @@ class FoxlinkTrain:
             print('正規化完成')
 
         x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size = 0.2, random_state= 42)
+        
+        print(y_train)
         ## 這有設計 Upsample方法可以選，但Smote會報錯。
         if upsample_method == 'SMOTE':
             try: 

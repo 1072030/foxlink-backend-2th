@@ -694,6 +694,7 @@ class AuditLogHeader(ormar.Model):
     # ormar.ForeignKey(ProjectEvent,index=True, nullable=False,ondelete="CASCADE")
     user: str = ormar.ForeignKey(User,index=True,ondelete="NO ACTION",nullable=True)
     created_date: datetime = ormar.DateTime(default=get_ntz_now, timezone=True)
+    project: str = ormar.String(max_length=50,nullable=True)
     description: str = ormar.String(max_length=256, nullable=True)
 
 

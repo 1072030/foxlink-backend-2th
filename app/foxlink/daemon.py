@@ -238,12 +238,14 @@ if __name__ == "__main__":
             for device in project.devices:
                 predict_required.append({
                     "project_id":project.id,
+                    "project_name":project.name,
                     "select_type":"day"
                 })
                 # 確認每週預測時間點
                 if get_ntz_now().weekday() == 6:
                     predict_required.append({
                         "project_id":project.id,
+                        "project_name":project.name,
                         "select_type":"week"
                     })
                 break
@@ -255,7 +257,8 @@ if __name__ == "__main__":
                 AuditLogHeader(
                     action=AuditActionEnum.PREDICT_STARTED.value,
                     user='admin',
-                    description=deatil["project_id"]
+                    description=deatil["project_id"],
+                    project = deatil["project_id"]
                 )
             )
         if len(bulk_create_started) != 0:

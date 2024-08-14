@@ -98,6 +98,7 @@ async def delete_devices(dto: List[NewProjectDto], user: User = Depends(get_curr
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DELECT_DEVICES.value,
             user=user.badge,
+            project=project_id,
             description=f"Deleted devices:{devices_name}"
         )
         return
@@ -118,6 +119,7 @@ async def add_new_workers(dto: NewUserDto, user: User = Depends(get_current_user
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.ADD_PROJECT_WORKER.value,
             user=user.badge,
+            project=dto.project_id,
             description=f"{dto.user_id}"
         )
         return
@@ -138,6 +140,7 @@ async def delete_workers(project_id: int, user_id: str, user: User = Depends(get
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DELECT_PROJECT_WORKER.value,
             user=user.badge,
+            project=project_id,
             description=f"{user_id}"
         )
         return
@@ -183,6 +186,7 @@ async def add_project_and_events(dto: List[NewProjectDto], start_date: date = No
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.ADD_NEW_PROJECT.value,
             user=user.badge,
+            project=project.id,
             description=project.id
         )
 
@@ -230,6 +234,7 @@ async def preprocessing_data(project_id: int, user: User = Depends(get_current_u
     await AuditLogHeader.objects.create(
         action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
         user=user.badge,
+        project = project_id,
         description=project_id
     )
     try:
@@ -237,6 +242,7 @@ async def preprocessing_data(project_id: int, user: User = Depends(get_current_u
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
             user=user.badge,
+            project=project_id,
             description=project_id
         )
         return
@@ -244,6 +250,7 @@ async def preprocessing_data(project_id: int, user: User = Depends(get_current_u
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
             user=user.badge,
+            project=project_id,
             description=project_id
         )
         raise HTTPException(
@@ -277,12 +284,14 @@ async def training_data(project_id: int, select_type: str, user: User = Depends(
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_SUCCEEDED_DAILY.value,
                 user=user.badge,
+                project=project_id,
                 description=project_id
             )
         else:
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_SUCCEEDED_WEEKLY.value,
                 user=user.badge,
+                project=project_id,
                 description=project_id
             )
     except Exception as e:
@@ -290,12 +299,14 @@ async def training_data(project_id: int, select_type: str, user: User = Depends(
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_FAILED_DAILY.value,
                 user=user.badge,
+                project=project_id,
                 description=project_id
             )
         else:
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_FAILED_WEEKLY.value,
                 user=user.badge,
+                project=project_id,
                 description=project_id
             )
         raise HTTPException(
@@ -337,28 +348,33 @@ async def auto_train(preprocessing_days: int, days_before_retrain: int, descript
         await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_STARTED_WEEKLY.value,
                 user='admin',
+                project=project,
                 description=project
             )
         try:
             await auto_TrainingData(project, 'day', start_date)  
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.RETRAIN_SUCCEEDED_DAILY.value,
+                project=project,
                 description=project
             )
         except:
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.RETRAIN_FAILED_DAILY.value,
+                project=project,
                 description=project
             )
         try:
             await auto_TrainingData(project, 'week', start_date)  
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.RETRAIN_SUCCEEDED_WEEKLY.value,
+                project=project,
                 description=project
             )
         except:
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.RETRAIN_FAILED_WEEKLY.value,
+                project=project,
                 description=project
             )
 
@@ -373,6 +389,7 @@ async def predict_data(project_id: int, pred_type: str, user: User = Depends(get
     await AuditLogHeader.objects.create(
         action=AuditActionEnum.PREDICT_STARTED.value,
         user=user.badge,
+        project=project_id,
         description=project_id
     )
     try:
@@ -406,11 +423,14 @@ async def add_project(projects: List[str], user: User = Depends(get_current_user
         ) 
     if user is not None:
         projects = await AddNewProjects(projects,user)
-        await AuditLogHeader.objects.create(
-            action=AuditActionEnum.ADD_NEW_PROJECT.value,
-            user=user.badge,
-            description=str(projects)
-        )
+        for project in projects:
+            pjt = await Project.objects.filter(name=project).get_or_none()
+            await AuditLogHeader.objects.create(
+                action=AuditActionEnum.ADD_NEW_PROJECT.value,
+                user=user.badge,
+                project=pjt.id,
+                description=str(projects)
+            )
     return
 
 @router.delete("/project", tags=["project"])
@@ -424,10 +444,14 @@ async def delete_projects(projects: List[str], user: User = Depends(get_current_
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"please select project"
         ) 
     if user is not None:
+        for project in projects:
+            pjt = await Project.objects.filter(name=project).get_or_none()
+        
         projects = await DeleteProjects(projects)
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DELECT_PROJECT.value,
             user=user.badge,
+            project=pjt.id,
             description=str(projects)
         )
     return

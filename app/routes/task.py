@@ -78,6 +78,7 @@ async def checking_task():
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
                 user='admin',
+                project=str(args),
                 description=str(args)
             )
             try:
@@ -85,6 +86,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
                     user='admin',
+                    project=str(args),
                     description=str(args)
                 )
 
@@ -96,6 +98,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.DATA_PREPROCESSING_FAILED.value,
                     user='admin',
+                    project=str(args),
                     description=f'{args} detail:{e.detail}'
                 )
                 project = await Project.objects.filter(id = args).get_or_none()
@@ -146,6 +149,7 @@ async def checking_task():
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_STARTED_DAILY.value,
                 user='admin',
+                project=str(args),
                 description=str(args)
             )
             try:
@@ -153,6 +157,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.TRAINING_SUCCEEDED_DAILY.value,
                     user='admin',
+                    project=str(args),
                     description=str(args)
                 )
 
@@ -164,6 +169,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.TRAINING_FAILED_DAILY.value,
                     user='admin',
+                    project=str(args),
                     description=f'{args} detail:{e}'
                 )
                 pending_task.status = TaskStatus.Failure.value
@@ -175,6 +181,7 @@ async def checking_task():
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.TRAINING_STARTED_WEEKLY.value,
                 user='admin',
+                project=str(args),
                 description=str(args)
             )
             try:
@@ -182,6 +189,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.TRAINING_SUCCEEDED_WEEKLY.value,
                     user='admin',
+                    project=str(args),
                     description=str(args)
                 )
 
@@ -193,6 +201,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.TRAINING_FAILED_WEEKLY.value,
                     user='admin',
+                    project=str(args),
                     description=f'{args} detail:{e}'
                 )
 
@@ -204,6 +213,7 @@ async def checking_task():
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.PREDICT_STARTED.value,
                 user='admin',
+                project=str(args),
                 description=str(args)
             )
             try:
@@ -211,6 +221,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.PREDICT_SUCCEEDED.value,
                     user='admin',
+                    project=str(args),
                     description=str(args)
                 )
 
@@ -233,6 +244,7 @@ async def checking_task():
             await AuditLogHeader.objects.create(
                 action=AuditActionEnum.PREDICT_STARTED.value,
                 user='admin',
+                project=str(args),
                 description=str(args)
             )
             try:
@@ -240,6 +252,7 @@ async def checking_task():
                 await AuditLogHeader.objects.create(
                     action=AuditActionEnum.PREDICT_SUCCEEDED.value,
                     user='admin',
+                    project=str(args),
                     description=str(args)
                 )
 

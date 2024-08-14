@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException
 import datetime
 from typing import List
 from pydantic import BaseModel
-from app.core.database import AuditActionEnum, AuditLogHeader, User
+from app.core.database import AuditActionEnum, AuditLogHeader, User,Project
 from typing import Optional
-
+from app.services.log import convert_project_name
 from app.services.auth import get_manager_active_user
 from datetime import timedelta
 router = APIRouter(prefix="/logs")
@@ -37,6 +37,7 @@ class LogOut(BaseModel):
     badge: Optional[str]
     username: Optional[str]
     description: Optional[str]
+    project: Optional[str]
     created_date: datetime.datetime
 
 
@@ -54,7 +55,7 @@ async def get_logs(
     page: int = 1,
     badge: Optional[str] = None,
     username: Optional[str] = None,
-    project_name: Optional[str] = None,
+    projectName: Optional[str] = None,
     start_date: Optional[datetime.datetime] = None,
     end_date: Optional[datetime.datetime] = None,
     user: User = Depends(get_manager_active_user),
@@ -69,9 +70,13 @@ async def get_logs(
         "created_date__gte": start_date,
         "created_date__lte": end_date.replace(hour=23,minute=59,second=59),
         "user__badge": badge,
-        "user__username": username,
-        "description__contains": project_name
+        "user__username": username
     }
+
+    if projectName is not None:
+        projectName = projectName.upper()
+        project = await Project.objects.filter(name=projectName).get_or_none()
+        params["project"] = project.id
 
     if action is not None:
         params["action"] = action.value  # type: ignore
@@ -93,6 +98,7 @@ async def get_logs(
                 badge=log.user.badge,
                 username=log.user.username,
                 # user=log.user if log.user is not None else None,
+                project =await convert_project_name(log.project),
                 description=log.description,
                 created_date=(log.created_date + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M:%S'),
             )
