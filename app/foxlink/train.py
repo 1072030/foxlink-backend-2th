@@ -83,9 +83,10 @@ class FoxlinkTrain:
                     status_code=400, detail="this project doesnt existed.")
         # 用來存每個device的每個error的輸入表
         input_data_dict = {}
+        # 取得專案中所有機台
         all_devices = await Device.objects.filter(project=project_id).all()
         devices = []
-        
+        # 取得機台的TrainPerformance,用於確認是否訓練過
         for dvs in all_devices:
             device = await TrainPerformance.objects.filter(device = dvs.id,freq = select_type).all()
             if len(device) == 0 :
@@ -93,19 +94,25 @@ class FoxlinkTrain:
 
         if len(devices) == 0:
             return
-        
+        # 開始處理資料
         for dvs in devices:
             print(f"{get_ntz_now()} : starting preprocessing {dvs.name}")
+            # 取得ErrorFeature事件
             event = await ErrorFeature.objects.filter(
                 device=dvs.id,
                 project=project_id
             ).all()
+            # 將重複事件去除
             event = set([row.event.id for row in event])
+            # 取得ProjectEvent中的資料
             events = await ProjectEvent.objects.filter(id__in=event).all()
-            # event = set([row.name for row in events])
+            # 取得機台IP和資料庫
             FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+            # 提取資料庫內容
             FOXLINK_DATABASE = FOXLINK_IP_DATABASE.split("@")[1]
+            # 嘗試連接
             await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
+            # aoi資料庫與hmi資料庫query差異
             if FOXLINK_DATABASE == "aoi":
                 sql = f"""
                     SELECT Measure_Workno FROM {FOXLINK_DATABASE}.measure_info 
@@ -122,25 +129,18 @@ class FoxlinkTrain:
                         Project='{project[0].name}'
                         ORDER BY Workno_Order;
                 """
-            # -- edit by mike 2024/7/9
-            # FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(stmt)
-            # await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
-            # foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
+
+            # 正崴資料庫engine
             foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
             # --
+            # 取得正崴資料庫中的measure
             dvs_aoi_measure = pd.read_sql(sql, foxlink_engine)['Measure_Workno']
+            # 提取第一個measure
             first_aoi_measure = dvs_aoi_measure[0].lower()
+            # 取得此機台所有的measure資料
             ntust_measure = await Device.objects.select_related(['aoimeasures']).filter(name=dvs.name,line = dvs.line,project=project_id).all()
-            # ntust_measure = for i in ntust_measure[0].aoimeasures
+            # 提取aoimeasures資料
             ntust_measure = ntust_measure[0].aoimeasures
-            # sql = f"""
-            #     SELECT Measure_Workno FROM aoi.measure_info 
-            #     WHERE 
-            #         Workno_Order=1 and 
-            #         Project='{project[0].name}'and
-            #         Device_Name='{dvs.name}';
-            # """
-            # first_aoi_measure = pd.read_sql(sql, self.foxlink_engine)['Measure_Workno'][0].lower()
             
             for row in events: # 預測目標異常 Y
                 # print(f"{get_ntz_now} : starting preprocessing {row.message}")

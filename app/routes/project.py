@@ -53,6 +53,7 @@ async def get_all_project(user: User = Depends(get_current_user())):
     """
     取得所有專案內容(當前使用者權限內所有的專案)
     """
+    # 取得專案id和專案名稱
     project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_worker.value)
     if len(project_id_list) != 0:
         return await (Project.objects.filter(
@@ -64,7 +65,9 @@ async def get_all_project(user: User = Depends(get_current_user())):
 async def get_all_project(project_id: int, user: User = Depends(get_current_user())):
     """
     取得對應專案內的所有人員(當前使用者權限內的專案)
+    project_id:int 專案id
     """
+    # 查看此使用者是否符合設定權限
     user = await checkUserProjectPermission(project_id, user, UserLevel.project_leader.value)
 
     try:
@@ -87,14 +90,22 @@ async def get_all_project(project_id: int, user: User = Depends(get_current_user
 async def delete_devices(dto: List[NewProjectDto], user: User = Depends(get_current_user())):
     """
     刪除專案(僅專案管理者以上之人員)
+    NewProjectDto
+        project:str 專案名稱
+        line:int    專案線號
+        device:str  機台名稱
+        ename:str   事件英文名稱
+        cname:str   事件中文名稱
     """
     project_name = dto[0].project.upper()
     project = await Project.objects.filter(name=project_name).get_or_none()
     project_id = project.id
-
+    # 查看此使用者是否符合設定權限
     user = await checkUserProjectPermission(project_id, user, UserLevel.project_manager.value)
     if user is not None:
+        # 刪除機台
         devices_name = await DeleteDevices(dto)
+        # 產生log
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DELECT_DEVICES.value,
             user=user.badge,
@@ -112,10 +123,17 @@ async def delete_devices(dto: List[NewProjectDto], user: User = Depends(get_curr
 async def add_new_workers(dto: NewUserDto, user: User = Depends(get_current_user())):
     """
     新增專案內人員(會確認新增者權限)
+    NewUserDto
+        project_id:int 專案id
+        user_id:str 員工id
+        permission:int 員工權限
     """
+    # 查看此使用者是否符合設定權限
     user = await checkUserProjectPermission(dto.project_id, user, UserLevel.project_leader.value)
     if user is not None:
+        # 新增專案使用者
         await AddNewProjectWorker(dto.project_id, dto.user_id, dto.permission)
+        # 產生log
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.ADD_PROJECT_WORKER.value,
             user=user.badge,
@@ -133,10 +151,16 @@ async def add_new_workers(dto: NewUserDto, user: User = Depends(get_current_user
 async def delete_workers(project_id: int, user_id: str, user: User = Depends(get_current_user())):
     """
     新增專案內人員(admin、manager、leader)
+    project_id: int 專案id
+    user_id: str 員工id
     """
+    # 查看此使用者是否符合設定權限
     user = await checkUserProjectPermission(project_id, user, UserLevel.project_leader.value)
+
     if user is not None:
+        # 刪除專案中的員工
         await RemoveProjectWorker(project_id, user_id)
+        # 產生log
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DELECT_PROJECT_WORKER.value,
             user=user.badge,
@@ -154,48 +178,53 @@ async def delete_workers(project_id: int, user_id: str, user: User = Depends(get
 async def search_project_devices(project_name: str):
     """
     搜尋專案擁有的devices
+    project_name: str 專案名稱
     """
+    # 防呆 機台名稱不能為空
     if project_name == "":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"please input project"
-        )            
+        )      
+    # 搜尋專案      
     return await SearchProjectDevices(project_name)
 
 @router.post("/add-project-events", status_code=200, tags=["project"])
 async def add_project_and_events(dto: List[NewProjectDto], start_date: date = None ,user: User = Depends(get_current_user())):
     """
     搜尋專案內的所有事件(新增者權限 = admin、manager)
+    NewProjectDto
+        project:str 專案名稱
+        line:int    線號
+        device:str  機台名稱
+        ename:str   事件英文名稱
+        cname:str   事件中文名稱
     """
     # project_id_list, project_name_list = await checkAdminPermission(user, UserLevel.project_manager.value)
+    # 確認新增專案的使用者權限
     createProjectUser = await checkNewProjectPermission(user)
 
     if len(dto) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"please select device"
         )
-
+    # 確認起始日期
     if start_date is None:
         checkEnv = await Env.objects.filter(key="preprocess_days").get_or_none()
         if checkEnv is None:
             raise HTTPException(400,"can not find 'preprocess_days' env settings")
         preprocess_days = int(checkEnv.value)
         start_date = date.today() - timedelta(days = preprocess_days)
-
+    # 新增專案
     project = await AddNewProjectEvents(dto,start_date)
     if project is not None:
+        # 產生log
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.ADD_NEW_PROJECT.value,
             user=user.badge,
             project=project.id,
             description=project.id
         )
-
-    # await AuditLogHeader.objects.create(
-    #     action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
-    #     user=user.badge,
-    #     description=project.id
-    # )
-
+    # 產生一系列tasks (前處理、日訓練、週訓練、日預測、週預測)讓系統可以自動排程任務
     tasks = [
             Task(
                 action=TaskAction.DATA_PREPROCESSING.value,
@@ -230,7 +259,9 @@ async def add_project_and_events(dto: List[NewProjectDto], start_date: date = No
 async def preprocessing_data(project_id: int, user: User = Depends(get_current_user())):
     """
     訓練前的前處理 : 產生資料表 aoi_feature dn_mf hourly_mf
+    project_id: int 專案id
     """
+    # 產生log
     await AuditLogHeader.objects.create(
         action=AuditActionEnum.DATA_PREPROCESSING_STARTED.value,
         user=user.badge,
@@ -238,7 +269,9 @@ async def preprocessing_data(project_id: int, user: User = Depends(get_current_u
         description=project_id
     )
     try:
+        # 資料前處理
         await PreprocessingData(project_id)
+        # 產生log
         await AuditLogHeader.objects.create(
             action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,
             user=user.badge,
@@ -263,8 +296,10 @@ async def update_preprocessing_data(project_id: int, user: User = Depends(get_cu
     """
     每日前處理 產生資料表內容 : aoi_feature dn_mf hourly_mf
     """
+    # 查看此使用者是否符合設定權限
     user = await checkUserProjectPermission(project_id, user, UserLevel.project_manager.value)
     try:
+        # 每日資料前處理
         await UpdatePreprocessingData(project_id,user.badge)
     except Exception as e:
         raise HTTPException(
@@ -277,8 +312,11 @@ async def update_preprocessing_data(project_id: int, user: User = Depends(get_cu
 async def training_data(project_id: int, select_type: str, user: User = Depends(get_current_user())):
     """
     對前處理資料進行訓練 : 產生 model->.pkl檔 train_performance資料表內容
+    project_id: int     專案id
+    select_type: str    日訓練或是週訓練的選擇
     """
     try:
+        # 開始訓練
         await TrainingData(project_id, select_type)
         if select_type == "day":
             await AuditLogHeader.objects.create(

@@ -27,7 +27,7 @@ router = APIRouter(prefix="/logs")
 #             new_value=logvalue.new_value,
 #         )
 
-
+# log 接收格式
 class LogOut(BaseModel):
     id: int
     action: AuditActionEnum
@@ -40,14 +40,24 @@ class LogOut(BaseModel):
     project: Optional[str]
     created_date: datetime.datetime
 
-
+# log 回傳格式
 class LogResponse(BaseModel):
     logs: List[LogOut]
     page: int  # current page
     limit: int  # current page limit
     total: int  # total amount of logs
 
-
+"""
+action : 依照AuditActionEnum類別接收
+limit : 預設一頁顯示內容
+page : 預設顯示頁數
+badge : 員工工號
+username : 員工姓名
+projectName : 專案名稱
+start_date : 起始日期
+end_date : 結束日期
+user : 一般用於確認操作者是誰
+"""
 @router.get("/", response_model=LogResponse, tags=["logs"])
 async def get_logs(
     action: Optional[AuditActionEnum] = None,
@@ -60,6 +70,7 @@ async def get_logs(
     end_date: Optional[datetime.datetime] = None,
     user: User = Depends(get_manager_active_user),
 ):
+    
     if limit <= 0:
         raise HTTPException(400, "limit must be greater than 0")
 
