@@ -77,7 +77,7 @@ if __name__ == "__main__":
 
     _terminate = None
 
-    MAIN_ROUTINE_MIN_RUNTIME = 60
+    MAIN_ROUTINE_MIN_RUNTIME = 900
     NOTIFICATION_INTERVAL = 30
     
     def show_duration(func):
@@ -264,9 +264,12 @@ if __name__ == "__main__":
         if len(bulk_create_started) != 0:
             await AuditLogHeader.objects.bulk_create(bulk_create_started)
 
-        for detail in predict_required:
-            await PredictData(detail['project_id'],detail['select_type'],"admin")
+        # for detail in predict_required:
+        #     await PredictData(detail['project_id'],detail['select_type'],"admin")
 
+        await asyncio.gather(
+            *[PredictData(detail['project_id'],detail['select_type'],"admin") for detail in predict_required]
+        )
         return
     
     @transaction(callback=True)
