@@ -49,20 +49,23 @@ ntust_engine = foxlink_dbs.ntust_db
 # foxlink_engine = foxlink_dbs.foxlink_db
 
 async def DeleteDevices(dto: List[NewProjectDto]):
+    # 專案名稱大寫
     project_name = dto[0].project.upper()
+    # 確認本地資料庫中存有此專案相關內容
     project = await Project.objects.filter(name=project_name).get_or_none()
-    project_id = project.id
-    # project = await Project.objects.filter(id=project_id).get_or_none()
+
     if project is None:
         raise HTTPException(404,'project is not found')
     
     # data = await Project.objects.filter(id = project_id).select_related(["devices"]).all()
-    data = await Project.objects.select_related("devices").filter(id=project_id).all()
+    # 正確取得專案內容
+    data = await Project.objects.select_related("devices").filter(id=project.id).all()
     if data is None:
         raise HTTPException(404,'device is not found')
     
     output = []
     try:
+        # 資料輸出整理
         for pjt in data:
             for i in dto:
                 for dvs in pjt.devices:
@@ -78,18 +81,9 @@ async def DeleteDevices(dto: List[NewProjectDto]):
         raise HTTPException(400, 'project can not delete')
     
     return output
-# async def DeleteProject(project_id: int):
-#     project = await Project.objects.filter(id=project_id).get_or_none()
-#     if project is None:
-#         raise HTTPException(404, 'user is not found')
-#     try:
-#         await project.delete()
-#         return project.name
-#     except:
-#         raise HTTPException(400, 'project can not delete')
-
 
 async def AddNewProjectWorker(project_id: int, user_id: str, permission: int = UserLevel):
+    # 確認本地資料庫中有此員工
     user = await User.objects.filter(badge=user_id).get_or_none()
     if user is None:
         raise HTTPException(404, 'user is not found')
@@ -98,7 +92,7 @@ async def AddNewProjectWorker(project_id: int, user_id: str, permission: int = U
 
     if project is None:
         raise HTTPException(404, 'project is not found')
-
+    # 確認此員工是否已存在於此專案
     check_duplicate = await ProjectUser.objects.filter(
         project=project_id, user=user_id
     ).get_or_none()
@@ -109,6 +103,7 @@ async def AddNewProjectWorker(project_id: int, user_id: str, permission: int = U
             user=user.badge,
             permission=permission
         )
+        # 更新權限
         if permission > user.level:
             await User.objects.filter(badge = user_id).update(level = permission)
         return True
@@ -125,7 +120,7 @@ async def RemoveProjectWorker(project_id: int, user_id: str):
 
     if project is None:
         raise HTTPException(404, 'project is not found')
-
+    # 確認此員工是否已存在於此專案
     check_duplicate = await ProjectUser.objects.filter(
         project=project_id, user=user_id
     ).get_or_none()
@@ -142,13 +137,14 @@ async def RemoveProjectWorker(project_id: int, user_id: str):
 
 
 async def SearchProjectDevices(project_name: str):
+    # 從正崴資料庫中取得此專案的相關內容
     data = await foxlink_dbs.get_device_names(project_name=project_name)
+
     devices = await Project.objects.filter(name = project_name).select_related(["devices"]).get_or_none()
+    # 確認本地端機台是否已經被選取過
     if devices is None:
         for dev in data:
             dev['select'] = 0
-            
-
     else:
         for dev in data:
             dev['select'] = 0
@@ -156,46 +152,29 @@ async def SearchProjectDevices(project_name: str):
                 if device.name == dev['device'] and device.line==dev['line']:
                     dev['select'] = 1
                     break
-                
-
+    
     return data
-    # return await foxlink_dbs.get_device_names(project_name=project_name)
-
-    # project = await Project.objects.filter(name = project_name).select_related(["devices"]).get_or_none()
-    # if project is None:
-    #     return data
-    # else:
-    #     devices = [i.name for i in project.devices]
-    #     for i in data:
-    #         if i["device"] in devices:
-    #             i["selected"] = True
-    #     return data
 
 @transaction()
 async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
+    # 統一使用者輸入內容
     project_name = dto[0].project.upper()
-    project_line = dto[0].line
-    # check selected devices
+    # 防呆 確認使用者有選擇機台
     if len(dto) == 0:
         raise HTTPException(
             status_code=400, detail="please select devices")
-
-    # foxlink db project select
-    # stmt = (
-    #     f"SELECT Device_Name , Measure_Workno FROM aoi.measure_info WHERE Project = '{project_name}'"
-    # )
     try:
-        # check query project
-        # -- edit by mike 2024/7/10
-        # FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project_name,dto[0].device)
-        # await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
-        # devices = await foxlink_dbs[FOXLINK_IP_DATABASE].fetch_all(query=stmt)
+        # 機台事件提取
         devices = []
+        # 取得server_ip example output: 111.111.1.111:3306
         server_ip = await foxlink_dbs.get_server_ip(project_name)
+        # 尋找機台位置，可能在hmi資料表或是aoi資料表中，需兩邊都進行查詢
         for i in range(len(FOXLINK_EVENT_DB_NAME)):
+            # 系統中資料庫連線格式
             FOXLINK_IP_DATABASE = f"{server_ip}@{FOXLINK_EVENT_DB_NAME[i]}"
+            # 確認連線
             await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
-
+            # aoi和hmi資料表內容不同
             if FOXLINK_EVENT_DB_NAME[i] != "hmi":
                 stmt = (
                     f"SELECT Device_Name , Measure_Workno FROM {FOXLINK_EVENT_DB_NAME[i]}.measure_info WHERE Project = '{project_name}'"
@@ -203,24 +182,27 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
             else:
                 stmt = (
                     f"SELECT Measure_Workno , Measure_Workno FROM {FOXLINK_EVENT_DB_NAME[i]}.measure_info WHERE Project = '{project_name}'"
-                )                
+                )    
+            # 取得資料內容            
             temp = await foxlink_dbs[FOXLINK_IP_DATABASE].fetch_all(query=stmt)
+            # 將資料進行合併
             devices = [*devices,*temp]
         # --
     except:
         raise HTTPException(
             status_code=400, detail="cant query foxlink database")
-
+    # 把資料進行dict格式轉換
     dvs_aoi = {}
     for device, measure in devices:
         if device not in dvs_aoi.keys():
             dvs_aoi[device] = dvs_aoi.get(device, [])
         dvs_aoi[device].append(measure.lower())
 
-    # check project in system duplicated
-    # project_create = await Project.objects.select_related(["devices"]).get_or_none(name=project_name)
+    # 確認此專案是否在本地端存在
     project_create = await Project.objects.filter(name=project_name).select_related(["devices"]).get_or_none()
+    # 確認機台事件提取有內容
     if len(devices) != 0:
+        # 專案在本地端不存在則新增
         if project_create is None:
             project_create = await Project.objects.create(name=project_name)
             # add admin into project
@@ -245,9 +227,10 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
 
     event_data = {}
     for selected in dto:
-        # -- edit by mike 2024/7/10
+        # 查詢此機台的ip位置和資料表
         FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(selected.project,selected.device)
         await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
+        # 從event表中取得事件名稱
         stmt = (
             f"""
             SELECT DISTINCT Device_Name,Line ,Message,Category FROM {FOXLINK_IP_DATABASE.split('@')[1]}.`{project_name}_event`
@@ -263,7 +246,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
         # --
             if not foxlink:  
                 raise HTTPException(status_code=400, detail=f'The event data table of line {selected.line}-{selected.device} is empty.')
-
+            # 確認同一個category當中是否有不同的事件名稱
             check_category_duplicate = []
             for i in foxlink:
                 # remove dumplicate name with same category
@@ -271,6 +254,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
                     check_category_duplicate.append(i.Category)
                 else:
                     continue
+                # 整理資料格式 
                 name = i.Device_Name + "-" + i.Line + "-" + selected.cname
                 if name not in event_data.keys():
                     event_data[name] = event_data.get(
@@ -298,12 +282,13 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
             flag=False,
             start_date = start_date
         )
+        # 暫存機台資料
         bulk_create_device.append(device)
 
     # bulk create device
     await Device.objects.bulk_create(bulk_create_device)
 
-    # get device detail
+    # 取得在本次請求所新增的機台
     new_devices = await Device.objects.filter(
         project=project_create.id,
         flag=0
@@ -317,6 +302,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
                 name=events['message'],
                 category=events['category']
             )
+            # 暫存機台事件資料
             bulk_create_events.append(event)
 
     # bulk create events
@@ -328,8 +314,9 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
                 device=device.id,
                 name=aoi_measures,
             )
+            # 暫存機台aoi measure
             bulk_create_aoi_measure.append(aoi_measure)
-
+    # bulk create AoiMeasure
     await AoiMeasure.objects.bulk_create(bulk_create_aoi_measure)
 
     return project_create
@@ -376,9 +363,13 @@ async def PreprocessingData(project_id: int):
                     foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
                     # -- 以下設定以aoi為基準 用於將資料參數化
                     if FOXLINK_DATABASE == "aoi":
+                        # 確認此筆資料是否可用
                         query_useful = 'Code2'
+                        # 資料庫日期欄位
                         query_date = 'Code3'
+                        # 資料庫時間欄位
                         query_time = 'Code4'
+                        # 資料庫區間
                         query_block = 'Code6'
                     else:
                         query_useful = 'Code3'
@@ -865,14 +856,22 @@ async def UpdatePreprocessingData(project_id: int,user:str):
                 for measure in dvs.aoimeasures:
                     # sql = f"SELECT * FROM `{project[0].name}_{measure.name}_data` LIMIT 1;"
                     # -- edit by mike 2024/7/9
+                    # 取得機台IP和資料庫
                     FOXLINK_IP_DATABASE = await foxlink_dbs.choose_database(project[0].name,dvs.name)
+                    # 提取資料庫內容
                     FOXLINK_DATABASE = FOXLINK_IP_DATABASE.split('@')[1]
+                    # 嘗試連接
                     await foxlink_dbs[FOXLINK_IP_DATABASE].connect()
+                    # 正崴資料庫engine
                     foxlink_engine = await foxlink_dbs.foxlink_db_engine(FOXLINK_IP_DATABASE)
                     if FOXLINK_DATABASE == "aoi":
+                        # 確認此筆資料是否可用
                         query_useful = 'Code2'
+                        # 資料庫日期欄位
                         query_date = 'Code3'
+                        # 資料庫時間欄位
                         query_time = 'Code4'
+                        # 資料庫區間
                         query_block = 'Code6'
                     else:
                         query_useful = 'Code3'
@@ -1228,11 +1227,16 @@ async def UpdatePreprocessingData(project_id: int,user:str):
 
 @transaction()
 async def TrainingData(project_id: int, select_type: str):
+    # 訓練資料前處理
     input_data_dict = await foxlink_train.data_preprocessing_from_sql(project_id=project_id,select_type=select_type)
+    # 用於最後資料格式整理
     every_error_performance = {}
+    # 確認時間點
     timenow = get_ntz_now().strftime("%Y%m%d%H%M")
+    # 所有機台提取
     all_devices = await Device.objects.filter(project=project_id).all()
     devices = []
+    # 所有機台訓練資料提取
     for dvs in all_devices:
         device = await TrainPerformance.objects.filter(device = dvs.id,freq = select_type).all()
         if len(device) == 0 :
@@ -1444,6 +1448,7 @@ async def PredictData(project_id: int, select_type: str,user:str):
     with ntust_engine.connect() as conn:
         trans = conn.begin()
         try:
+            # 預測資料前處理
             input_data_dict, infos = await foxlink_predict.data_preprocessing_from_sql(project_id=project_id,select_type=select_type)
             for line in input_data_dict:
                 for dv in input_data_dict[line]:

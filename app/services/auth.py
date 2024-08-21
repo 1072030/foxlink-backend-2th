@@ -142,7 +142,7 @@ def get_manager_active_user(
     #     )
     return manager_user
 
-
+# 查看此使用者是否符合所需權限
 async def checkUserProjectPermission(project_id: int, user: User, permission: int):
     project = await Project.objects.filter(id=project_id).get_or_none()
     if project is None:
@@ -161,7 +161,7 @@ async def checkUserProjectPermission(project_id: int, user: User, permission: in
 
     return user
 
-
+# 確認使用者權限
 async def checkAdminPermission(user: User):
     if user.level == 4:
         return user
@@ -177,7 +177,7 @@ async def checkNewProjectPermission(user: User):
         raise HTTPException(
             status_code=HTTPStatus.HTTP_403_FORBIDDEN, detail="Permission Denied"
         )
-
+# 將此使用者權限內的專案id和專案名稱進行回傳
 async def checkUserSearchProjectPermission(user: User, permission: int):
     user_in_project = await ProjectUser.objects.select_related("project").filter(user=user.badge).all()
     if len(user_in_project) == 0:

@@ -59,12 +59,13 @@ class FoxlinkDatabasePool:
         return self.event_dbs[key]
 
     async def get_device_names(self,project_name: str):
-
+        # 取得所有事件英文和中文名稱
         full_cnames: List[str, str] = await self.device_db.fetch_all(
             f"SELECT device_ename, device_cname FROM `{FOXLINK_DEVICE_DB_NAME}`.`dev_func`"
         )
-
+        # 轉換為dict格式
         full_cnames: Dict[str, str] = {k: v for k, v in full_cnames}
+        # 依照正崴device_setting來取得此專案擁有的事件和機台
         query =  f"""
                 SELECT DISTINCT dsl.Device_Name,dsl.Dev_Func,dsl.Line 
                 from sfc.device_setting as dsl 
@@ -78,6 +79,8 @@ class FoxlinkDatabasePool:
                 "project": project_name,
             }
         )
+
+        # 重新整理資料格式
         project_detail = {}
         for i in project_names:
             name = i.Device_Name + "-" + i.Line
@@ -104,6 +107,12 @@ class FoxlinkDatabasePool:
                 "ename":ename[:-1],
                 "cname":cname[:-1]
             })
+        # final output:
+        #   "project":str, 專案名稱
+        #   "line":int,    線號
+        #   "device":str,  機台名稱
+        #   "ename":str,   事件英文名稱
+        #   "cname":str    事件中文名稱
         return data
     
     async def get_all_project_tabels(self):
@@ -116,6 +125,7 @@ class FoxlinkDatabasePool:
     
     # -- edit by mike 2024/7/9
     async def get_server_ip(self,project_name):
+        # 依照device_setting和facinfo表來找到對應專案所在的ip位置
         query = f"""
             select distinct fs.SUB_IP  
             from sfc.device_setting as dsl
@@ -134,7 +144,7 @@ class FoxlinkDatabasePool:
         elif server_ip[0] == "172.168.1.237":
             return FOXLINK_EVENT_DB_HOSTS[1]
         # ------- this settings is for debug. You need to delete it before deploy to server
-        # output ex: 172.168.1.231
+        # output ex: 172.168.1.231:3306
         return f"{server_ip[0]}:{DATABASE_PORT}"
     # -- edit by mike 2024/7/9
     async def get_device_db(self,project_name,device_name):

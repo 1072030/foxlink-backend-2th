@@ -11,10 +11,12 @@ from fastapi.responses import JSONResponse
 import subprocess
 # path:str
 
-
+# 完整備份功能
 async def FullBackup(path: str):
     # path = '/app/backup.sql'
+    # 從env資料表中提取路徑
     env = await Env.objects.filter(key="backup_path").get_or_none()
+    # 如果沒有路徑資料
     if env is None:
         mysqldump_cmd = f"mysqldump -h {DATABASE_HOST} -u {DATABASE_USER} -p{DATABASE_PASSWORD} {DATABASE_NAME} --lock-all-tables > {path}"
         await Env.objects.create(key="backup_path", value=path)

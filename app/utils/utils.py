@@ -135,14 +135,14 @@ def change_file_name(filename:str,position:str)->str:
 
 #     return day_shift_start.astimezone(pytz.utc), day_shift_end.astimezone(pytz.utc), night_shift_start.astimezone(pytz.utc), night_shift_end.astimezone(pytz.utc)
 
-
+# object格式回傳
 class BenignObj(object):
     def query(self):
         result = self.__dict__
         result["_columns"] = [key for key in self.__dict__.keys()]
         return result
 
-# 這我也不知道幹嘛的 應該是處理多個同時執行
+# 處理多個同時執行
 class AsyncEmitter:
     def __init__(self):
         self.jobs = []
