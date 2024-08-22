@@ -12,6 +12,7 @@ uploaded*
 *.sql
 /backup
 happened.json
+homepage.json
 # Distribution / packaging
 .Python
 build/

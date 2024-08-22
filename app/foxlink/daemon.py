@@ -49,6 +49,9 @@ if __name__ == "__main__":
         PredictData,
         UpdatePreprocessingData
     )
+    from app.services.statistics import (
+        HomePagePreProcessing
+    )
     from pymysql.err import (
         Warning, Error,
         InterfaceError, DataError, DatabaseError,
@@ -356,8 +359,11 @@ if __name__ == "__main__":
                     "recently":None,
                     "happened":0
                 }
-
-
+    # 首頁資料前處理
+    @transaction()
+    async def home_page_data_preprocessing():
+        await HomePagePreProcessing()
+        return
 
     ######### main #########
 
@@ -416,6 +422,8 @@ if __name__ == "__main__":
                 await daily_project_predict_handler()
 
                 await sync_foxlink_event_happened_handler()
+
+                await home_page_data_preprocessing()
 
                 end_time = time.perf_counter()
 

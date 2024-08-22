@@ -8,7 +8,8 @@ from app.core.database import (
     PredictResult,
     ErrorFeature,
     TrainPerformance,
-    Env
+    Env,
+    get_ntz_now
 )
 from datetime import datetime, timedelta
 import pandas as pd
@@ -129,6 +130,165 @@ async def GetPredictResult(project_name: Optional[str] = None, line:Optional[int
                 })
     return formatData
 
+# 將主畫面所需資料進行處理並存於json檔案中
+# 主要是/foxlink/daemon.py 裡面使用的function
+async def HomePagePreProcessing():
+    # 取得所有專案的資料(devices和events)
+    projects = await Project.objects.select_related(["devices","devices__events"]).all()
+    # 回傳資料格式
+    format_data = {}
+    allFirstResultData = []
+
+    # 取得發生次數json file
+    with open('happened.json','r') as happened_json:
+        happened_ori_data = json.load(happened_json)
+    
+    # 開始進行資料彙整
+    for project in projects:
+
+        # 以專案名稱來當作key值
+        if project.name not in format_data.keys():
+            format_data[project.name] = {}
+        
+        # 取得所有不重複的線號
+        devices = project.devices
+        devices_line = set([device.line for device in devices])
+        
+        # 以線號當作key值
+        for line in devices_line:
+            if line not in format_data[project.name].keys():
+                format_data[project.name][line] = {}
+        
+        # 以機台來查詢事件是否經過預測
+        for dvs in devices:
+            # 取得所有此機台的事件
+            events = dvs.events
+            for event in events:
+
+                # 確認此事件有被預測
+                checkPredEvent = await PredictResult.objects.filter(device=dvs.id,event=event.id).order_by('-id').limit(1).get_or_none()
+
+                # check
+                if checkPredEvent is None:
+                    continue
+                
+                # 取得最新的預測資料
+                firstResultData_week = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=1).order_by('-id').limit(1).get_or_none()
+                firstResultData_day = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=0).order_by('-id').limit(1).get_or_none()
+                
+                # 取得此事件的訓練內容
+                firstResultData_week_trainperformances = await TrainPerformance.objects.filter(device=dvs.id, event=event.id, freq="week").order_by('-id').limit(1).get_or_none()
+                firstResultData_day_trainperformances = await TrainPerformance.objects.filter(device=dvs.id, event=event.id, freq="day").order_by('-id').limit(1).get_or_none()
+                
+                # arf來判斷是該事件為日預測或週預測
+                if firstResultData_week_trainperformances.arf > firstResultData_day_trainperformances.arf:
+                    allFirstResultData.append(firstResultData_week)
+                else:
+                    allFirstResultData.append(firstResultData_day)
+
+            if len(allFirstResultData) != 0:
+                # -- 儲存資料變數
+                total_day_stable = []
+                total_day_unstable = []
+                total_week_stable = []
+                total_week_unstable = []
+                # -- 儲存資料變數
+                day_stable_happened = 0
+                day_unstable_happened = 0
+                week_stable_happened = 0
+                week_unstable_happened = 0
+                # -- 
+                for data in allFirstResultData:
+                    # 確認此事件是否發生
+                    check_happened = None
+                    for happened_data in happened_ori_data["data"]:
+                        if data.event.id == happened_data["event_id"]:
+                            if happened_data["happened"] != 0:
+                                check_happened = True
+                            else:
+                                check_happened = False
+
+                    # 日穩定
+                    if data.pred_type == False and data.pred == '0':
+                        total_day_stable.append({f"{data.event.id}":check_happened})
+                        if check_happened == True:
+                            day_stable_happened += 1
+                    # 日異常
+                    elif data.pred_type == False and data.pred == '1':
+                        total_day_unstable.append({f"{data.event.id}":check_happened})
+                        if check_happened == True:
+                            day_unstable_happened += 1
+                    # 週穩定
+                    elif data.pred_type == True and data.pred == '0':
+                        total_week_stable.append({f"{data.event.id}":check_happened})
+                        if check_happened == True:
+                            week_stable_happened += 1
+                    # 週異常
+                    else:
+                        total_week_unstable.append({f"{data.event.id}":check_happened})
+                        if check_happened == True:
+                            week_unstable_happened += 1
+
+            # 以"機台英文名稱@機台中文名稱"當作key值
+            if dvs.name not in format_data[project.name][dvs.line].keys():
+                format_data[project.name][dvs.line][dvs.name + "@" + dvs.cname] = {}
+
+            # 回傳格式
+            format_data[project.name][dvs.line][dvs.name + "@" + dvs.cname] = {
+                "event_ids": total_day_stable + total_day_unstable + total_week_stable + total_week_unstable,
+                "total_day_stable": len(total_day_stable) + len(total_day_unstable),
+                "total_day_happened": day_stable_happened + day_unstable_happened,
+                "total_week_stable": len(total_week_stable) + len(total_week_unstable),
+                "total_week_happened": week_stable_happened + week_unstable_happened,
+                "day_stable": len(total_day_stable),
+                "day_stable_happened":day_stable_happened,
+                "day_unstable":len(total_day_unstable),
+                "day_unstable_happened":day_unstable_happened,
+                "week_stable":len(total_week_stable),
+                "week_stable_happened":week_stable_happened,
+                "week_unstable":len(total_week_unstable),
+                "week_unstable_happened" : week_unstable_happened
+            }
+    # 儲存於homepage.json file
+    with open('homepage.json','w') as jsonfile:
+        result = {
+            "data":format_data,
+            "timestamp":f'{get_ntz_now()+timedelta(hours=8)}'
+        }
+        json.dump(result,jsonfile)
+
+    # 詳細資料可以到homepage.json查看
+    # example output:
+    # {
+    #   "data":{
+    #       "專案名稱":{
+    #           "線號":{
+    #               "機台英文名稱@機台中文名稱":{
+    #                   "event_ids": List,
+    #                   "total_day_count": int ,
+    #                   "total_week_count": int,
+    #                   "day_stable": int ,
+    #                   "day_unstable":int ,
+    #                   "week_stable": int,
+    #                   "week_unstable": int
+    #               }
+    #           }
+    #       }
+    #   }
+    # }
+    return
+
+async def GetHomePageData(project_name_list:List):
+    with open('homepage.json','r') as home_page_data:
+        home_page_data = json.load(home_page_data)     
+
+    all_projects = home_page_data["data"].keys()
+    format_data = {}
+
+    for i in project_name_list:
+        if i in all_projects:
+            format_data[i] = home_page_data["data"][i]
+    return format_data
 
 async def GetPredictCompareSearch(project_name: List, select_type: str, line: int, start_time: datetime, end_time: datetime):
     formatData = []

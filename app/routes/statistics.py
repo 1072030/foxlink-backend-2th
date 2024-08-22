@@ -17,7 +17,9 @@ from app.services.auth import (
 from app.services.statistics import (
     GetPredictResult,
     GetPredictCompareSearch,
-    GetPredictCompareAnalysis
+    GetPredictCompareAnalysis,
+    # HomePagePreProcessing,
+    GetHomePageData
 )
 from datetime import datetime
 router = APIRouter(prefix="/statistics")
@@ -68,7 +70,14 @@ async def get_predict_result(project_name: Optional[str] = None, line:Optional[i
             status_code=status.HTTP_400_BAD_REQUEST, detail=repr(e)
         )
 
-
+@router.get("/homepage", tags=["statistics"])
+async def get_all_project_statistics(user: User = Depends(get_current_user())):
+    """
+    給前端請求伺服器資料列表
+    """
+    project_id_list, project_name_list = await checkUserSearchProjectPermission(user, UserLevel.project_worker.value)
+    print(project_name_list)
+    return await GetHomePageData(project_name_list)
 
 @router.get("/predict-compare-list", tags=["statistics"])
 async def get_predict_compare_list(user: User = Depends(get_current_user())):
