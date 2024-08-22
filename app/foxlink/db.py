@@ -174,7 +174,24 @@ class FoxlinkDatabasePool:
 
         return f"{server_ip}@{str(device_db).lower()}"
 
-
+    # 
+    async def get_real_line_names(self,project,line):
+        query = f"""
+        select distinct  pwrl.REAL_LINE  from device_setting as ds 
+        join project_with_real_line as pwrl on ds.Project = pwrl.PROJECT_CODE 
+        where  
+            ds.Project = :project and 
+            pwrl.LINE_NO = :line
+        """
+        query_db = await self.device_db.fetch_one(
+            query = query,
+            values = {
+                "project":project,
+                "line":line
+            }
+        )
+        return query_db[0]
+    
     async def connect(self):
         db_connect_routines = [db.connect() for db in self.event_dbs.values()]
         await asyncio.gather(*db_connect_routines)

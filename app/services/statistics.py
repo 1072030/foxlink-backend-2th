@@ -11,6 +11,9 @@ from app.core.database import (
     Env,
     get_ntz_now
 )
+from app.foxlink.db import (
+    foxlink_dbs
+)
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
@@ -153,16 +156,24 @@ async def HomePagePreProcessing():
         # 取得所有不重複的線號
         devices = project.devices
         devices_line = set([device.line for device in devices])
-        
+
+
+
         # 以線號當作key值
         for line in devices_line:
-            if line not in format_data[project.name].keys():
-                format_data[project.name][line] = {}
+            # get line real names
+            real_name = await foxlink_dbs.get_real_line_names(project.name,line)
+            line_name_combine = f"{line}@{real_name}"
+            if line_name_combine not in format_data[project.name].keys():
+                format_data[project.name][line_name_combine] = {}
         
         # 以機台來查詢事件是否經過預測
         for dvs in devices:
             # 取得所有此機台的事件
             events = dvs.events
+            real_name = await foxlink_dbs.get_real_line_names(project.name,dvs.line)
+            output_line_format = f"{dvs.line}@{real_name}"
+            output_device_format = f"{dvs.name}@{dvs.cname}"
             for event in events:
 
                 # 確認此事件有被預測
@@ -230,22 +241,27 @@ async def HomePagePreProcessing():
                             week_unstable_happened += 1
 
             # 以"機台英文名稱@機台中文名稱"當作key值
-            if dvs.name not in format_data[project.name][dvs.line].keys():
-                format_data[project.name][dvs.line][dvs.name + "@" + dvs.cname] = {}
+            if output_device_format not in format_data[project.name][output_line_format].keys():
+                format_data[project.name][output_line_format][output_device_format] = {}
 
             # 回傳格式
-            format_data[project.name][dvs.line][dvs.name + "@" + dvs.cname] = {
+            format_data[project.name][output_line_format][output_device_format] = {
                 "event_ids": total_day_stable + total_day_unstable + total_week_stable + total_week_unstable,
-                "total_day_stable": len(total_day_stable) + len(total_day_unstable),
-                "total_day_happened": day_stable_happened + day_unstable_happened,
-                "total_week_stable": len(total_week_stable) + len(total_week_unstable),
-                "total_week_happened": week_stable_happened + week_unstable_happened,
+                "total_stable": len(total_day_stable) + len(total_week_stable),
+                "total_unstable": len(total_day_unstable) + len(total_week_unstable),
+                
+                "total_stable_happened": day_stable_happened + week_stable_happened,
+                "total_unstable_happened": day_unstable_happened + week_unstable_happened,
+
                 "day_stable": len(total_day_stable),
                 "day_stable_happened":day_stable_happened,
+
                 "day_unstable":len(total_day_unstable),
                 "day_unstable_happened":day_unstable_happened,
+
                 "week_stable":len(total_week_stable),
                 "week_stable_happened":week_stable_happened,
+
                 "week_unstable":len(total_week_unstable),
                 "week_unstable_happened" : week_unstable_happened
             }
