@@ -153,6 +153,7 @@ class FoxlinkPredict:
                         date >= '{predict_date}'
                 """
                 target_Y = pd.read_sql(sql, self.ntust_engine)
+                target_Y = target_Y.drop_duplicates(subset=['date'], keep='first')
                 target_Y.rename(columns={'happened':row.name}, inplace=True)
                 target_feature = target_Y.drop('operation_day', axis=1)
 
@@ -226,16 +227,28 @@ class FoxlinkPredict:
                     if others.name == row.name:
                         continue
                     else:
+                        # sql = f"""
+                        # SELECT e.date, p.category, e.happened 
+                        # FROM error_feature as e 
+                        # JOIN project_events as p 
+                        # ON p.id=e.event 
+                        # WHERE 
+                        #     e.device = {dvs.id} and 
+                        #     e.event = {others.id} and 
+                        #     e.project={project_id} and
+                        #     e.date >= '{predict_date}';
+                        # """
                         sql = f"""
-                        SELECT e.date, p.category, e.happened 
-                        FROM error_feature as e 
-                        JOIN project_events as p 
-                        ON p.id=e.event 
-                        WHERE 
-                            e.device = {dvs.id} and 
-                            e.event = {others.id} and 
-                            e.project={project_id} and
-                            e.date >= '{predict_date}';
+                            SELECT e.date, p.category, MIN(e.happened) as happened
+                            FROM error_feature as e
+                            JOIN project_events as p
+                            ON p.id = e.event
+                            WHERE 
+                                e.device = {dvs.id} and 
+                                e.event = {others.id} and 
+                                e.project = {project_id} and
+                                e.date >= '{predict_date}'
+                            GROUP BY e.date, p.category;
                         """
                         other_error_happened = pd.read_sql(sql, self.ntust_engine) # 預測目標異常的特徵
                         if other_error_happened.empty:
@@ -284,8 +297,14 @@ class FoxlinkPredict:
                     input_data_dict[dvs.line][dvs.name] = {}
                     infos[dvs.line][dvs.name] = {}
 
-                input_data_dict[dvs.line][dvs.name][row.name] = input_data
-                infos[dvs.line][dvs.name][row.name] = trained_info[['device', 'event', 'created_date', 'actual_cutpoint', 'threshold']]
+                if row.category not in input_data_dict[dvs.line][dvs.name]:
+                    input_data_dict[dvs.line][dvs.name][row.category] = {}
+                    infos[dvs.line][dvs.name][row.category] = {}
+                input_data_dict[dvs.line][dvs.name][row.category][row.name] = input_data
+    
+
+                # input_data_dict[dvs.line][dvs.name][row.name] = input_data
+                infos[dvs.line][dvs.name][row.category][row.name] = trained_info[['device', 'event', 'created_date', 'actual_cutpoint', 'threshold']]
         return input_data_dict, infos
     
     def fit_model_data_preprocessing(self, df, scaler=True):

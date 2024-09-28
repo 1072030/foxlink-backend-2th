@@ -166,6 +166,7 @@ class FoxlinkDatabasePool:
             }
         )
         # output ex: AOI
+        # print(f"project:{project_name},device:{device_name},query:{query_db}")
         return query_db[0]
     # -- edit by mike 2024/7/9
     async def choose_database(self, project_name,device_name):

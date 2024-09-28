@@ -62,6 +62,7 @@ async def authenticate_user(badge: str):
 def get_current_user():
     async def driver(token: str = Depends(oauth2_scheme)):
         expired = False
+        # print(token)
         try:
             payload = jwt.decode(
                 token,

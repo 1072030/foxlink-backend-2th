@@ -39,6 +39,7 @@ if __name__ == "__main__":
         api_db,
         Env,
         Project,
+        Device,
         AuditActionEnum,
         AuditLogHeader,
         PredictResult,
@@ -155,6 +156,11 @@ if __name__ == "__main__":
         projects = await Project.objects.all()
         project_ids = []
         for i in projects:
+            #確認專案是否有新增機台
+            devices = await Device.objects.filter(project=i.id).all()
+            if not devices:
+                continue
+
             # 確定專案前處理有成功執行
             checkPreProcessLogs = await AuditLogHeader.objects.filter(
                 action=AuditActionEnum.DATA_PREPROCESSING_SUCCEEDED.value,

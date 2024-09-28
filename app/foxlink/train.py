@@ -254,11 +254,13 @@ class FoxlinkTrain:
                 pnsf = list(pf|sf)
                 target_feature.reset_index(inplace=True)
                 input_data = pd.merge(target_feature[['date',row.name]], target_feature[['date']+pnsf])
+                # input_data = pd.merge(target_feature[['date', row.name]], target_feature[['date'] + pnsf], on='date', how='outer')
 
                 if dvs.name not in input_data_dict:
                     input_data_dict[dvs.name] = {}
-                    
-                input_data_dict[dvs.name][row.name] = input_data
+                if row.category not in input_data_dict[dvs.name]:
+                    input_data_dict[dvs.name][row.category] = {}
+                input_data_dict[dvs.name][row.category][row.name] = input_data
     
         return input_data_dict
     

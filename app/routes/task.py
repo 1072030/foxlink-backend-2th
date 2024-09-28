@@ -114,14 +114,14 @@ async def checking_task():
                     elif e.detail == "aoi_measure does not start from the same date":
                         body = f'{project.name} :新增機台之aoi_measure資料量不一致'
                     else:
-                        body = f'{project.name} :新增機台失敗'
+                        body = f'{project.name} :新增機台前處理失敗'
                 else:
                     if e.detail == "Not enough data.":
                         body = f'{args} :新增機台資料量過少，請重新選擇起始日期'
                     elif e.detail == "aoi_measure does not start from the same date":
                         body = f'{args} :新增機台之aoi_measure資料量不一致'
                     else:
-                        body = f'{args} :新增機台失敗'
+                        body = f'{args} :新增機台前處理失敗'
 
                 # 設置郵件內容
                 subject = "設備預知保養系統通知"
@@ -172,6 +172,36 @@ async def checking_task():
                     project=str(args),
                     description=f'{args} detail:{e}'
                 )
+                project = await Project.objects.filter(id = args).get_or_none()
+                pjt_users = await ProjectUser.objects.filter(project=args,permission__gte=3).select_related(["user"]).all()
+                print(pjt_users)
+
+                recipients = []
+                for pjt_user in pjt_users:
+                    recipients.append(pjt_user.user.email)
+                    
+                if project:
+                    body = f'{project.name} :新增機台日訓練失敗'
+                else:    
+                    body = f'{args} :新增機台日訓練失敗'
+                
+                 # 設置郵件內容
+                subject = "設備預知保養系統通知"
+                msg = MIMEText(body, 'plain', 'utf-8')
+                msg['Subject'] = Header(subject, 'utf-8')
+                msg['From'] = "Joey_Chen@cn.foxlink.com.tw"
+                # msg['To'] = ", ".join(recipients)
+
+                # 發送郵件
+                smtp_server = "192.168.64.249"  # SMTP 伺服器
+                smtp_port = 25  #  SMTP 端口
+
+                with smtplib.SMTP(smtp_server, smtp_port) as smtpObj:
+                    smtpObj.ehlo()
+                    smtpObj.sendmail(msg['From'], recipients, msg.as_string())
+                    smtpObj.quit()
+
+                print("郵件發送成功")
                 pending_task.status = TaskStatus.Failure.value
                 await pending_task.update()
 
@@ -204,6 +234,36 @@ async def checking_task():
                     project=str(args),
                     description=f'{args} detail:{e}'
                 )
+                project = await Project.objects.filter(id = args).get_or_none()
+                pjt_users = await ProjectUser.objects.filter(project=args,permission__gte=3).select_related(["user"]).all()
+                print(pjt_users)
+
+                recipients = []
+                for pjt_user in pjt_users:
+                    recipients.append(pjt_user.user.email)
+                    
+                if project:
+                    body = f'{project.name} :新增機台週訓練失敗'
+                else:    
+                    body = f'{args} :新增機台週訓練失敗'
+                
+                 # 設置郵件內容
+                subject = "設備預知保養系統通知"
+                msg = MIMEText(body, 'plain', 'utf-8')
+                msg['Subject'] = Header(subject, 'utf-8')
+                msg['From'] = "Joey_Chen@cn.foxlink.com.tw"
+                # msg['To'] = ", ".join(recipients)
+
+                # 發送郵件
+                smtp_server = "192.168.64.249"  # SMTP 伺服器
+                smtp_port = 25  #  SMTP 端口
+
+                with smtplib.SMTP(smtp_server, smtp_port) as smtpObj:
+                    smtpObj.ehlo()
+                    smtpObj.sendmail(msg['From'], recipients, msg.as_string())
+                    smtpObj.quit()
+
+                print("郵件發送成功")
 
                 pending_task.status = TaskStatus.Failure.value
                 await pending_task.update()
@@ -235,6 +295,36 @@ async def checking_task():
                 #     user='admin',
                 #     description=f'{args} detail:{e}'
                 # )
+                project = await Project.objects.filter(id = args).get_or_none()
+                pjt_users = await ProjectUser.objects.filter(project=args,permission__gte=3).select_related(["user"]).all()
+                print(pjt_users)
+
+                recipients = []
+                for pjt_user in pjt_users:
+                    recipients.append(pjt_user.user.email)
+                    
+                if project:
+                    body = f'{project.name} :新增機台日預測失敗'
+                else:    
+                    body = f'{args} :新增機台日預測失敗'
+                
+                 # 設置郵件內容
+                subject = "設備預知保養系統通知"
+                msg = MIMEText(body, 'plain', 'utf-8')
+                msg['Subject'] = Header(subject, 'utf-8')
+                msg['From'] = "Joey_Chen@cn.foxlink.com.tw"
+                # msg['To'] = ", ".join(recipients)
+
+                # 發送郵件
+                smtp_server = "192.168.64.249"  # SMTP 伺服器
+                smtp_port = 25  #  SMTP 端口
+
+                with smtplib.SMTP(smtp_server, smtp_port) as smtpObj:
+                    smtpObj.ehlo()
+                    smtpObj.sendmail(msg['From'], recipients, msg.as_string())
+                    smtpObj.quit()
+
+                print("郵件發送成功")
 
                 pending_task.status = TaskStatus.Failure.value
                 await pending_task.update()
@@ -266,6 +356,36 @@ async def checking_task():
                 #     user='admin',
                 #     description=f'{args} detail:{e}'
                 # )
+                project = await Project.objects.filter(id = args).get_or_none()
+                pjt_users = await ProjectUser.objects.filter(project=args,permission__gte=3).select_related(["user"]).all()
+                print(pjt_users)
+
+                recipients = []
+                for pjt_user in pjt_users:
+                    recipients.append(pjt_user.user.email)
+                    
+                if project:
+                    body = f'{project.name} :新增機台週預測失敗'
+                else:    
+                    body = f'{args} :新增機台週預測失敗'
+                
+                 # 設置郵件內容
+                subject = "設備預知保養系統通知"
+                msg = MIMEText(body, 'plain', 'utf-8')
+                msg['Subject'] = Header(subject, 'utf-8')
+                msg['From'] = "Joey_Chen@cn.foxlink.com.tw"
+                # msg['To'] = ", ".join(recipients)
+
+                # 發送郵件
+                smtp_server = "192.168.64.249"  # SMTP 伺服器
+                smtp_port = 25  #  SMTP 端口
+
+                with smtplib.SMTP(smtp_server, smtp_port) as smtpObj:
+                    smtpObj.ehlo()
+                    smtpObj.sendmail(msg['From'], recipients, msg.as_string())
+                    smtpObj.quit()
+
+                print("郵件發送成功")
 
                 pending_task.status = TaskStatus.Failure.value
                 await pending_task.update()

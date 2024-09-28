@@ -141,17 +141,36 @@ async def SearchProjectDevices(project_name: str):
     data = await foxlink_dbs.get_device_names(project_name=project_name)
 
     devices = await Project.objects.filter(name = project_name).select_related(["devices"]).get_or_none()
+    foxlink_device_map = {(dev['device'], dev['line']): dev for dev in data}
     # 確認本地端機台是否已經被選取過
     if devices is None:
         for dev in data:
             dev['select'] = 0
     else:
+        ntust_device_map = {(device.name, device.line): device for device in devices.devices}
         for dev in data:
-            dev['select'] = 0
-            for device in devices.devices:
-                if device.name == dev['device'] and device.line==dev['line']:
-                    dev['select'] = 1
-                    break
+            # dev['select'] = 0
+            if (dev['device'], dev['line']) in ntust_device_map:
+                dev['select'] = 1
+            else:
+                dev['select'] = 0
+            # for device in devices.devices:
+            #     if device.name == dev['device'] and device.line==dev['line']:
+            #         dev['select'] = 1
+            #         break
+        for device in devices.devices:
+            if (device.name, device.line) not in foxlink_device_map:
+                missing_device = {
+                    'project':project_name,
+                    'line': device.line,
+                    'device': device.name,
+                    'cname':device.cname,
+                    'ename':device.ename,
+                    'select': 1}
+                data.append(missing_device)
+            
+
+                    
     
     return data
 
@@ -241,6 +260,21 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
             ORDER BY ID DESC
             """
         )
+        # stmt = (
+        #     f"""
+        #     SELECT Device_Name, Line, Message, Category, ID
+        #     FROM (
+        #         SELECT Device_Name, Line, Message, Category, ID, 
+        #             ROW_NUMBER() OVER (PARTITION BY Device_Name, Line, Message, Category ORDER BY ID DESC) AS rn
+        #         FROM {FOXLINK_IP_DATABASE.split('@')[1]}.`{project_name}_event`
+        #         WHERE 
+        #             Device_Name = '{selected.device}' 
+        #             AND Line = {selected.line} 
+        #             AND (Category >= 1 AND Category <= 199)
+        #     ) sub
+        #     WHERE rn = 1
+        #     """
+        # )
         try:
             foxlink = await foxlink_dbs[FOXLINK_IP_DATABASE].fetch_all(query=stmt)
         # --
@@ -255,7 +289,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
                 else:
                     continue
                 # 整理資料格式 
-                name = i.Device_Name + "-" + i.Line + "-" + selected.cname
+                name = i.Device_Name + "-" + i.Line + "-" + selected.cname + "-" + selected.ename
                 if name not in event_data.keys():
                     event_data[name] = event_data.get(
                         name, [{"message": i.Message, "category": i.Category}])
@@ -278,6 +312,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
             name=content.split('-')[0],
             line=content.split('-')[1],
             cname=content.split('-')[2],
+            ename=content.split('-')[3],
             project=project_create.id,
             flag=False,
             start_date = start_date
@@ -296,7 +331,7 @@ async def AddNewProjectEvents(dto: List[NewProjectDto],start_date: date):
 
     for device in new_devices:
         # check selected events
-        for events in event_data[device.name + '-' + str(device.line) + '-' + device.cname]:
+        for events in event_data[device.name + '-' + str(device.line) + '-' + device.cname + '-' + device.ename]:
             event = ProjectEvent(
                 device=device.id,
                 name=events['message'],
@@ -425,6 +460,7 @@ async def PreprocessingData(project_id: int):
                                         ({query_date} = '{dr[index]}' AND {query_time} <= '07:40:00')
                                         AND {query_useful} < 3 ;
                                 """
+                                
                             else:
                                 sql = f"""
                                     SELECT ID,{query_date},{query_time},{query_block} FROM `{project[0].name}_{measure.name}_data`
@@ -433,6 +469,7 @@ async def PreprocessingData(project_id: int):
                                         ({query_date} > '{dr[index-1]}' AND {query_date} < '{dr[index]}') OR
                                         ({query_date} = '{dr[index]}' AND {query_time} <= '07:40:00')
                                 """
+                                
                             print(
                                 f"{get_ntz_now()} : starting query {index} {dvs.name} {measure.name} {dr[index - 1]} to {dr[index]}")
                             tmp_data = pd.read_sql(sql, foxlink_engine)
@@ -573,9 +610,11 @@ async def PreprocessingData(project_id: int):
                     aoi_fea['date'] = pd.date_range(
                         aoi['date'].min(), now_workday, closed='left')
                     aoi_fea['date'] = aoi_fea['date'].dt.date
+                    aoi_fea = pd.merge(aoi_fea, op_day, on='date', how='outer')
+                    aoi_fea = aoi_fea.sort_values(by='date')
                     aoi_fea['device'] = dvs.id
                     aoi_fea['aoi_measure'] = measure.id
-                    aoi_fea = pd.merge(aoi_fea, op_day, on='date', how='outer')
+                    # aoi_fea = pd.merge(aoi_fea, op_day, on='date', how='outer')
 
                     aoi_fea = pd.merge(aoi_fea, aoi.groupby(['date']).ID.count(
                     ).reset_index().rename(columns={'ID': 'pcs'}), on='date', how='outer')
@@ -595,6 +634,7 @@ async def PreprocessingData(project_id: int):
                     aoi_fea['pcs'] = aoi_fea['pcs'].astype(int)
                     aoi_fea['ng_num'] = aoi_fea['ng_num'].astype(int)
                     aoi_fea['operation_day'] = aoi_fea['operation_day'].astype(int)
+                    # aoi_fea = aoi_fea.sort_values(by='date')
 
                     print("starting input aoi_feature...")
                     print(aoi_fea)
@@ -1249,81 +1289,82 @@ async def TrainingData(project_id: int, select_type: str):
         trans = conn.begin()
         try:
             for dv in input_data_dict:
-                for events in tqdm(input_data_dict[dv]):
-                    temp = []
-                    count = 0
-                    for t in foxlink_train.Threshold:
-                        count += 1
-                        print(dv + ' '+events + ' T = ', t)
-                        df = input_data_dict[dv][events]
-                        if select_type == "week" and count == 1:
-                            df['date'] = pd.to_datetime(df['date'])
-                            df.set_index('date', inplace=True)
-                            # df = df.resample('W').sum()
-                            df = df.resample('W').agg(
-                                {col: foxlink_train.choose_agg_func(col) for col in df.columns})
-                        # 透過device與Message去Map出Category
-                        for i in devices:
-                            if dv == i.name:
-                                device_id = i.id
-                        event = await ProjectEvent.objects.filter(name=events, device=device_id).get()
-                        ca = foxlink_train.map_category(device_id, event.id)
+                for category in tqdm(input_data_dict[dv]):
+                    for events in input_data_dict[dv][category]:
+                        temp = []
+                        count = 0
+                        for t in foxlink_train.Threshold:
+                            count += 1
+                            print(dv + ' '+events + ' T = ', t)
+                            df = input_data_dict[dv][category][events]
+                            if select_type == "week" and count == 1:
+                                df['date'] = pd.to_datetime(df['date'])
+                                df.set_index('date', inplace=True)
+                                # df = df.resample('W').sum()
+                                df = df.resample('W').agg(
+                                    {col: foxlink_train.choose_agg_func(col) for col in df.columns})
+                            # 透過device與Message去Map出Category
+                            for i in devices:
+                                if dv == i.name:
+                                    device_id = i.id
+                            event = await ProjectEvent.objects.filter(name=events, device=device_id,category=category).get()
+                            ca = foxlink_train.map_category(device_id, event.id)
+                            try:
+                                # 貼標
+                                df, lights, cutting_point = foxlink_train.light_labeling(
+                                    df, events=events, Threshold=t)
+                                # 把欄位提取出來
+                                used_col = df.columns.to_list()
+                                used_col.remove('light')
+                                # 訓練模型前的最後資料前處理
+                                foxlink_train.training_data_preprocessing(df)
+                                # 此event屬於特殊狀況無法訓練時
+                                # if not preprocessing_check:
+                                #     continue
+                                # 挑選了哪些模型
+                                es = foxlink_train.select_model()
+                                # 訓練模型
+                                model, report = foxlink_train.stacking(es)
+                                # 計算評估指標
+                                acc, red_recall, red_f1, arf = foxlink_train.ARF(report)
+                                # 存至暫存器
+                                temp.append((t, arf))
+                                if dv not in every_error_performance:
+                                    every_error_performance[dv] = {}
+                                if category not in every_error_performance[dv]:
+                                    every_error_performance[dv][category] = {}
+                                if t not in every_error_performance[dv][category]:
+                                    every_error_performance[dv][category][t] = {'device': device_id,
+                                                                            'event': event.id,
+                                                                            'threshold': t,
+                                                                            'actual_cutpoint': cutting_point,
+                                                                            'model': model,
+                                                                            'arf': arf,
+                                                                            'acc': acc,
+                                                                            'red_recall': red_recall,
+                                                                            'red_f1score': red_f1,
+                                                                            'used_col': str(used_col),
+                                                                            'created_date': timenow}
+                            except:
+                                print('無法訓練')
                         try:
-                            # 貼標
-                            df, lights, cutting_point = foxlink_train.light_labeling(
-                                df, events=events, Threshold=t)
-                            # 把欄位提取出來
-                            used_col = df.columns.to_list()
-                            used_col.remove('light')
-                            # 訓練模型前的最後資料前處理
-                            foxlink_train.training_data_preprocessing(df)
-                            # 此event屬於特殊狀況無法訓練時
-                            # if not preprocessing_check:
-                            #     continue
-                            # 挑選了哪些模型
-                            es = foxlink_train.select_model()
-                            # 訓練模型
-                            model, report = foxlink_train.stacking(es)
-                            # 計算評估指標
-                            acc, red_recall, red_f1, arf = foxlink_train.ARF(report)
-                            # 存至暫存器
-                            temp.append((t, arf))
-                            if dv not in every_error_performance:
-                                every_error_performance[dv] = {}
-                            if events not in every_error_performance[dv]:
-                                every_error_performance[dv][events] = {}
-                            if t not in every_error_performance[dv][events]:
-                                every_error_performance[dv][events][t] = {'device': device_id,
-                                                                        'event': event.id,
-                                                                        'threshold': t,
-                                                                        'actual_cutpoint': cutting_point,
-                                                                        'model': model,
-                                                                        'arf': arf,
-                                                                        'acc': acc,
-                                                                        'red_recall': red_recall,
-                                                                        'red_f1score': red_f1,
-                                                                        'used_col': str(used_col),
-                                                                        'created_date': timenow}
+                            # 找最佳ARF的Threshold
+                            best_t = sorted(temp, key=lambda x: (x[1]), reverse=True)[0][0]
+                            best_model = every_error_performance[dv][category][best_t]['model']
+                            # 儲存模型
+                            if select_type == 'week':
+                                joblib.dump(
+                                    best_model, f'/app/model_week/{dv}_{ca}_{timenow}.pkl')
+                            else:
+                                joblib.dump(best_model, f'/app/model/{dv}_{ca}_{timenow}.pkl')
+
+                            every_error_performance[dv][category][best_t]['freq'] = select_type
+                            # 寫入資料庫      
+                            pd.DataFrame(every_error_performance[dv][category][best_t], index=[0]).drop(
+                                columns='model').to_sql('train_performances', con=conn, if_exists='append', index=False)
+
                         except:
-                            print('無法訓練')
-                    try:
-                        # 找最佳ARF的Threshold
-                        best_t = sorted(temp, key=lambda x: (x[1]), reverse=True)[0][0]
-                        best_model = every_error_performance[dv][events][best_t]['model']
-                        # 儲存模型
-                        if select_type == 'week':
-                            joblib.dump(
-                                best_model, f'/app/model_week/{dv}_{ca}_{timenow}.pkl')
-                        else:
-                            joblib.dump(best_model, f'/app/model/{dv}_{ca}_{timenow}.pkl')
-
-                        every_error_performance[dv][events][best_t]['freq'] = select_type
-                        # 寫入資料庫      
-                        pd.DataFrame(every_error_performance[dv][events][best_t], index=[0]).drop(
-                            columns='model').to_sql('train_performances', con=conn, if_exists='append', index=False)
-
-                    except:
-                        await PredTarget.objects.filter(device=device_id, event=event.id).update(target=2)
+                            await PredTarget.objects.filter(device=device_id, event=event.id).update(target=2)
             trans.commit()
         except Exception as e:
             trans.rollback()
@@ -1452,11 +1493,11 @@ async def PredictData(project_id: int, select_type: str,user:str):
             input_data_dict, infos = await foxlink_predict.data_preprocessing_from_sql(project_id=project_id,select_type=select_type)
             for line in input_data_dict:
                 for dv in input_data_dict[line]:
-    
-                    for events in tqdm(input_data_dict[line][dv]):
-                            device_id = int(str(infos[line][dv][events]['device']).split()[1])
+                    for category in tqdm(input_data_dict[line][dv]):
+                        for events in input_data_dict[line][dv][category]:
+                            device_id = int(str(infos[line][dv][category][events]['device']).split()[1])
 
-                            df = input_data_dict[line][dv][events]
+                            df = input_data_dict[line][dv][category][events]
                             if select_type == 'week':
                                 try:
                                     df['date1'] = pd.to_datetime(df['date'].iloc[:, 0])
@@ -1469,10 +1510,10 @@ async def PredictData(project_id: int, select_type: str,user:str):
                                     {col: foxlink_predict.choose_agg_func(col) for col in df.columns})
                                 df['date'] = df.index
 
-                            event = infos[line][dv][events]['event'].values[0]
+                            event = infos[line][dv][category][events]['event'].values[0]
 
                             time = pd.to_datetime(
-                                infos[line][dv][events]['created_date'].values[0]).strftime('%Y%m%d%H%M')
+                                infos[line][dv][category][events]['created_date'].values[0]).strftime('%Y%m%d%H%M')
                             X = foxlink_predict.fit_model_data_preprocessing(df)
                             model = foxlink_predict.map_model(
                                 dv, device_id, event, time, select_type)

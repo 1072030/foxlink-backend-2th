@@ -350,6 +350,7 @@ class Device(ormar.Model):
     line: int = ormar.Integer(nullable=False)
     name: str = ormar.String(max_length=100, nullable=False)
     cname:str = ormar.String(max_length=100, nullable=False)
+    ename:str = ormar.String(max_length=100, nullable=False)
     project: int = ormar.ForeignKey(
         Project, index=True, nullable=False, ondelete="CASCADE")
     flag: bool = ormar.Boolean(default=False)

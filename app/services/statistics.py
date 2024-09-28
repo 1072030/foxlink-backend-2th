@@ -140,7 +140,6 @@ async def HomePagePreProcessing():
     projects = await Project.objects.select_related(["devices","devices__events"]).all()
     # 回傳資料格式
     format_data = {}
-    allFirstResultData = []
 
     # 取得發生次數json file
     with open('happened.json','r') as happened_json:
@@ -172,17 +171,18 @@ async def HomePagePreProcessing():
             # 取得所有此機台的事件
             events = dvs.events
             real_name = await foxlink_dbs.get_real_line_names(project.name,dvs.line)
+            # for key value
             output_line_format = f"{dvs.line}@{real_name}"
             output_device_format = f"{dvs.name}@{dvs.cname}"
+            # 
+            allFirstResultData = []
             for event in events:
-
                 # 確認此事件有被預測
                 checkPredEvent = await PredictResult.objects.filter(device=dvs.id,event=event.id).order_by('-id').limit(1).get_or_none()
 
                 # check
                 if checkPredEvent is None:
                     continue
-                
                 # 取得最新的預測資料
                 firstResultData_week = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=1).order_by('-id').limit(1).get_or_none()
                 firstResultData_day = await PredictResult.objects.filter(device=dvs.id, event=event.id, pred_type=0).order_by('-id').limit(1).get_or_none()
@@ -196,19 +196,18 @@ async def HomePagePreProcessing():
                     allFirstResultData.append(firstResultData_week)
                 else:
                     allFirstResultData.append(firstResultData_day)
-
+            # -- 儲存資料變數
+            total_day_stable = []
+            total_day_unstable = []
+            total_week_stable = []
+            total_week_unstable = []
+            # -- 儲存資料變數
+            day_stable_happened = 0
+            day_unstable_happened = 0
+            week_stable_happened = 0
+            week_unstable_happened = 0
+            # -- 
             if len(allFirstResultData) != 0:
-                # -- 儲存資料變數
-                total_day_stable = []
-                total_day_unstable = []
-                total_week_stable = []
-                total_week_unstable = []
-                # -- 儲存資料變數
-                day_stable_happened = 0
-                day_unstable_happened = 0
-                week_stable_happened = 0
-                week_unstable_happened = 0
-                # -- 
                 for data in allFirstResultData:
                     # 確認此事件是否發生
                     check_happened = None
@@ -239,7 +238,8 @@ async def HomePagePreProcessing():
                         total_week_unstable.append({f"{data.event.id}":check_happened})
                         if check_happened == True:
                             week_unstable_happened += 1
-
+            else:
+                continue
             # 以"機台英文名稱@機台中文名稱"當作key值
             if output_device_format not in format_data[project.name][output_line_format].keys():
                 format_data[project.name][output_line_format][output_device_format] = {}
@@ -249,7 +249,7 @@ async def HomePagePreProcessing():
                 "event_ids": total_day_stable + total_day_unstable + total_week_stable + total_week_unstable,
                 "total_stable": len(total_day_stable) + len(total_week_stable),
                 "total_unstable": len(total_day_unstable) + len(total_week_unstable),
-                
+
                 "total_stable_happened": day_stable_happened + week_stable_happened,
                 "total_unstable_happened": day_unstable_happened + week_unstable_happened,
 
@@ -278,7 +278,7 @@ async def HomePagePreProcessing():
     # {
     #   "data":{
     #       "專案名稱":{
-    #           "線號":{
+    #           "線號@實體線號名稱":{
     #               "機台英文名稱@機台中文名稱":{
     #                   "event_ids": List,
     #                   "total_day_count": int ,
@@ -299,11 +299,12 @@ async def GetHomePageData(project_name_list:List):
         home_page_data = json.load(home_page_data)     
 
     all_projects = home_page_data["data"].keys()
-    format_data = {}
+    format_data = {"data":{}}
 
     for i in project_name_list:
         if i in all_projects:
-            format_data[i] = home_page_data["data"][i]
+            format_data["data"][i] = home_page_data["data"][i]
+    format_data["timestamp"] = home_page_data["timestamp"]
     return format_data
 
 async def GetPredictCompareSearch(project_name: List, select_type: str, line: int, start_time: datetime, end_time: datetime):

@@ -2,10 +2,10 @@
 主要是和登入的認證與權限有關
 """
 import asyncio
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordRequestForm
-from app.services.auth import authenticate_user, create_access_token,get_current_user
+from app.services.auth import authenticate_user, create_access_token,checkFoxlinkAuth,getFoxlinkUser,get_current_user
 from app.services.user import check_users
 from datetime import timedelta
 from app.core.database import (
@@ -43,7 +43,7 @@ async def login_for_permission(user_id:str = None,user: User = Depends(get_curre
     level = user.level
     return level
 
-# transaction的用意是在交付一致性
+# # transaction的用意是在交付一致性
 @transaction(callback=True)
 async def login_routine(form_data, handler=[], checkFoxlink:bool = True):
     # 查詢使用者是否存在於本地端資料庫中
@@ -80,5 +80,71 @@ async def login_routine(form_data, handler=[], checkFoxlink:bool = True):
     await emitter.emit()
 
     return {"access_token": access_token, "permission":user.level ,"token_type": "bearer"}
+
+
+# # 打開
+# # transaction的用意是在交付一致性
+# # 全有全無律
+# @transaction(callback=True)
+# async def login_routine(form_data, handler=[], checkFoxlink:bool = True):
+    
+    
+#     foxlink = await checkFoxlinkAuth(type="login",user_id=form_data.username,user_password=form_data.password,system="16")
+#     user = await authenticate_user(form_data.username)
+#     print(user)
+#     print(foxlink)
+#     if foxlink['data']['code'] == 1:
+
+#         if user is None:
+#             await User.objects.create(
+#                 badge=foxlink['data']['data']['user_id'],
+#                 username=foxlink['data']['data']['user_name'],
+#                 current_UUID=form_data.client_id,
+#                 flag=1,
+#                 level = 1
+#             )
+#             user = await authenticate_user(form_data.username)
+#             print(user)
+
+#             await AuditLogHeader.objects.create(
+#                 action=AuditActionEnum.USER_LOGIN.value,
+#                 user=user.badge
+#             )
+
+#         else:
+#             changes = BenignObj()
+#             emitter = AsyncEmitter()
+
+#             changes.current_UUID = form_data.client_id
+#             changes.login_date = get_ntz_now()
+
+#             emitter.add(
+#                 AuditLogHeader.objects.create(
+#                     action=AuditActionEnum.USER_LOGIN.value,
+#                     user=user.badge,
+#                 )
+#             )
+
+#             emitter.add(
+#                 user.update(
+#                     **changes.query()
+#                 )
+#             )
+
+#             await emitter.emit()
+#     else:
+#        raise HTTPException(
+#             status_code=400, detail="user doesnt exist in foxlink dbs."
+#         )
+
+#     access_token = create_access_token(
+#         data={
+#             "sub": user.badge,
+#             "UUID": form_data.client_id
+#         },
+#         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+#     )
+
+#     return {"access_token": access_token, "permission":user.level ,"token_type": "bearer"}
 
 
