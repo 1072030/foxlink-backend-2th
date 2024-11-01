@@ -240,3 +240,12 @@ async def getUserGroup(user_id: str , system_id: int = 16, checkSSH: bool = Fals
         }
         response = requests.post(url, data=myobj)
         return response.json()
+    
+async def searchUserBySystem(system_id: int = 16,type = 'searchUserBySystem'):
+    url = 'http://172.168.1.242/auth_test/server/server.php'
+    myobj = {
+            "type":'searchUserBySystem',
+            "system": 16
+    }
+    response = requests.post(url, data=myobj)
+    return response.json()

@@ -18,6 +18,9 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 import json
+import gc
+
+ntust_engine = foxlink_dbs.ntust_db
 
 async def GetPredictResult(project_name: Optional[str] = None, line:Optional[int] = None, device_name: Optional[str] = None):
     # if project_name is None:
@@ -104,7 +107,9 @@ async def GetPredictResult(project_name: Optional[str] = None, line:Optional[int
                 pred_type = "週預測" if result.pred_type == 1 else "日預測"
 
                 try:
-                    happened = next((i for i in happened_ori_data["data"] if i["event_id"] == result.event.id),None)
+                    # happened = next((i for i in happened_ori_data["data"] if i["event_id"] == result.event.id),None)
+                    happened = next((event for sublist in happened_ori_data["data"] for event in sublist if event["event_id"] == result.event.id), None)
+
                 except:
                     # happened["recently"] = "can not find recently data"
                     # happened["happened"] = 0
@@ -212,11 +217,12 @@ async def HomePagePreProcessing():
                     # 確認此事件是否發生
                     check_happened = None
                     for happened_data in happened_ori_data["data"]:
-                        if data.event.id == happened_data["event_id"]:
-                            if happened_data["happened"] != 0:
-                                check_happened = True
-                            else:
-                                check_happened = False
+                        for happened in happened_data:
+                            if data.event.id == happened["event_id"]:
+                                if happened["happened"] != 0:
+                                    check_happened = True
+                                else:
+                                    check_happened = False
 
                     # 日穩定
                     if data.pred_type == False and data.pred == '0':
@@ -309,326 +315,227 @@ async def GetHomePageData(project_name_list:List):
 
 async def GetPredictCompareSearch(project_name: List, select_type: str, line: int, start_time: datetime, end_time: datetime):
     formatData = []
+  
     threshold = await Env.objects.filter(key="threshold").get_or_none()
     if threshold is None:
         raise HTTPException(status_code=400, detail="cannot find 'threshold' env settings")
-    for project in project_name:
 
+
+    for project in project_name:
         if line is None:
-            project_devices = await Project.objects.select_related(["devices", "devices__events"]).filter(name=project).all()
+            project_devices = await Project.objects.prefetch_related("devices__events").filter(name=project).all()
         else:
-            project_devices = await Project.objects.select_related(["devices", "devices__events"]).filter(name=project, devices__line=line).all()
+            project_devices = await Project.objects.prefetch_related("devices__events").filter(name=project, devices__line=line).all()
 
         if len(project_devices) == 0:
-            raise HTTPException(
-                status_code=400, detail="cannot find any events")
+            raise HTTPException(status_code=400, detail="cannot find any events")
+
+        if select_type == "day":
+            pred_type = 0
+            date_range = pd.date_range(start_time, end_time).astype(str)
+        elif select_type == "week":
+            pred_type = 1
+            date_range = pd.date_range(start_time, end_time, freq='D')[pd.date_range(start_time, end_time, freq='D').dayofweek == 5].astype(str)
+
 
         devices = project_devices[0].devices
 
-        dr_day = pd.date_range(start_time, end_time).astype(str)
-        dr_week = pd.date_range(start_time, end_time, freq='7D').astype(str)
-        if select_type == "day":
-            for date in dr_day:
-                # actual_check = []
-                # predict_check = []
-                total_accuracy = []
-                devices_detail = {}
-                for dvs in devices:
-                    actual_check = []
-                    predict_check = []
-                    events = dvs.events
-                    for event in events:
-                        # checkPredEvent = await PredictResult.objects.filter(event=event.id,pred_type=0).order_by('-pred_date').limit(1).get_or_none()
+        # 提前批量查询 PredictResult, ErrorFeature 和 TrainPerformance
+        events = [event.id for dvs in devices for event in dvs.events]
+        sql = f"""
+            SELECT p.*
+            FROM predict_results p
+            WHERE p.event IN ({','.join(map(str, events))})
+            AND p.pred_date IN ({','.join([f"'{d}'" for d in date_range])})  
+            AND p.pred_type = {pred_type}
+            ORDER BY p.pred_date;
+        """
 
-                        # # check
-                        # if checkPredEvent is None:
-                        #     continue
+        ntust_engine = foxlink_dbs.ntust_db
+        predict_results = pd.read_sql(sql, ntust_engine)
 
-                        data = await PredictResult.objects.filter(event=event.id, pred_date=date, pred_type=0).select_related("device").order_by('-pred_date').limit(1).get_or_none()
-                        if data is None:
-                            continue
 
-                        error_feature = await ErrorFeature.objects.filter(event=event.id, date=date).order_by('-date').limit(1).get_or_none()
-                        if error_feature is None:
-                            continue
+        # predict_results = await PredictResult.objects.filter(event__in=[event.id for dvs in devices for event in dvs.events], pred_date__in=date_range,pred_type=pred_type
+                                                                # ).select_related("device").all()
+        error_features = await ErrorFeature.objects.filter(event__in=[event.id for dvs in devices for event in dvs.events], date__in=date_range).all()
+        train_performances = await TrainPerformance.objects.filter(event__in=[event.id for dvs in devices for event in dvs.events], freq=select_type).all()
+        
+        predict_results_dict = {(row['event'], row['pred_date']): row for index, row in predict_results.iterrows()}
+        predict_results_dict_check = {(row['device'], row['pred_date']): row for index, row in predict_results.iterrows()}
 
-                        train_performance = await TrainPerformance.objects.filter(event=event.id,freq=select_type).get_or_none()
-                        if train_performance is None:
-                            continue
+        
+        # predict_results_dict_check = {(res.device,res.pred_date): res for res in predict_results}
+        error_features_dict = {(err.event.id, err.date): err for err in error_features}
+        train_performances_dict = {tp.event.id: tp for tp in train_performances}
 
-                        faithful = 0
-                        if train_performance.arf >= float(threshold.value):
-                            faithful = 1
+        # 根據選擇類型，進行每日或每週處理
+        # date_range = dr_day if select_type == "day" else dr_week
+        for date_str in date_range:
+            date = datetime.strptime(date_str, '%Y-%m-%d')
+            total_accuracy = []
+            devices_detail = {}
+            
+            for dvs in devices:
+                
+                predict_check = predict_results_dict_check.get((dvs.id,date))
 
-                        if faithful:
-                            if data.pred == '0':
-                                predict_check.append(0)
-                            else:
-                                predict_check.append(1)
+                if predict_check is None:
+                    continue
+                actual_check = []
+                predict_check = []
+    
+                events = dvs.events
 
-                            if error_feature.happened <= train_performance.actual_cutpoint:
-                                actual_check.append(0)
-                            else:
-                                actual_check.append(1)
-
-                        if dvs.name not in devices_detail.keys():
-                            devices_detail[dvs.name] = {
-                                "events": [], "device_accuracy": 0}
-
-                        devices_detail[dvs.name]["cname"] = dvs.cname
-                        devices_detail[dvs.name]["events"].append({
-                            "category": event.category,
-                            "name": event.name,
-                            "predict": int(data.pred),
-                            "true": error_feature.happened,
-                            "faithful": faithful
-                        })
-
-                    # per day event accuracy
-                    # print(predict_check)
-                    # print(actual_check)
-                    device_accuracy = (np.array(actual_check)
-                                       == np.array(predict_check)).mean()
-                    if len(predict_check) == 0 and len(actual_check) == 0:
-                        continue
-                    devices_detail[dvs.name]["device_accuracy"] = device_accuracy
-
-                    total_accuracy.append(device_accuracy)
-
-                device_accuracy = (np.array(total_accuracy)).mean()
-                if len(total_accuracy) != 0:
-                    formatData.append({
-                        "id": None,
-                        "projectName": project,
-                        "line": dvs.line,
-                        "date": date,
-                        "accuracyDate": device_accuracy,
-                        "devices": devices_detail,
-                    })
-
-        else:
-            for date in dr_week:
-                date_check = datetime.strptime(date,"%Y-%m-%d")
-                next_day = (date_check + timedelta(days=7)).strftime("%Y-%m-%d")
-                # actual_check = []
-                # predict_check = []
-                total_accuracy = []
-                devices_detail = {}
-                for dvs in devices:
-                    actual_check = []
-                    predict_check = []
-                    events = dvs.events
-                    for event in events:
-                        data = await PredictResult.objects.filter(event=event.id, ori_date__gte=date,ori_date__lte=next_day, pred_type=1).select_related("device").order_by('-pred_date').limit(1).get_or_none()
-                        if data is None:
-                            continue
-
-                        error_features = await ErrorFeature.objects.filter(event=event.id, date__gte=date,date__lte=next_day).all()
-                        if len(error_features) == 0:
-                            continue
-                        total_happened = sum([feature.happened for feature in error_features])
-                        
-                        train_performance = await TrainPerformance.objects.filter(event=event.id,freq=select_type).get_or_none()
-                        if train_performance is None:
-                            continue
-
-                        faithful = 0
-                        if train_performance.arf >= float(threshold.value):
-                            faithful = 1
-
-                        if faithful:
-                            if data.pred == '0':
-                                predict_check.append(0)
-                            else:
-                                predict_check.append(1)
-
-                            if total_happened <= train_performance.actual_cutpoint:
-                                actual_check.append(0)
-                            else:
-                                actual_check.append(1)
-
-                        if dvs.name not in devices_detail.keys():
-                            devices_detail[dvs.name] = {
-                                "events": [], "device_accuracy": 0}
-
-                        actual_predict_date = data.ori_date
-
-                        devices_detail[dvs.name]["cname"] = dvs.cname
-                        devices_detail[dvs.name]["events"].append({
-                            "category": event.category,
-                            "name": event.name,
-                            "predict": int(data.pred),
-                            "true": total_happened,
-                            "faithful": faithful
-                        })
-
-                    # per day event accuracy
-                    device_accuracy = (np.array(actual_check)
-                                       == np.array(predict_check)).mean()
-                    if len(predict_check) == 0 and len(actual_check) == 0:
-                        continue
-                    devices_detail[dvs.name]["device_accuracy"] = device_accuracy
-
-                    total_accuracy.append(device_accuracy)
-                device_accuracy = (np.array(total_accuracy)).mean()
-                if len(total_accuracy) != 0:
-                    formatData.append({
-                        "id": None,
-                        "projectName": project,
-                        "line": dvs.line,
-                        "date": actual_predict_date.date(),
-                        "accuracyDate": device_accuracy,
-                        "devices": devices_detail,
-                    })
+                for event in events:
                     
+                    data = predict_results_dict.get((event.id, date))
+                    error_feature = error_features_dict.get((event.id, date))
+                    train_performance = train_performances_dict.get(event.id)
+
+                    # 如果沒有相關數據跳過
+                    if data is None or error_feature is None or train_performance is None:
+                        continue
+
+                    # 根據 arf 值來判斷 faithful
+                    faithful = int(train_performance.arf >= float(threshold.value))
+
+                    if faithful:
+                        predict_check.append(1 if data.pred != '0' else 0)
+                        actual_check.append(1 if error_feature.happened > train_performance.actual_cutpoint else 0)
+
+                    if dvs.name not in devices_detail:
+                        devices_detail[dvs.name] = {"events": [], "device_accuracy": 0, "cname": dvs.cname}
+                    
+                    # 添加事件細節
+                    devices_detail[dvs.name]["events"].append({
+                        "category": event.category,
+                        "name": event.name,
+                        "predict": int(data.pred),
+                        "true": error_feature.happened,
+                        "faithful": faithful
+                    })
+
+                # 計算設備的準確度
+                if len(predict_check) > 0 and len(actual_check) > 0:
+                    device_accuracy = (np.array(actual_check) == np.array(predict_check)).mean()
+                    devices_detail[dvs.name]["device_accuracy"] = device_accuracy
+                    total_accuracy.append(device_accuracy)
+
+            # 如果有準確度數據，則添加到結果中
+            if len(total_accuracy) != 0:
+                avg_accuracy = np.mean(total_accuracy)
+                formatData.append({
+                    "id": None,
+                    "projectName": project,
+                    "line": dvs.line if devices else None,
+                    "date": date_str,
+                    "accuracyDate": avg_accuracy,
+                    "devices": devices_detail,
+                })
+
     return formatData
 
 
 async def GetPredictCompareAnalysis(project_name, line, select_type, start_date, end_date):
     formatData = []
+    
+    # 提前查询 threshold 数据
     threshold = await Env.objects.filter(key="threshold").get_or_none()
     if threshold is None:
         raise HTTPException(status_code=400, detail="cannot find 'threshold' env settings")
-    data = await Project.objects.filter(name=project_name).select_related(["devices", "devices__events"]).filter(devices__line=line).all()
+    
+    # 获取项目相关设备及事件数据
+    data = await Project.objects.filter(name=project_name).select_related("devices__events").filter(devices__line=line).all()
 
+    if len(data) == 0:
+        raise HTTPException(status_code=400, detail="cannot find any events")
+    
     devices = data[0].devices
 
-    dr_day = pd.date_range(start_date, end_date).astype(str)
-    dr_week = pd.date_range(start_date, end_date, freq='7D').astype(str)
-    predict_check = []
-    actual_check = []
+    # 根據 select_type 設置 pred_type
     if select_type == "day":
-        for date in dr_day:
-
-            # actual_check = []
-            # predict_check = []
-            total_accuracy = []
-            devices_detail = {}
-
-            for dvs in devices:
-                if dvs.line != int(line):
-                    continue
-                events = dvs.events
-                actual_check = []
-                predict_check = []                
-                for event in events:
-
-                    data = await PredictResult.objects.filter(event=event.id, pred_date=date, pred_type=0).select_related("device").order_by('-pred_date').limit(1).get_or_none()
-                    if data is None:
-                        continue
-
-                    # error_feature = await ErrorFeature.objects.filter(event=event.id, date=date).get_or_none()
-                    error_feature = await ErrorFeature.objects.filter(event=event.id, date=date).order_by('-date').limit(1).get_or_none()
-                    if error_feature is None:
-                        continue
-
-                    train_performance = await TrainPerformance.objects.filter(event=event.id,freq=select_type).get_or_none()
-                    if train_performance is None:
-                        continue
-
-                    faithful = 0
-                    if train_performance.arf >= float(threshold.value):
-                        faithful = 1
-
-                    if faithful:
-                        if data.pred == '0':
-                            predict_check.append(0)
-                        else:
-                            predict_check.append(1)
-
-                        if error_feature.happened <= train_performance.actual_cutpoint:
-                            actual_check.append(0)
-                        else:
-                            actual_check.append(1)
-
-                    if dvs.name not in devices_detail.keys():
-                        devices_detail[dvs.name] = {"device_accuracy": 0}
-
-                    devices_detail[dvs.name]["cname"] = dvs.cname
-
-                # per day event accuracy
-                device_accuracy = (np.array(actual_check) ==
-                                   np.array(predict_check)).mean()
-                if len(predict_check) == 0 and len(actual_check) == 0:
-                    continue
-                devices_detail[dvs.name]["device_accuracy"] = device_accuracy
-
-                total_accuracy.append(device_accuracy)
-
-            device_accuracy = (np.array(total_accuracy)).mean()
-            formatData.append({
-                "date": date,
-                "value": str(device_accuracy)
-                # "value": '%.2f' % device_accuracy,
-            })
+        pred_type = 0
+        date_range = pd.date_range(start_date, end_date).astype(str)
     else:
-        for date in dr_week:
-            # year = int(date.split('-')[0])
-            # month = int(date.split('-')[1])
-            # day = int(date.split('-')[2])
-            # print(date)
-            date_check = datetime.strptime(date,"%Y-%m-%d")
-            next_day = (date_check + timedelta(days=7)).strftime("%Y-%m-%d")
-            # actual_check = []
-            # predict_check = []
-            total_accuracy = []
-            devices_detail = {}
-            for dvs in devices:
-                events = dvs.events
-                actual_check = []
-                predict_check = []
-                for event in events:
-                    data = await PredictResult.objects.filter(event=event.id, ori_date__gte=date,ori_date__lte=next_day, pred_type=1).select_related("device").order_by('-pred_date').limit(1).get_or_none()
-                    if data is None:
-                        continue
-
-                    error_features = await ErrorFeature.objects.filter(event=event.id, date__gte=date,date__lte=next_day).all()
-                    if len(error_features) == 0:
-                        continue
-                    total_happened = sum([feature.happened for feature in error_features])
-                    train_performance = await TrainPerformance.objects.filter(event=event.id,freq=select_type).get_or_none()
-                    if train_performance is None:
-                        continue
-
-                    faithful = 0
-                    if train_performance.arf >= float(threshold.value):
-                        faithful = 1
-
-                    if faithful:
-                        if data.pred == '0':
-                            predict_check.append(0)
-                        else:
-                            predict_check.append(1)
-
-                        if total_happened <= train_performance.actual_cutpoint:
-                            actual_check.append(0)
-                        else:
-                            actual_check.append(1)
-
-                    # data = await PredictResult.objects.filter(event=event.id, ori_date__gte=date, ori_date__lte=next_day, pred_type=1).select_related("device").order_by('-pred_date').limit(1).get_or_none()
-
-                    actual_predict_date = data.ori_date
+        pred_type = 1
+        date_range = pd.date_range(start_date, end_date, freq='D')[pd.date_range(start_date, end_date, freq='D').dayofweek == 5].astype(str)
 
 
-                    if dvs.name not in devices_detail.keys():
-                        devices_detail[dvs.name] = {"device_accuracy": 0}
-                    devices_detail[dvs.name]["cname"] = dvs.cname
-                        
-                # per day event accuracy
-                device_accuracy = (np.array(actual_check) ==
-                                   np.array(predict_check)).mean()
-                if len(predict_check) == 0 and len(actual_check) == 0:
+    # 提前批量查询 PredictResult, ErrorFeature 和 TrainPerformance
+    events = [event.id for dvs in devices for event in dvs.events]
+    sql = f"""
+        SELECT p.*
+        FROM predict_results p
+        WHERE p.event IN ({','.join(map(str, events))})
+        AND p.pred_date IN ({','.join([f"'{d}'" for d in date_range])})  
+        AND p.pred_type = {pred_type}
+        ORDER BY p.pred_date;
+    """
+
+    ntust_engine = foxlink_dbs.ntust_db
+    predict_results = pd.read_sql(sql, ntust_engine)
+
+    error_features = await ErrorFeature.objects.filter(
+        event__in=[event.id for dvs in devices for event in dvs.events],
+        date__in=date_range 
+    ).all()
+
+    train_performances = await TrainPerformance.objects.filter(
+        event__in=[event.id for dvs in devices for event in dvs.events],
+        freq=select_type
+    ).all()
+
+    # 组织数据为字典形式，加快查找速度
+    predict_results_dict = {(row['event'], row['pred_date']): row for index, row in predict_results.iterrows()}
+    predict_results_dict_check = {(row['device'], row['pred_date']): row for index, row in predict_results.iterrows()}
+
+    # predict_results_dict = {(res.event.id, res.pred_date): res for res in predict_results}
+    error_features_dict = {(err.event.id, err.date): err for err in error_features}
+    train_performances_dict = {tp.event.id: tp for tp in train_performances}
+
+    # 根据选择的时间范围进行逐日或逐周的分析
+    for date_str in date_range:
+        date = datetime.strptime(date_str, '%Y-%m-%d')
+        total_accuracy = []
+
+        for dvs in devices:
+            predict_check = predict_results_dict_check.get((dvs.id,date))
+
+            if predict_check is None:
+                continue
+            actual_check = []
+            predict_check = []
+            events = dvs.events
+
+            for event in events:
+                # 从字典中获取预预测结果、错误特征和训练性能
+                data = predict_results_dict.get((event.id, date))
+                error_feature = error_features_dict.get((event.id, date))
+                train_performance = train_performances_dict.get(event.id)
+
+                # 如果相关数据没有找到，跳过当前事件
+                if data is None or error_feature is None or train_performance is None:
                     continue
-                devices_detail[dvs.name]["device_accuracy"] = device_accuracy
 
+                # 根据训练性能的 ARF 值判断是否有效
+                faithful = int(train_performance.arf >= float(threshold.value))
+
+                if faithful:
+                    predict_check.append(1 if data.pred != '0' else 0)
+                    actual_check.append(1 if error_feature.happened > train_performance.actual_cutpoint else 0)
+
+            # 计算设备的准确度
+            if len(predict_check) > 0 and len(actual_check) > 0:
+                device_accuracy = (np.array(actual_check) == np.array(predict_check)).mean()
                 total_accuracy.append(device_accuracy)
-            device_accuracy = (np.array(total_accuracy)).mean()
+
+        # 如果有准确度数据，加入最终结果
+        if len(total_accuracy) != 0:
+            avg_accuracy = np.mean(total_accuracy)
             formatData.append({
-                # "date": date,
-                # "value": str(device_accuracy)
-                # "date": actual_predict_date,
-                "date": date,
-                "value": str(device_accuracy),
+                "date": date_str,
+                "value": str(avg_accuracy)
             })
-            
+
     return formatData
+

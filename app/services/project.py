@@ -42,7 +42,6 @@ from natsort import natsort_keygen
 from sqlalchemy import create_engine
 # ----
 from tqdm import tqdm
-import joblib
 # ----
 
 ntust_engine = foxlink_dbs.ntust_db

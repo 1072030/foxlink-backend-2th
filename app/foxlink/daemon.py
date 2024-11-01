@@ -66,6 +66,7 @@ if __name__ == "__main__":
         UpdatePreprocessingData,
         PredictData
     )
+    from app.services.user import userupdate
     import json
     import traceback
     # host = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
@@ -81,7 +82,8 @@ if __name__ == "__main__":
 
     _terminate = None
 
-    MAIN_ROUTINE_MIN_RUNTIME = 900
+    MAIN_ROUTINE_MIN_RUNTIME = 60
+
     NOTIFICATION_INTERVAL = 30
     
     def show_duration(func):
@@ -281,96 +283,192 @@ if __name__ == "__main__":
         )
         return
     
+    # @transaction(callback=True)
+    # @ show_duration
+    # async def sync_foxlink_event_happened_handler(handler=[]):
+    #     projects = await Project.objects.select_related(["devices","devices__events"]).all()
+    #     result = await asyncio.gather(*[
+    #         sync_foxlink_event_happened(project,device,event)
+    #         for project in projects
+    #         for device in project.devices
+    #         for event in device.events
+    #     ])
+    #     # print(result)
+    #     with open('happened.json','w') as jsonfile:
+    #         result = {
+    #             "data":result,
+    #             "timestamp":f'{get_ntz_now()+timedelta(hours=8)}'
+    #         }
+    #         json.dump(result,jsonfile)
+    # # -- edit by mike 2024/7/9
+    # # async def choose_database(stmt):
+    # #     try:
+    # #         FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
+    # #         # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+    # #         project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
+    # #         if project:
+    # #             return FOXLINK_AOI_DATABASE
+    # #     except:
+    # #         # await foxlink_dbs[FOXLINK_AOI_DATABASE].disconnect()
+    # #         FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
+    # #         # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
+    # #         return FOXLINK_AOI_DATABASE
+
+
+    # async def sync_foxlink_event_happened(project,device,event):
+    #     stmt = (
+    #         f"SELECT * FROM `{project.name}_event_new` WHERE "
+    #         f"Device_Name='{device.name}' AND "
+    #         f"Line = {device.line} AND "
+    #         f"Category = {event.category} AND "
+    #         f"Message = '{event.name}' AND "
+    #         f"Start_Time >= '{get_ntz_now().date()}' "
+    #         "ORDER BY ID DESC "
+    #         # "LIMIT 100;"
+    #     )
+        
+    #     stmt1 = (
+    #         f"SELECT * FROM `{project.name}_event` WHERE "
+    #         f"Device_Name='{device.name}' AND "
+    #         f"Line={device.line} AND "
+    #         f"Category={event.category} AND "
+    #         f"Message='{event.name}' "
+    #         "ORDER BY Start_Time DESC "
+    #         "LIMIT 1;"
+    #     )
+    #     # -- edit by mike 2024/7/9
+    #     # host = await foxlink_dbs.choose_database(stmt1)
+    #     host = await foxlink_dbs.choose_database(project.name,device.name)
+    #     # print(host)
+    #     # -- 
+    #     try:
+    #         row = await foxlink_dbs[host].fetch_all(query=stmt)
+    #         # print(row)
+    #         return {
+    #             "event_id":event.id,
+    #             "recently":str(row[0]["Start_Time"]),
+    #             "happened":len(row)
+    #         }
+    #     except:
+    #         # row = None
+    #         row = await foxlink_dbs[host].fetch_all(query=stmt1)
+    #         # print(row)
+    #         if row is not None:
+    #             return {
+    #                 "event_id":event.id,
+    #                 "recently":str(row[0]["Start_Time"]),
+    #                 # "recently":row,
+    #                 "happened":0
+    #             }
+    #         else:
+    #             return {
+    #                 "event_id":event.id,
+    #                 # "recently":str(row[0]["Start_Time"]),
+    #                 "recently":None,
+    #                 "happened":0
+    #             }
+
     @transaction(callback=True)
-    @ show_duration
-    async def sync_foxlink_event_happened_handler(handler=[]):
-        projects = await Project.objects.select_related(["devices","devices__events"]).all()
+    @show_duration
+    async def sync_foxlink_event_happened_handler(handler=None):
+        if handler is None:
+            handler = []
+
+  
+        projects = await Project.objects.prefetch_related("devices__events").all()
+
         result = await asyncio.gather(*[
-            sync_foxlink_event_happened(project,device,event)
+            sync_foxlink_event_happened(project, device, device.events)
             for project in projects
             for device in project.devices
-            for event in device.events
         ])
-        # print(result)
-        with open('happened.json','w') as jsonfile:
+
+        # 保存结果到 JSON 文件
+        with open('happened.json', 'w') as jsonfile:
             result = {
-                "data":result,
-                "timestamp":f'{get_ntz_now()+timedelta(hours=8)}'
+                "data": result,
+                "timestamp": f'{get_ntz_now() + timedelta(hours=8)}'
             }
-            json.dump(result,jsonfile)
-    # -- edit by mike 2024/7/9
-    # async def choose_database(stmt):
-    #     try:
-    #         FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[0]+"@"+FOXLINK_EVENT_DB_NAME[0]
-    #         # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-    #         project = await foxlink_dbs[FOXLINK_AOI_DATABASE].fetch_one(query=stmt)
-    #         if project:
-    #             return FOXLINK_AOI_DATABASE
-    #     except:
-    #         # await foxlink_dbs[FOXLINK_AOI_DATABASE].disconnect()
-    #         FOXLINK_AOI_DATABASE = FOXLINK_EVENT_DB_HOSTS[1]+"@"+FOXLINK_EVENT_DB_NAME[0]
-    #         # await foxlink_dbs[FOXLINK_AOI_DATABASE].connect()
-    #         return FOXLINK_AOI_DATABASE
+            json.dump(result, jsonfile)
 
 
-    async def sync_foxlink_event_happened(project,device,event):
-        stmt = (
-            f"SELECT * FROM `{project.name}_event_new` WHERE "
-            f"Device_Name='{device.name}' AND "
-            f"Line = {device.line} AND "
-            f"Category = {event.category} AND "
-            f"Message = '{event.name}' AND "
-            f"Start_Time >= '{get_ntz_now().date()}' "
-            "ORDER BY ID DESC "
-            # "LIMIT 100;"
-        )
-        
-        stmt1 = (
-            f"SELECT * FROM `{project.name}_event` WHERE "
-            f"Device_Name='{device.name}' AND "
-            f"Line={device.line} AND "
-            f"Category={event.category} AND "
-            f"Message='{event.name}' "
-            "ORDER BY Start_Time DESC "
-            "LIMIT 1;"
-        )
-        # -- edit by mike 2024/7/9
-        # host = await foxlink_dbs.choose_database(stmt1)
-        host = await foxlink_dbs.choose_database(project.name,device.name)
-        # print(host)
-        # -- 
+
+    async def sync_foxlink_event_happened(project, device, events):
+        event_categories = [event.category for event in events]
+        event_names = [event.name for event in events]
+
+        stmt = f"""
+            SELECT Category, Message, COUNT(*) as Happened, MAX(Start_Time) as Recently 
+            FROM `{project.name}_event_new` 
+            WHERE Device_Name='{device.name}' 
+            AND Line={device.line} 
+            AND Category IN ({','.join(map(str, event_categories))}) 
+            AND Message IN ({','.join([f'"{name}"' for name in event_names])}) 
+            AND Start_Time >= '{get_ntz_now().date()}' 
+            GROUP BY Category, Message 
+            ORDER BY Recently DESC;
+        """
+
+        stmt1 = f"""
+            SELECT Category, Message, MAX(Start_Time) as Recently 
+            FROM `{project.name}_event` 
+            WHERE Device_Name='{device.name}' 
+            AND Line={device.line} 
+            AND Category IN ({','.join(map(str, event_categories))}) 
+            AND Message IN ({','.join([f'"{name}"' for name in event_names])}) 
+            GROUP BY Category, Message 
+            ORDER BY Recently DESC;
+        """
+
+        host = await foxlink_dbs.choose_database(project.name, device.name)
+
+
+        result = []
         try:
-            row = await foxlink_dbs[host].fetch_all(query=stmt)
-            # print(row)
-            return {
-                "event_id":event.id,
-                "recently":str(row[0]["Start_Time"]),
-                "happened":len(row)
-            }
+            rows = await foxlink_dbs[host].fetch_all(query=stmt)
+            rows1 = await foxlink_dbs[host].fetch_all(query=stmt1)
+            for event in events:
+    
+                row = next((r for r in rows if r["Category"] == event.category and r["Message"] == event.name), None)
+                if row:
+                    result.append({
+                            "event_id": event.id,
+                            "recently": str(row["Recently"]),
+                            "happened": row["Happened"]
+                        })
+              
+                else:
+               
+                    row1 = next((r for r in rows1 if r["Category"] == event.category and r["Message"] == event.name), None)
+                    if row1:
+                        result.append({
+                                "event_id": event.id,
+                                "recently": str(row1["Recently"]),
+                                "happened": 0
+                            })
+                    else:
+                        result.append({
+                                "event_id": event.id,
+                                "recently": None,
+                                "happened": 0
+                            })
+            return result
         except:
-            # row = None
-            row = await foxlink_dbs[host].fetch_all(query=stmt1)
-            # print(row)
-            if row is not None:
-                return {
-                    "event_id":event.id,
-                    "recently":str(row[0]["Start_Time"]),
-                    # "recently":row,
-                    "happened":0
-                }
-            else:
-                return {
-                    "event_id":event.id,
-                    # "recently":str(row[0]["Start_Time"]),
-                    "recently":None,
-                    "happened":0
-                }
+            return result
+
+
+
+
     # 首頁資料前處理
     @transaction()
     async def home_page_data_preprocessing():
         await HomePagePreProcessing()
         return
 
+    @transaction()
+    async def user_update():
+        await userupdate()
+        return
     ######### main #########
 
     def shutdown_callback():
@@ -430,6 +528,8 @@ if __name__ == "__main__":
                 await sync_foxlink_event_happened_handler()
 
                 await home_page_data_preprocessing()
+
+                # await user_update()
 
                 end_time = time.perf_counter()
 
